@@ -62,9 +62,9 @@ class SnapshotSample:
         self.field_arrays = {}
         self.fields = {}
 
+        region._compute_sample(self, snap)
         self.ploc = {k: v.copy() for k, v in region.ploc.items()}
 
-        region._compute_sample(self, snap)
         self._register_fields(snap)
 
     def view(self, etype, *, layout='soa'):

@@ -85,12 +85,8 @@ class BaseSnapshot:
 
     def primitive_at(self, etype, info, sample):
         names = self.pris_names
-        arr = np.stack([sample.pris[etype][names.index(c)]
-                        for c in info.components], axis=-1)
-        # Canonical AoS: (flat_npts, ncomps), element-major for raw
-        if arr.ndim == 3:
-            arr = arr.swapaxes(0, 1)
-        return arr.reshape(-1, len(info.components))
+        return np.stack([sample.pris[etype][names.index(c)]
+                         for c in info.components], axis=-1)
 
     def gradient_at(self, etype, info, sample):
         names = self.pris_names
@@ -98,11 +94,7 @@ class BaseSnapshot:
         for c in info.components:
             var, _, d = c.rpartition('-')
             cols.append(sample.grad_pris[etype][names.index(var)][int(d)])
-        arr = np.stack(cols, axis=-1)
-        # Canonical AoS: (flat_npts, ncomps), element-major for raw
-        if arr.ndim == 3:
-            arr = arr.swapaxes(0, 1)
-        return arr.reshape(-1, len(info.components))
+        return np.stack(cols, axis=-1)
 
     def data_at(self, etype, info):
         # data[etype][:, info.data_index] is (nsvpts, neles); canonical AoS

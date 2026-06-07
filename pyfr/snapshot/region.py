@@ -6,7 +6,7 @@ from pyfr.mpiutil import get_comm_rank_root
 from pyfr.points import PointLocator, PointSampler
 from pyfr.shapes import BaseShape, proj_pts
 from pyfr.snapshot.sample import SnapshotSample
-from pyfr.subdiv import CleanToGrid
+from pyfr.subdiv import CleanToGrid, NullCleaner
 from pyfr.util import subclass_where
 
 
@@ -69,10 +69,10 @@ class BaseSnapshotRegion:
 
     def points(self, etype, ploc=None):
         p = self.ploc[etype] if ploc is None else ploc
-        return np.ascontiguousarray(p.T)
+        return p.T
 
     def connectivity(self, etype, sub_nodes):
-        if self.cleaner is not None:
+        if self.cleaner.layouts is not None:
             return self.cleaner.layouts[etype][0][:, sub_nodes]
         if etype not in getattr(self, '_nsvpts_at', {}):
             raise NotImplementedError(
@@ -88,23 +88,19 @@ class BaseSnapshotRegion:
 
     def _finalize_sample(self, sample, snap, raw_pris, raw_grad_pris):
         nvars = len(snap.pris_names)
-        if self.clean:
-            sample.pris = self._clean_pris(raw_pris, nvars)
-            if any(v is None for v in raw_grad_pris.values()):
-                sample.grad_pris = raw_grad_pris
-            else:
-                sample.grad_pris = self._clean_grad_pris(raw_grad_pris, nvars)
-        else:
-            sample.pris = raw_pris
+        sample.pris = self._reduce_pris(raw_pris, nvars)
+        if any(v is None for v in raw_grad_pris.values()):
             sample.grad_pris = raw_grad_pris
+        else:
+            sample.grad_pris = self._reduce_grad_pris(raw_grad_pris, nvars)
 
-    def _clean_pris(self, raw, nvars):
+    def _reduce_pris(self, raw, nvars):
         stacked = {k: np.stack(prims_list, axis=-1)
                    for k, prims_list in raw.items()}
         avg = self.cleaner.average(stacked, nvars, self.dtype)
         return {k: list(avg[k].T) for k in raw}
 
-    def _clean_grad_pris(self, raw, nvars):
+    def _reduce_grad_pris(self, raw, nvars):
         ndims = self.ndims
         flat = {}
         for k, grads_list in raw.items():
@@ -168,7 +164,7 @@ class VolumeSnapshotRegion(BaseSnapshotRegion):
             self._ops[et] = (shape.sbasis.nodal_basis_at(pts),
                              shape.ubasis.nodal_basis_at(pts))
 
-        self.cleaner = self._build_cleaner() if self.clean else None
+        self.cleaner = self._build_cleaner() if self.clean else NullCleaner()
 
         self.ploc = self._build_ploc()
 
@@ -190,12 +186,8 @@ class VolumeSnapshotRegion(BaseSnapshotRegion):
         out = {}
         for et in self.etypes:
             mesh_op, _ = self._ops[et]
-            xd = interp_ops(mesh_op, self._ele_spts(et))   # (nsvpts,neles,ndims)
-            if self.clean:
-                out[et] = np.ascontiguousarray(self.cleaner.select(et, xd).T)
-            else:
-                out[et] = np.ascontiguousarray(
-                    xd.transpose(2, 1, 0).reshape(xd.shape[2], -1))
+            xd = interp_ops(mesh_op, self._ele_spts(et))
+            out[et] = np.ascontiguousarray(self.cleaner.select(et, xd).T)
         return out
 
     def cell_curved(self, etype):
@@ -295,7 +287,7 @@ class SurfaceSnapshotRegion(BaseSnapshotRegion):
             spts = self.mesh.spts[etype][:, eidxs]
             self._eles.append(elementscls(shapecls, spts, self.cfg))
 
-        self.cleaner = self._build_cleaner() if self.clean else None
+        self.cleaner = self._build_cleaner() if self.clean else NullCleaner()
 
         self.ploc = self._build_ploc()
         self.normals = self._build_normals()
@@ -347,13 +339,8 @@ class SurfaceSnapshotRegion(BaseSnapshotRegion):
             return xd.transpose(2, 0, 1)
 
         raw = self._assemble(fn)
-        if self.clean:
-            return {it: np.ascontiguousarray(
-                        self.cleaner.select(it, xd.transpose(1, 2, 0)).T)
-                    for it, xd in raw.items()}
-
         return {it: np.ascontiguousarray(
-                    xd.transpose(0, 2, 1).reshape(xd.shape[0], -1))
+                    self.cleaner.select(it, xd.transpose(1, 2, 0)).T)
                 for it, xd in raw.items()}
 
     def _build_normals(self):
@@ -366,23 +353,13 @@ class SurfaceSnapshotRegion(BaseSnapshotRegion):
             return pn / np.linalg.norm(pn, axis=0)
 
         raw = self._assemble(fn)
-        if not self.clean:
-            return raw
-
         stacked = {it: arr.transpose(1, 2, 0) for it, arr in raw.items()}
         avg = self.cleaner.average(stacked, self.ndims, self.dtype)
-        out = {}
-        for it in raw:
-            n = avg[it].T
-            out[it] = n / np.linalg.norm(n, axis=0, keepdims=True)
-        return out
+        return {it: self.cleaner.renormalize(avg[it].T) for it in raw}
 
     def _build_wall_dist(self):
         raw = self._assemble(
             lambda gi, g: self._eles[gi].min_upt_face_dist_approx(g[1]))
-
-        if not self.clean:
-            return raw
 
         stacked = {}
         for it, wd_per_ele in raw.items():
@@ -437,6 +414,7 @@ class PointsSnapshotRegion(BaseSnapshotRegion):
 
         self.etypes = ['points']
         self.clean = False
+        self.cleaner = NullCleaner()
 
         _, rank, root = get_comm_rank_root()
         self._is_root = rank == root

@@ -404,3 +404,24 @@ class CleanToGrid:
             out[etype] = np.concatenate(out[etype])
 
         return out
+
+    def renormalize(self, arr):
+        # Averaging at shared vertices de-normalizes; restore unit length.
+        return arr / np.linalg.norm(arr, axis=0, keepdims=True)
+
+
+class NullCleaner:
+    layouts = None
+
+    def average(self, stacked, ncomp, dtype):
+        # Passthrough — preserve input dtype so raw-mode precision matches
+        # the pre-PR behavior (no dedup, no cast).
+        return {k: a.swapaxes(0, 1).reshape(-1, ncomp)
+                for k, a in stacked.items()}
+
+    def select(self, etype, arr):
+        return arr.swapaxes(0, 1).reshape(-1, arr.shape[-1])
+
+    def renormalize(self, arr):
+        # No averaging happens, so per-element unit vectors stay unit.
+        return arr

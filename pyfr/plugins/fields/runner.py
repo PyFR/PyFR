@@ -24,7 +24,6 @@ class FieldRunner:
         return out
 
     def run_on_sample(self, sample, public_only=False):
-        clean = sample.region.clean
         for et in sample.region.etypes:
             view = SoASampleView(sample, et)
             for p in self.plugins:
@@ -32,14 +31,8 @@ class FieldRunner:
             for fname, arr in view.fields.items():
                 if public_only and fname.startswith('_'):
                     continue
-                # Canonical AoS: (flat_npts, ncomps), element-major for raw
-                if clean:
-                    arr = arr[:, None] if arr.ndim == 1 else arr
-                elif arr.ndim == 2:
-                    arr = arr.T.reshape(-1, 1)
-                else:
-                    arr = arr.swapaxes(0, 1).reshape(-1, arr.shape[-1])
-                sample.field_arrays[et, fname] = arr
+                sample.field_arrays[et, fname] = (
+                    arr[:, None] if arr.ndim == 1 else arr)
 
         for p in self.plugins:
             for fname, varnames in p.fields.items():

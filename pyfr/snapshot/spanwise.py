@@ -12,7 +12,7 @@ from pyfr.polys import get_polybasis
 from pyfr.readers.native import NativeReader
 from pyfr.shapes import BaseShape, proj_pts
 from pyfr.snapshot.region import BaseSnapshotRegion, interp_ops
-from pyfr.subdiv import CleanToGrid
+from pyfr.subdiv import CleanToGrid, NullCleaner
 from pyfr.util import subclass_where
 
 
@@ -530,6 +530,8 @@ class SpanwiseSnapshotRegion(BaseSnapshotRegion):
                 {it: self._vis_div for it in self.etypes},
                 {it: self._vis_pts_2d[it] for it in self.etypes},
                 shared)
+        else:
+            self.cleaner = NullCleaner()
 
         self.ploc = {}
         self._nsvpts_at = {}
@@ -537,12 +539,8 @@ class SpanwiseSnapshotRegion(BaseSnapshotRegion):
             vpts = np.concatenate([v for _, v, _ in groups]).swapaxes(0, 1)
             vpts[..., self.axis] = 0
             self._nsvpts_at[itype] = vpts.shape[0]
-            if self.clean:
-                self.ploc[itype] = np.ascontiguousarray(
-                    self.cleaner.select(itype, vpts).T)
-            else:
-                self.ploc[itype] = np.ascontiguousarray(
-                    vpts.transpose(2, 1, 0).reshape(vpts.shape[2], -1))
+            self.ploc[itype] = np.ascontiguousarray(
+                self.cleaner.select(itype, vpts).T)
 
     def _compute_sample(self, sample, snap):
         self._ensure_form(snap, lambda: self._configure_form(snap))
@@ -585,22 +583,13 @@ class SpanwiseSnapshotRegion(BaseSnapshotRegion):
                     sample.grad_pris[itype] = None
                 continue
 
-            # raw: (ncols, nsvpts, nfields) → (nsvpts, ncols, nfields)
+            # (ncols, nsvpts, nfields) → (nsvpts, ncols, nfields)
             raw = np.concatenate(groups).swapaxes(0, 1)
-
-            if self.clean:
-                avg = self.cleaner.average({itype: raw}, nfields_total,
-                                           self.dtype)
-                # avg[itype]: (npts_dedup, nfields)
-                vsoln = avg[itype].T
-            else:
-                # (nfields, nsvpts, ncols)
-                vsoln = raw.transpose(2, 0, 1)
-
+            avg = self.cleaner.average({itype: raw}, nfields_total, self.dtype)
+            vsoln = avg[itype].T
             sample.pris[itype] = [vsoln[i] for i in range(npri)]
-
             if snap.has_grads:
-                grads = vsoln[npri:].reshape(npri, self.ndims, *vsoln.shape[1:])
+                grads = vsoln[npri:].reshape(npri, self.ndims, vsoln.shape[1])
                 sample.grad_pris[itype] = [grads[i] for i in range(npri)]
             else:
                 sample.grad_pris[itype] = None

@@ -193,7 +193,7 @@ class VTKSTLWriter(BaseVTKWriter):
                     arr = arr[:, pinv].reshape(ncomp, n_subdiv, ntri)
                     arr = arr.transpose(1, 2, 0)
 
-            fields.append((np.ascontiguousarray(arr, dtype=ftype), ftype))
+            fields.append((arr, ftype))
 
         return fields
 

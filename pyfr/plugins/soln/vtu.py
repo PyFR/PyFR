@@ -8,9 +8,6 @@ from pyfr.writers.vtk.volume import VTKVolumeWriter
 
 
 class VTUWriterPlugin(BaseSolnPlugin):
-    # In-situ VTU writer.  One plugin instance = one output stream (volume
-    # or one boundary).  Use the plugin suffix mechanism for multiple
-    # streams: [soln-plugin-vtu-volume], [soln-plugin-vtu-walls].
     name = 'vtu'
     systems = '.*'
     dimensions = '2|3'
@@ -44,11 +41,18 @@ class VTUWriterPlugin(BaseSolnPlugin):
         add_fields = [n.strip() for n in adds if n.strip()]
         remove_fields = [n.strip() for n in removes if n.strip()]
 
+        mesh, scfg = intg.system.mesh, intg.cfg
+
+        has_grads = intg.system.eles_vect_upts is not None
+        if has_grads and not cfg.getbool(s, 'write-gradients', False):
+            elementscls = intg.system.elementscls
+            for gname in elementscls.visvars(mesh.ndims, scfg):
+                remove_fields.append(f'grad {gname}')
+
         mode = cfg.get(s, 'mode', 'volume').strip()
         common = dict(prec=prec, order=order, divisor=divisor,
                       add_fields=add_fields, remove_fields=remove_fields,
                       discontinuous=not clean)
-        mesh, scfg = intg.system.mesh, intg.cfg
 
         if mode == 'volume':
             self._writer = VTKVolumeWriter(mesh, scfg, **common)

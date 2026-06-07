@@ -181,9 +181,7 @@ class BaseVTKWriter(BaseWriter):
         return svpts
 
     def _point_field_data(self, etype):
-        region = self._region
         view = self._sample.view(etype, layout='aos')
-        neles = dict(self.einfo)[etype]
         fields = []
 
         for name, info in self._emit_fields('point'):
@@ -191,14 +189,7 @@ class BaseVTKWriter(BaseWriter):
             if arr is None:
                 continue
 
-            # Canonical AoS is (flat_npts, ncomps); raw mode wants
-            # (neles, nsvpts, ncomps) for VTU element-major emission.
-            if not region.clean:
-                nsvpts = arr.shape[0] // neles
-                arr = arr.reshape(neles, nsvpts, arr.shape[1])
-
-            fields.append((np.ascontiguousarray(arr, dtype=info.dtype),
-                           info.dtype))
+            fields.append((arr, info.dtype))
 
         return fields
 
