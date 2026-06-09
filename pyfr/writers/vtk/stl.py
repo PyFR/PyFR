@@ -92,16 +92,6 @@ def _spherigon_smooth(flat_pts, bary, tri_verts, tri_norms):
 
 
 class VTKSTLWriter(BaseVTKWriter):
-    # STL surface export.  The STL is just a set of physical points (welded
-    # subdivision vertices) plus user-supplied triangle connectivity — exactly
-    # what snap.at_points(ppts) (PointsSnapshotRegion) consumes.  Sampling
-    # runs once at the welded vertices; emission expands per-triangle via the
-    # weld inverse `pinv` so each triangle gets its own VTU cell.
-    #
-    # STL keeps its own _write_data because per-triangle emission needs the
-    # weld-inverse expansion, which doesn't fit the region.connectivity API
-    # (region holds welded points, no per-element layout).  DirectVTKOutput
-    # provides the points/connectivity adapter for that path.
     type = 'stl'
     output_curved = False
     dimensions = '3'
@@ -140,9 +130,9 @@ class VTKSTLWriter(BaseVTKWriter):
         ppts, pinv = np.unique(pts.reshape(-1, 3), axis=0,
                                return_inverse=True)
 
-        self._stl_pts_shape = pts.shape    # (n_subdiv, ntri, 3)
-        self._stl_ppts = ppts              # (n_welded, 3)
-        self._stl_pinv = pinv              # (n_subdiv*ntri,)
+        self._stl_pts_shape = pts.shape
+        self._stl_ppts = ppts
+        self._stl_pinv = pinv
 
         _, rank, root = get_comm_rank_root()
         if rank == root:
@@ -201,7 +191,7 @@ class VTKSTLWriter(BaseVTKWriter):
         # Per-triangle vpts from welded region.ploc + pinv -> standard
         # DirectVTKOutput emit (tile-pattern connectivity).
         region = self._region
-        ppts = region.ploc['points']           # (3, n_welded)
+        ppts = region.ploc['points']
         pinv = self._stl_pinv
         n_subdiv, ntri = self._stl_pts_shape[:2]
         nsvpts = n_subdiv
