@@ -27,11 +27,6 @@ _conduit_functions = [
     (None, 'conduit_node_set_path_node', c_void_p, c_char_p, c_void_p),
     (c_void_p, 'conduit_node_fetch', c_void_p, c_char_p),
     (None, 'conduit_node_remove_path', c_void_p, c_char_p),
-    # Strided external variants for interleaved (AoS) multi-component arrays
-    (None, 'conduit_node_set_path_external_float32_ptr_detailed',
-     c_void_p, c_char_p, c_void_p, c_int64, c_int64, c_int64, c_int64, c_int64),
-    (None, 'conduit_node_set_path_external_float64_ptr_detailed',
-     c_void_p, c_char_p, c_void_p, c_int64, c_int64, c_int64, c_int64, c_int64),
 ]
 
 
@@ -81,17 +76,10 @@ class ConduitNode:
             case float():
                 self.lib.conduit_node_set_path_float64(self, key, value)
             case (np.ndarray() | np.generic()):
-                if value.ndim == 1 and value.strides[0] != value.itemsize:
-                    fn = getattr(self.lib,
-                                 f'conduit_node_set_path_external_'
-                                 f'{value.dtype}_ptr_detailed')
-                    fn(self, key, value.ctypes.data, value.size,
-                       0, value.strides[0], value.itemsize, 0)
-                else:
-                    value = np.ascontiguousarray(value)
-                    fn = getattr(self.lib,
-                                 f'conduit_node_set_path_{value.dtype}_ptr')
-                    fn(self, key, value.ctypes.data, value.size)
+                value = np.ascontiguousarray(value)
+                fn = getattr(self.lib,
+                             f'conduit_node_set_path_{value.dtype}_ptr')
+                fn(self, key, value.ctypes.data, value.size)
             case list():
                 value = np.array(value, dtype=float)
                 self.lib.conduit_node_set_path_float64_ptr(self, key,
