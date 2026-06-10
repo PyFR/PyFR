@@ -68,6 +68,18 @@ Free-mode options
   dt-ode           float  ODE sub-step size (s).  Default: solver dt.
   file             str    Path for CSV output.  Optional.
 
+Lab-frame export
+-----------------
+A companion postproc plugin (`nirf`) rotates coordinates and velocity from
+the body frame back to the inertial (lab) frame at export time:
+
+  pyfr export volume --postproc nirf mesh.pyfrm in.pyfrs out.vtu
+
+Config section: [postproc-plugin-nirf]
+  apply-translation  bool   Add the frame translation `loc` after rotation
+                            (body sits at its lab-frame position).
+                            Default: False (rotation only, body stays put).
+
 """
 
 import math
