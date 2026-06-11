@@ -414,3 +414,14 @@ class EulerCharRiemInvNIRFBCInters(NIRFBCMixin, EulerBaseBCInters):
 
 class EulerSlpAdiaWallNIRFBCInters(NIRFBCMixin, EulerBaseBCInters):
     type = 'slp-adia-wall-nirf'
+
+
+class EulerSupInflowNIRFBCInters(NIRFBCMixin, EulerBaseBCInters):
+    type = 'sup-in-fa-nirf'
+
+    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
+        super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
+
+        self.c |= self._exp_opts(
+            ['rho', 'p', 'u', 'v', 'w'][:self.ndims + 2], lhs
+        )
