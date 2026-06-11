@@ -353,11 +353,19 @@ class NIRFBCMixin:
         fvelo = [get_param(f'frame-velo-{c}') for c in 'xyz'[:self.ndims]]
         fx0 = self.cfg.getliteral(sect, 'center-of-rot', (0.0,) * self.ndims)
 
-        # Replace x,y,z with inertial locaiton
+        # Replace body-frame ploc with the inertial position
+        placeholders = [f'__NIRF_PLOC_{i}__' for i in range(self.ndims)]
+        inertial = []
+        for i in range(self.ndims):
+            rotated = ' + '.join(f'nirf_R[{j}][{i}]*ploc[{j}]'
+                                 for j in range(self.ndims))
+            inertial.append(f'({rotated} + ({floc[i]}))')
+
         for k in exprs:
-            for i in range(self.ndims):
-                exprs[k] = exprs[k].replace(
-                    f'ploc[{i}]', f'(ploc[{i}] + ({floc[i]}))')
+            for i, ph in enumerate(placeholders):
+                exprs[k] = exprs[k].replace(f'ploc[{i}]', ph)
+            for ph, inert in zip(placeholders, inertial):
+                exprs[k] = exprs[k].replace(ph, inert)
 
         # Step 1: inertial freestream minus frame translation
         u_inertial = [exprs.get(c) for c in 'uvw'[:self.ndims]]
