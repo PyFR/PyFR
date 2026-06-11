@@ -87,6 +87,7 @@ import math
 import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
+from pyfr.exprs import npeval
 from pyfr.plugins.common import init_csv
 from pyfr.plugins.solver.base import BaseSolverPlugin
 from pyfr.quadrules.surface import SurfaceIntegrator
@@ -333,35 +334,52 @@ class NIRFPlugin(BaseSolverPlugin):
             cfgsect, 'center-of-rot', (0.,) * ndims
         ))
 
-        Rt = _quat_to_rotmat(self._fquat).T
+        R3 = _quat_to_rotmat(self._fquat)
+        R = R3[:ndims, :ndims]
+        Rt3 = R3.T
         omega = self._fomega
-        velo = self._fvelo
+        velo = self._fvelo[:ndims]
+        floc = self._floc[:ndims]
 
-        solns = intg.system.ele_scal_upts(0)
-        for s, ploc in zip(solns, intg.system.ele_ploc_upts):
-            rho = s[:, 0, :]
-            u_lab = s[:, 1:1 + ndims, :] / rho[:, None, :]
+        consts = self.cfg.items_as('constants', float)
 
-            # Pad to 3D for cross product and rotation
-            nupts, neles = ploc.shape[0], ploc.shape[-1]
+        for eles, eb in zip(intg.system.ele_map.values(),
+                            intg.system.ele_banks):
+            ploc_body = eles.ploc_at_np('upts')
+            nupts, neles = ploc_body.shape[0], ploc_body.shape[-1]
+
+            # Inertial position: x_lab = R @ x_body + floc
+            ploc_lab = (np.einsum('ij,njk->nik', R, ploc_body)
+                        + floc[None, :, None])
+
+            # Re-evaluate IC primitives with x,y,z bound to inertial coords
+            vars = dict(consts)
+            for i, c in enumerate('xyz'[:ndims]):
+                vars[c] = ploc_lab[:, i, :]
+
+            pris = [npeval(self.cfg.getexpr('soln-ics', dv), vars)
+                    for dv in eles.privars]
+            pris = [np.broadcast_to(v, (nupts, neles)).copy() for v in pris]
+
+            # Velocity transform: u_body = R^T*(u_lab - V_frame) - Ω×r_body
+            u_lab = np.stack(pris[1:1 + ndims], axis=1)
+
             r3 = np.zeros((nupts, 3, neles))
-            r3[:, :ndims, :] = ploc - cor[None, :, None]
-
+            r3[:, :ndims, :] = ploc_body - cor[None, :, None]
             u3 = np.zeros_like(r3)
             u3[:, :ndims, :] = u_lab - velo[None, :, None]
 
-            # u_body = R^T*(u_lab - V_frame) - Ω×r
-            ub = np.einsum('ij,ajk->aik', Rt, u3)
+            ub = np.einsum('ij,njk->nik', Rt3, u3)
             ub -= np.cross(omega, r3.transpose(0, 2, 1)).transpose(0, 2, 1)
 
-            # Update momentum and correct energy for KE change
-            ke_old = 0.5 * rho * np.sum(u_lab**2, axis=1)
-            ke_new = 0.5 * rho * np.sum(ub[:, :ndims, :]**2, axis=1)
-            s[:, 1:1 + ndims, :] = rho[:, None, :] * ub[:, :ndims, :]
-            s[:, -1, :] += ke_new - ke_old
+            for i in range(ndims):
+                pris[1 + i] = ub[:, i, :]
 
-        # Write transformed solution back to backend
-        for eb, s in zip(intg.system.ele_banks, solns):
+            # Convert primitives to conservatives and push to backend
+            s = np.empty((nupts, eles.nvars, neles))
+            for i, v in enumerate(eles.pri_to_con(pris, self.cfg)):
+                s[:, i, :] = v
+
             eb[0].set(s)
 
     def _init_prescribed(self, cfgsect, subs):
