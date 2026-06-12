@@ -407,6 +407,20 @@ class NIRFPlugin(BaseSolverPlugin):
         self._eval_prescribed(self._intg.tcurr)
         self._init_nirf_R()
 
+        self._init_force_output(cfgsect)
+
+    def _csv_header(self):
+        if self.ndims == 2:
+            return ('t,phi,omega,omega_dot,loc_x,loc_y,'
+                    'velo_x,velo_y,accel_x,accel_y,fx,fy,mz')
+        return ('t,phi,theta,psi,'
+                'omega_x,omega_y,omega_z,'
+                'omega_dot_x,omega_dot_y,omega_dot_z,'
+                'loc_x,loc_y,loc_z,'
+                'velo_x,velo_y,velo_z,'
+                'accel_x,accel_y,accel_z,'
+                'fx,fy,fz,mx,my,mz')
+
     def _parse_rot0(self, cfgsect):
         has_euler = self.cfg.hasopt(cfgsect, 'frame-rot0-euler')
         has_quat = self.cfg.hasopt(cfgsect, 'frame-rot0-quat')
@@ -457,6 +471,11 @@ class NIRFPlugin(BaseSolverPlugin):
         self._bcname = self.cfg.get(cfgsect, 'boundary')
         self._viscous = 'navier-stokes' in intg.system.name
 
+        # Default surface quad-deg to solver order if not specified
+        if not self.cfg.hasopt(cfgsect, 'quad-deg'):
+            self.cfg.set(cfgsect, 'quad-deg',
+                         self.cfg.getint('solver', 'order'))
+
         if self._viscous:
             self._constants = self.cfg.items_as('constants', float)
             self._viscorr = self.cfg.get('solver', 'viscosity-correction',
@@ -505,8 +524,6 @@ class NIRFPlugin(BaseSolverPlugin):
             self._fomega = np.array(omega0, dtype=float)
             self._falpha = np.array(alpha0, dtype=float)
 
-        self._init_force_integrator(cfgsect)
-
         if self.cfg.hasopt(cfgsect, 'dt-ode'):
             self.dt_ode = self.cfg.getfloat(cfgsect, 'dt-ode')
         else:
@@ -523,23 +540,21 @@ class NIRFPlugin(BaseSolverPlugin):
         self._init_nirf_R()
         self._register_externs(intg, [_to_extern(p) for p in params])
 
-        _, rank, root = get_comm_rank_root()
+        self._init_force_output(cfgsect)
+
+    def _init_force_output(self, cfgsect):
+        if not self.cfg.hasopt(cfgsect, 'boundary'):
+            self._ff_int = None
+            self._csv = None
+            return
+
+        self._init_force_integrator(cfgsect)
         self._ode_nout = self.cfg.getint(cfgsect, 'ode-nout', 1)
         self._ode_count = 0
 
+        _, rank, root = get_comm_rank_root()
         if rank == root and self.cfg.hasopt(cfgsect, 'file'):
-            if self.ndims == 2:
-                header = ('t,phi,omega,omega_dot,loc_x,loc_y,'
-                          'velo_x,velo_y,accel_x,accel_y,fx,fy,mz')
-            else:
-                header = ('t,phi,theta,psi,'
-                          'omega_x,omega_y,omega_z,'
-                          'omega_dot_x,omega_dot_y,omega_dot_z,'
-                          'loc_x,loc_y,loc_z,'
-                          'velo_x,velo_y,velo_z,'
-                          'accel_x,accel_y,accel_z,'
-                          'fx,fy,fz,mx,my,mz')
-            self._csv = init_csv(self.cfg, cfgsect, header)
+            self._csv = init_csv(self.cfg, cfgsect, self._csv_header())
         else:
             self._csv = None
 
@@ -709,6 +724,14 @@ class NIRFPlugin(BaseSolverPlugin):
 
     def _call_prescribed(self, intg):
         self._eval_prescribed(intg.tcurr)
+
+        if self._ff_int is None:
+            return
+
+        force, moment = self._compute_forces(intg)
+        self._ode_count += 1
+        if self._ode_count % self._ode_nout == 0:
+            self._write_csv(intg, force, moment)
 
     def _call_free(self, intg):
         if self.dt_ode is not None:
