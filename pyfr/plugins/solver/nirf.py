@@ -91,18 +91,13 @@ from pyfr.exprs import npeval
 from pyfr.plugins.common import init_csv
 from pyfr.plugins.solver.base import BaseSolverPlugin
 from pyfr.quadrules.surface import SurfaceIntegrator
+from pyfr.util import subclass_where
 
 # TODO: viscous stress not just for nav-stokes but only no-slp
 # TODO: add support for multiple boundary names
 
-# Python-side math namespace for evaluating getexpr strings
-_PYMATH = {name: getattr(math, name)
-           for name in dir(math)
-           if not name.startswith('_')}
-
-
 def _eval_expr(expr, t):
-    return eval(expr, _PYMATH, {'t': t})
+    return eval(expr, vars(math), {'t': t})
 
 
 def nirf_src_params(ndims):
@@ -177,75 +172,205 @@ class NIRFForceIntegrator(SurfaceIntegrator):
 
         super().__init__(cfg, cfgsect, system.ele_map, con, flags='s')
 
+        self.ndims = system.ndims
+        self.viscous = viscous
+        self.ele_types = system.ele_types
+        self.elementscls = system.elementscls
+
         if con is not None and morigin is not None:
             self.rfpts = {k: loc - morigin[:, None, None]
                          for k, loc in self.locs.items()}
 
-        # Set up m4 and rcpjact for local gradient computation
+        # Viscous: stress-model constants plus the per-element gradient
+        # operators (m4) and J^-T (rcpjact) used by grad_at_fpts
         if viscous:
+            self.constants = cfg.items_as('constants', float)
+            self.viscorr = cfg.get('solver', 'viscosity-correction', 'none')
+
             self.m4 = {}
             rcpjact = {}
-
             for etype in system.ele_map:
                 eles = system.ele_map[etype]
 
-                # Get m4 operator from element basis
                 self.m4[etype] = eles.basis.m4
-
-                # Get smat (scaling matrix) at solution points
                 smat = eles.smat_at_np('upts').transpose(2, 0, 1, 3)
-
-                # Get |J|^-1 at solution points
                 rcpdjac = eles.rcpdjac_at_np('upts')
-
-                # Compute J^-T at solution points
                 rcpjact[etype] = smat * rcpdjac
 
-            # Extract only boundary elements
+            # Keep only the boundary elements
             self.rcpjact = {k: rcpjact[k[0]][..., v]
                            for k, v in self.eidxs.items()}
 
+    def grad_at_fpts(self, etype, fidx, uupts):
+        # Reconstruct the physical solution gradient at the face quadrature
+        # points.  uupts is (s, v, e); the result is (d, v, f, e).
+        m0 = self.m0[etype, fidx]
+        m4 = self.m4[etype]
+        rcpjact = self.rcpjact[etype, fidx]
 
-class NIRFPlugin(BaseSolverPlugin):
-    name = 'nirf'
-    systems = 'euler|navier-stokes'
-    formulations = 'dual|std'
-    dimensions = '2|3'
+        nfpts, nupts = m0.shape
+        ndims, nvars = self.ndims, uupts.shape[1]
 
-    def __init__(self, intg, cfgsect):
-        super().__init__(intg, cfgsect)
+        # Transformed gradient at solution points: (r, s, v, e)
+        tdu = (m4 @ uupts.reshape(nupts, -1)).reshape(ndims, nupts, nvars, -1)
 
-        self._intg = intg
+        # Map reference -> physical gradient via J^-T: (d, s, v, e)
+        du = np.einsum('drse,rsve->dsve', rcpjact, tdu)
+
+        # Interpolate each physical-gradient component to the face points
+        dufpts = np.array([m0 @ d for d in du.reshape(ndims, nupts, -1)])
+        return dufpts.reshape(ndims, nfpts, nvars, -1).swapaxes(1, 2)
+
+    def compute(self, soln):
+        comm, rank, root = get_comm_rank_root()
+
+        ndims = self.ndims
+        mcomp = 3 if ndims == 3 else 1
+
+        solns = dict(zip(self.ele_types, soln))
+        fm = np.zeros((2 if self.viscous else 1, ndims + mcomp))
+
+        # einsum axes: f face point, e element, d/c spatial dim, m moment comp
+        for (etype, fidx), m0 in self.m0.items():
+            nfpts, nupts = m0.shape
+
+            uupts = solns[etype][..., self.eidxs[etype, fidx]]
+            nvars = uupts.shape[1]
+
+            # Interpolate to face points: (v, f, e)
+            ufpts = m0 @ uupts.reshape(nupts, -1)
+            ufpts = ufpts.reshape(nfpts, nvars, -1).swapaxes(0, 1)
+
+            p = self.elementscls.con_to_pri(ufpts, self.cfg)[-1]
+
+            qwts = self.qwts[etype, fidx]
+
+            # Reorient normals and moment arms to (f, e, d)
+            norms = self.norms[etype, fidx].transpose(1, 2, 0)
+            rfpts = self.rfpts[etype, fidx].transpose(1, 2, 0)
+
+            # Pressure force (d) and moment (m): F = ∮ p n, M = ∮ r × (p n)
+            fm[0, :ndims] += np.einsum('f,fe,fed->d', qwts, p, norms)
+
+            rcn = np.atleast_3d(np.cross(rfpts, norms))
+            fm[0, ndims:] += np.einsum('f,fe,fem->m', qwts, p, rcn)
+
+            if self.viscous:
+                # Viscous stress τ at face points, reoriented to (f, e, d, c)
+                dufpts = self.grad_at_fpts(etype, fidx, uupts)
+                vis = self._stress_tensor(ufpts, dufpts).transpose(2, 3, 0, 1)
+
+                # Viscous force (d) and moment (m): traction t_d = τ_dc n_c
+                fm[1, :ndims] += np.einsum('f,fedc,fec->d', qwts, vis, norms)
+
+                viscf = np.einsum('fedc,fec->fed', vis, norms)
+                rcf = np.atleast_3d(np.cross(rfpts, viscf))
+                fm[1, ndims:] += np.einsum('f,fem->m', qwts, rcf)
+
+        if rank != root:
+            comm.Reduce(fm, None, op=mpi.SUM, root=root)
+        else:
+            comm.Reduce(mpi.IN_PLACE, fm, op=mpi.SUM, root=root)
+
+        totals = fm.sum(axis=0) if rank == root else np.zeros(ndims + mcomp)
+        comm.Bcast(totals, root=root)
+
+        return totals[:ndims], totals[ndims:]
+
+    def _stress_tensor(self, u, du):
+        c = self.constants
+        ndims = self.ndims
+
+        rho, E = u[0], u[-1]
+        gradrho, gradrhou = du[:, 0], du[:, 1:-1]
+
+        gradu = (gradrhou - gradrho[:, None]*u[None, 1:-1]/rho) / rho
+        bulk = np.eye(ndims)[:, :, None, None]*np.trace(gradu)
+
+        mu = c['mu']
+
+        if self.viscorr == 'sutherland':
+            cpT = c['gamma']*(E/rho - 0.5*np.sum(u[1:-1]**2, axis=0)/rho**2)
+            Trat = np.maximum(cpT/c['cpTref'], 1e-10)
+            mu *= (c['cpTref'] + c['cpTs'])*Trat**1.5 / (cpT + c['cpTs'])
+
+        return -mu*(gradu + gradu.swapaxes(0, 1) - 2/3*bulk)
+
+
+class BaseMotion:
+    name = None
+    needs_force = False
+    has_externs = False
+    extern_names = ()
+
+    def __init__(self, plugin, cfgsect):
+        self.plugin = plugin
+        self.cfg = plugin.cfg
+        self.ndims = plugin.ndims
+        self.cfgsect = cfgsect
+
+        # State (subclass __init__ populates)
+        self.floc = np.zeros(self.ndims)
+        self.fvelo = np.zeros(self.ndims)
+        self.faccel = np.zeros(self.ndims)
+        self.fquat = np.array([1.0, 0.0, 0.0, 0.0])
+        self.fomega = np.zeros(3)
+        self.falpha = np.zeros(3)
+        self.tode_last = plugin._intg.tcurr
+
+        # Kernel template args (subclass __init__ populates)
+        self.tplargs = {}
+
+    def should_advance(self, intg):
+        return True
+
+    def advance(self, intg, force, moment):
+        raise NotImplementedError
+
+
+class PrescribedMotion(BaseMotion):
+    name = 'prescribed'
+
+    def __init__(self, plugin, cfgsect):
+        super().__init__(plugin, cfgsect)
 
         subs = self.cfg.items('constants')
         subs |= dict(abs='fabs', pi=math.pi)
 
-        self._motion = self.cfg.get(cfgsect, 'motion')
+        self.fexprs = self._parse_motion_exprs(subs)
+        self._validate_cfg()
+        self._build_tplargs()
 
-        if self._motion == 'prescribed':
-            self._init_prescribed(cfgsect, subs)
-            self._call = self._call_prescribed
-        elif self._motion == 'free':
-            self._init_free(intg, cfgsect)
-            self._call = self._call_free
-        else:
-            raise ValueError(
-                f"Invalid NIRF motion type: {self._motion}"
-            )
+        self.advance_to(plugin._intg.tcurr)
 
-        # Transform ICs from lab frame to body frame (fresh start)
-        if not intg.isrestart:
-            self._transform_ics(intg, cfgsect)
-
-        macro = f'nirf_source_{self.ndims}d'
-        for eles in intg.system.ele_map.values():
-            eles.add_src_macro('pyfr.plugins.solver.kernels.nirf', macro,
-                               self._tplargs, ploc=True, soln=True)
-
-    def _validate_prescribed_cfg(self, cfgsect, subs):
-        comps = 'xyz'[:self.ndims]
+    def _parse_motion_exprs(self, subs):
         ge = self.cfg.getexpr
+        cfgsect = self.cfgsect
+        comps = 'xyz'[:self.ndims]
 
+        exprs = {}
+        for kind in ('loc', 'velo', 'accel'):
+            exprs[kind] = [ge(cfgsect, f'frame-{kind}-{c}', '0.0', subs=subs)
+                           for c in comps]
+        for kind in ('omega', 'alpha'):
+            exprs[kind] = [ge(cfgsect, f'frame-{kind}-{c}', '0.0', subs=subs)
+                           for c in 'xyz']
+        if self.ndims == 2:
+            exprs['rot'] = [ge(cfgsect, 'frame-rot-z', '0.0', subs=subs)]
+        else:
+            exprs['rot'] = [ge(cfgsect, f'frame-rot-{c}', '0.0', subs=subs)
+                            for c in 'xyz']
+        return exprs
+
+    def _build_tplargs(self):
+        for kind, comps in (('omega', 'xyz'), ('alpha', 'xyz'),
+                            ('accel', 'xyz'[:self.ndims])):
+            for i, c in enumerate(comps):
+                key = _to_tplkey(f'frame-{kind}-{c}')
+                self.tplargs[key] = self.fexprs[kind][i]
+        self.tplargs |= nirf_origin_tplargs(self.cfg, self.cfgsect, self.ndims)
+
+    def _validate_cfg(self):
         def ev(exprs, t):
             return np.array([_eval_expr(e, t) for e in exprs])
 
@@ -281,52 +406,235 @@ class NIRFPlugin(BaseSolverPlugin):
                     f'specified={given}'
                 )
 
-        s = subs
-        loc = [ge(cfgsect, f'frame-loc-{c}', '0.0', subs=s)
-               for c in comps]
-        velo = [ge(cfgsect, f'frame-velo-{c}', '0.0', subs=s)
-                for c in comps]
-        accel = [ge(cfgsect, f'frame-accel-{c}', '0.0', subs=s)
-                 for c in comps]
-        omega = [ge(cfgsect, f'frame-omega-{c}', '0.0', subs=s)
-                 for c in 'xyz']
-        alpha = [ge(cfgsect, f'frame-alpha-{c}', '0.0', subs=s)
-                 for c in 'xyz']
-
-        if self.ndims == 2:
-            rot = [ge(cfgsect, 'frame-rot-z', '0.0', subs=s)]
-        else:
-            rot = [ge(cfgsect, f'frame-rot-{c}', '0.0', subs=s)
-                   for c in 'xyz']
-
         t = 1.0
 
-        # loc -> velo -> accel
-        fd_velo = converged_fd(lambda s: ev(loc, s), t)
-        check('frame-velo', 'frame-loc',
-              fd_velo, ev(velo, t))
-        fd_accel = converged_fd(lambda s: ev(velo, s), t)
-        check('frame-accel', 'frame-velo',
-              fd_accel, ev(accel, t))
+        for deriv, primary in (('velo', 'loc'),
+                               ('accel', 'velo'),
+                               ('alpha', 'omega')):
+            fd = converged_fd(
+                lambda s, p=primary: ev(self.fexprs[p], s), t
+            )
+            check(f'frame-{deriv}', f'frame-{primary}',
+                  fd, ev(self.fexprs[deriv], t))
 
         # rot -> omega via quaternion kinematics
         def quat_at(t):
+            rv = ev(self.fexprs['rot'], t)
             if self.ndims == 2:
-                phi = _eval_expr(rot[0], t)
-                return _euler_to_quat(phi, 0, 0)
-            return _euler_to_quat(*ev(rot, t)[::-1])
+                return _euler_to_quat(rv[0], 0, 0)
+            return _euler_to_quat(*rv[::-1])
 
         dqdt_fd = converged_fd(quat_at, t)
-        q0 = quat_at(t)
-        w = ev(omega, t)
-        dqdt_an = 0.5 * _quat_mult(q0, np.r_[0, w])
-        check('frame-omega', 'frame-rot',
-              dqdt_fd, dqdt_an)
+        w = ev(self.fexprs['omega'], t)
+        dqdt_an = 0.5 * _quat_mult(quat_at(t), np.r_[0, w])
+        check('frame-omega', 'frame-rot', dqdt_fd, dqdt_an)
 
-        # omega -> alpha
-        fd_alpha = converged_fd(lambda s: ev(omega, s), t)
-        check('frame-alpha', 'frame-omega',
-              fd_alpha, ev(alpha, t))
+    def advance_to(self, t):
+        vals = {k: np.array([_eval_expr(e, t) for e in exprs])
+                for k, exprs in self.fexprs.items()}
+
+        self.floc = vals['loc']
+        self.fvelo = vals['velo']
+        self.faccel = vals['accel']
+        self.fomega = vals['omega']
+        self.falpha = vals['alpha']
+
+        if self.ndims == 2:
+            self.fquat = _euler_to_quat(vals['rot'][0], 0, 0)
+        else:
+            self.fquat = _euler_to_quat(*vals['rot'][::-1])
+
+        self.tode_last = t
+
+    def advance(self, intg, force, moment):
+        self.advance_to(intg.tcurr)
+
+
+class FreeMotion(BaseMotion):
+    name = 'free'
+    needs_force = True
+    has_externs = True
+
+    def __init__(self, plugin, cfgsect):
+        super().__init__(plugin, cfgsect)
+
+        self._parse_dof()
+
+        self.mass = self.cfg.getfloat(cfgsect, 'mass')
+        if self.ndims == 2:
+            self.inertia = self.cfg.getfloat(cfgsect, 'inertia')
+        else:
+            self.inertia = np.array(
+                self.cfg.getliteral(cfgsect, 'inertia')).reshape(3, 3)
+
+        zeros_nd = (0.,) * self.ndims
+
+        self.floc = np.array(self.cfg.getliteral(
+            cfgsect, 'frame-loc0', zeros_nd), dtype=float)
+        self.fvelo = np.array(self.cfg.getliteral(
+            cfgsect, 'frame-velo0', zeros_nd), dtype=float)
+        self.faccel = np.array(self.cfg.getliteral(
+            cfgsect, 'frame-accel0', zeros_nd), dtype=float)
+        self.fquat = self._parse_rot0()
+
+        omega0 = self.cfg.getliteral(cfgsect, 'frame-omega0',
+                                     0. if self.ndims == 2 else (0., 0., 0.))
+        alpha0 = self.cfg.getliteral(cfgsect, 'frame-alpha0',
+                                     0. if self.ndims == 2 else (0., 0., 0.))
+
+        if self.ndims == 2:
+            if not np.isscalar(omega0) or not np.isscalar(alpha0):
+                raise ValueError('frame-omega0/alpha0 must be a scalar in 2D')
+            self.fomega = np.array([0., 0., omega0])
+            self.falpha = np.array([0., 0., alpha0])
+        else:
+            self.fomega = np.array(omega0, dtype=float)
+            self.falpha = np.array(alpha0, dtype=float)
+
+        if self.cfg.hasopt(cfgsect, 'dt-ode'):
+            self.dt_ode = self.cfg.getfloat(cfgsect, 'dt-ode')
+        else:
+            self.dt_ode = None
+
+        self.tode_last = plugin._intg.tcurr
+
+        if self.dt_ode is not None:
+            plugin._intg.call_plugin_dt(plugin._intg.tcurr, self.dt_ode)
+
+        params = nirf_src_params(self.ndims)
+        self.tplargs = {_to_tplkey(p): _to_extern(p) for p in params}
+        self.tplargs |= nirf_origin_tplargs(self.cfg, cfgsect, self.ndims)
+        self.extern_names = [_to_extern(p) for p in params]
+
+    def _parse_dof(self):
+        if self.ndims == 2:
+            all_dof = {'x', 'y', 'rz'}
+        else:
+            all_dof = {'x', 'y', 'z', 'rx', 'ry', 'rz'}
+
+        dof_str = self.cfg.get(self.cfgsect, 'dof', None)
+        if dof_str is None:
+            self._free_dof = all_dof
+        elif dof_str.strip().lower() in ('', 'none'):
+            self._free_dof = set()
+        else:
+            self._free_dof = {s.strip() for s in dof_str.split(',')}
+            invalid = self._free_dof - all_dof
+            if invalid:
+                raise ValueError(f"Invalid DOF: {invalid}. Valid: {all_dof}")
+
+        comps = 'xyz'[:self.ndims]
+        self._trans_mask = np.array([c in self._free_dof for c in comps])
+        self._rot_mask = np.array([f'r{c}' in self._free_dof for c in 'xyz'])
+
+    def _parse_rot0(self):
+        cfgsect = self.cfgsect
+        has_euler = self.cfg.hasopt(cfgsect, 'frame-rot0-euler')
+        has_quat = self.cfg.hasopt(cfgsect, 'frame-rot0-quat')
+
+        if has_euler and has_quat:
+            raise ValueError('Specify frame-rot0-euler or frame-rot0-quat, '
+                             'not both')
+
+        if has_euler:
+            rot = self.cfg.getliteral(cfgsect, 'frame-rot0-euler')
+            if self.ndims == 2:
+                return _euler_to_quat(float(rot), 0, 0)
+            return _euler_to_quat(*rot[::-1])
+        elif has_quat:
+            q = np.array(self.cfg.getliteral(cfgsect, 'frame-rot0-quat'),
+                         dtype=float)
+            q /= np.linalg.norm(q)
+            return q
+        return np.array([1.0, 0.0, 0.0, 0.0])
+
+    def should_advance(self, intg):
+        if self.dt_ode is None:
+            return True
+        return intg.tcurr - self.tode_last >= self.dt_ode - self.plugin.tol
+
+    def advance(self, intg, force, moment):
+        dt = intg.tcurr - self.tode_last if self.dt_ode else intg.dt
+
+        faccel_new = force / self.mass
+        faccel_new *= self._trans_mask
+
+        falpha_new = np.zeros(3)
+        if self.ndims == 2:
+            falpha_new[2] = moment[0] / self.inertia
+        else:
+            gyro = np.cross(self.fomega, self.inertia @ self.fomega)
+            falpha_new = np.linalg.solve(self.inertia, moment - gyro)
+        falpha_new *= self._rot_mask
+
+        # Heun's method
+        fomega_new = self.fomega + 0.5*dt*(self.falpha + falpha_new)
+        fvelo_new = self.fvelo + 0.5*dt*(self.faccel + faccel_new)
+
+        omega_avg = 0.5*(self.fomega + fomega_new)
+        dqdt = 0.5*_quat_mult(self.fquat, np.array([0, *omega_avg]))
+        self.fquat = self.fquat + dt*dqdt
+        self.fquat /= np.linalg.norm(self.fquat)
+
+        self.floc = self.floc + 0.5*dt*(self.fvelo + fvelo_new)
+
+        self.fomega = fomega_new
+        self.falpha = falpha_new
+        self.fvelo = fvelo_new
+        self.faccel = faccel_new
+
+        self.tode_last = intg.tcurr
+
+
+class NIRFPlugin(BaseSolverPlugin):
+    name = 'nirf'
+    systems = 'euler|navier-stokes'
+    formulations = 'dual|std'
+    dimensions = '2|3'
+
+    def __init__(self, intg, cfgsect):
+        super().__init__(intg, cfgsect)
+
+        self._intg = intg
+
+        mode = self.cfg.get(cfgsect, 'motion')
+        modecls = subclass_where(BaseMotion, name=mode)
+        self.motion = modecls(self, cfgsect)
+
+        if self.motion.needs_force and not self.cfg.hasopt(cfgsect, 'boundary'):
+            raise ValueError(
+                f"Motion mode '{self.motion.name}' requires 'boundary'"
+            )
+
+        self._init_nirf_R()
+        if self.motion.extern_names:
+            self._register_externs(intg, self.motion.extern_names)
+
+        self._init_force_output(cfgsect)
+
+        if not intg.isrestart:
+            self._transform_ics(intg, cfgsect)
+
+        macro = f'nirf_source_{self.ndims}d'
+        for eles in intg.system.ele_map.values():
+            eles.add_src_macro('pyfr.plugins.solver.kernels.nirf', macro,
+                               self.motion.tplargs, ploc=True, soln=True)
+
+    # Read-only proxies so existing self._fX accesses keep working
+    @property
+    def _floc(self):    return self.motion.floc
+    @property
+    def _fvelo(self):   return self.motion.fvelo
+    @property
+    def _faccel(self):  return self.motion.faccel
+    @property
+    def _fquat(self):   return self.motion.fquat
+    @property
+    def _fomega(self):  return self.motion.fomega
+    @property
+    def _falpha(self):  return self.motion.falpha
+    @property
+    def tode_last(self): return self.motion.tode_last
 
     def _transform_ics(self, intg, cfgsect):
         ndims = self.ndims
@@ -382,165 +690,47 @@ class NIRFPlugin(BaseSolverPlugin):
 
             eb[0].set(s)
 
-    def _init_prescribed(self, cfgsect, subs):
-        self._validate_prescribed_cfg(cfgsect, subs)
-
+    def _csv_columns(self):
         comps = 'xyz'[:self.ndims]
-
-        # Source term params (omega, alpha, accel)
-        params = nirf_src_params(self.ndims)
-        self._tplargs = {_to_tplkey(p): self.cfg.getexpr(cfgsect, p, '0.0', subs=subs)
-                         for p in params}
-        self._tplargs |= nirf_origin_tplargs(self.cfg, cfgsect, self.ndims)
-
-        # Prescribed expressions for direct evaluation
-        self._loc_exprs = [self.cfg.getexpr(cfgsect, f'frame-loc-{c}', '0.0', subs=subs)
-                           for c in comps]
-        self._velo_exprs = [self.cfg.getexpr(cfgsect, f'frame-velo-{c}', '0.0', subs=subs)
-                            for c in comps]
         if self.ndims == 2:
-            self._rot_exprs = [self.cfg.getexpr(cfgsect, 'frame-rot-z', '0.0', subs=subs)]
+            ang = ['phi', 'omega', 'omega_dot']
+            moments = ['mz']
         else:
-            self._rot_exprs = [self.cfg.getexpr(cfgsect, f'frame-rot-{c}', '0.0', subs=subs)
-                               for c in 'xyz']
+            ang = (['phi', 'theta', 'psi'] +
+                   [f'omega_{c}' for c in 'xyz'] +
+                   [f'omega_dot_{c}' for c in 'xyz'])
+            moments = [f'm{c}' for c in 'xyz']
 
-        self._eval_prescribed(self._intg.tcurr)
-        self._init_nirf_R()
-
-        self._init_force_output(cfgsect)
+        return (['t'] + ang +
+                [f'loc_{c}' for c in comps] +
+                [f'velo_{c}' for c in comps] +
+                [f'accel_{c}' for c in comps] +
+                [f'f{c}' for c in comps] +
+                moments)
 
     def _csv_header(self):
-        if self.ndims == 2:
-            return ('t,phi,omega,omega_dot,loc_x,loc_y,'
-                    'velo_x,velo_y,accel_x,accel_y,fx,fy,mz')
-        return ('t,phi,theta,psi,'
-                'omega_x,omega_y,omega_z,'
-                'omega_dot_x,omega_dot_y,omega_dot_z,'
-                'loc_x,loc_y,loc_z,'
-                'velo_x,velo_y,velo_z,'
-                'accel_x,accel_y,accel_z,'
-                'fx,fy,fz,mx,my,mz')
-
-    def _parse_rot0(self, cfgsect):
-        has_euler = self.cfg.hasopt(cfgsect, 'frame-rot0-euler')
-        has_quat = self.cfg.hasopt(cfgsect, 'frame-rot0-quat')
-
-        if has_euler and has_quat:
-            raise ValueError('Specify frame-rot0-euler or frame-rot0-quat, '
-                             'not both')
-
-        if has_euler:
-            rot = self.cfg.getliteral(cfgsect, 'frame-rot0-euler')
-            if self.ndims == 2:
-                return _euler_to_quat(float(rot), 0, 0)
-            else:
-                return _euler_to_quat(*rot[::-1])
-        elif has_quat:
-            q = np.array(self.cfg.getliteral(cfgsect, 'frame-rot0-quat'),
-                         dtype=float)
-            q /= np.linalg.norm(q)
-            return q
-        else:
-            return np.array([1.0, 0.0, 0.0, 0.0])
-
-    def _parse_dof(self, cfgsect):
-        if self.ndims == 2:
-            all_dof = {'x', 'y', 'rz'}
-        else:
-            all_dof = {'x', 'y', 'z', 'rx', 'ry', 'rz'}
-
-        dof_str = self.cfg.get(cfgsect, 'dof', None)
-        if dof_str is None:
-            self._free_dof = all_dof
-        elif dof_str.strip().lower() in ('', 'none'):
-            self._free_dof = set()
-        else:
-            self._free_dof = {s.strip() for s in dof_str.split(',')}
-            invalid = self._free_dof - all_dof
-            if invalid:
-                raise ValueError(f"Invalid DOF: {invalid}. Valid: {all_dof}")
-
-        comps = 'xyz'[:self.ndims]
-        self._trans_mask = np.array([c in self._free_dof for c in comps])
-        self._rot_mask = np.array([f'r{c}' in self._free_dof for c in 'xyz'])
+        return ','.join(self._csv_columns())
 
     def _init_force_integrator(self, cfgsect):
         intg = self._intg
         comm, rank, root = get_comm_rank_root()
 
-        self._bcname = self.cfg.get(cfgsect, 'boundary')
-        self._viscous = 'navier-stokes' in intg.system.name
+        bcname = self.cfg.get(cfgsect, 'boundary')
+        viscous = 'navier-stokes' in intg.system.name
 
-        # Default surface quad-deg to solver order if not specified
-        if not self.cfg.hasopt(cfgsect, 'quad-deg'):
-            self.cfg.set(cfgsect, 'quad-deg',
-                         self.cfg.getint('solver', 'order'))
-
-        if self._viscous:
-            self._constants = self.cfg.items_as('constants', float)
-            self._viscorr = self.cfg.get('solver', 'viscosity-correction',
-                                         'none')
-
-        self._elementscls = intg.system.elementscls
+        self.cfg.set(cfgsect, 'quad-deg',
+                     self.cfg.getint(cfgsect, 'quad-deg',
+                                     self.cfg.getint('solver', 'order')))
 
         fx0 = np.array(self.cfg.getliteral(cfgsect, 'center-of-rot',
                                            (0.,) * self.ndims), dtype=float)
 
-        bcranks = comm.gather(self._bcname in intg.system.mesh.bcon, root=root)
+        bcranks = comm.gather(bcname in intg.system.mesh.bcon, root=root)
         if rank == root and not any(bcranks):
-            raise RuntimeError(f'Boundary {self._bcname} does not exist')
+            raise RuntimeError(f'Boundary {bcname} does not exist')
 
         self._ff_int = NIRFForceIntegrator(
-            self.cfg, cfgsect, intg.system, self._bcname, fx0, self._viscous)
-
-    def _init_free(self, intg, cfgsect):
-        self._parse_dof(cfgsect)
-
-        self._mass = self.cfg.getfloat(cfgsect, 'mass')
-        if self.ndims == 2:
-            self._inertia = self.cfg.getfloat(cfgsect, 'inertia')
-        else:
-            self._inertia = np.array(
-                self.cfg.getliteral(cfgsect, 'inertia')).reshape(3, 3)
-
-        zeros_nd = (0.,) * self.ndims
-
-        self._floc = np.array(self.cfg.getliteral(cfgsect, 'frame-loc0', zeros_nd), dtype=float)
-        self._fvelo = np.array(self.cfg.getliteral(cfgsect, 'frame-velo0', zeros_nd), dtype=float)
-        self._faccel = np.array(self.cfg.getliteral(cfgsect, 'frame-accel0', zeros_nd), dtype=float)
-        self._fquat = self._parse_rot0(cfgsect)
-
-        omega0 = self.cfg.getliteral(cfgsect, 'frame-omega0',
-                                     0. if self.ndims == 2 else (0., 0., 0.))
-        alpha0 = self.cfg.getliteral(cfgsect, 'frame-alpha0',
-                                     0. if self.ndims == 2 else (0., 0., 0.))
-
-        if self.ndims == 2:
-            if not np.isscalar(omega0) or not np.isscalar(alpha0):
-                raise ValueError('frame-omega0/alpha0 must be a scalar in 2D')
-            self._fomega = np.array([0., 0., omega0])
-            self._falpha = np.array([0., 0., alpha0])
-        else:
-            self._fomega = np.array(omega0, dtype=float)
-            self._falpha = np.array(alpha0, dtype=float)
-
-        if self.cfg.hasopt(cfgsect, 'dt-ode'):
-            self.dt_ode = self.cfg.getfloat(cfgsect, 'dt-ode')
-        else:
-            self.dt_ode = None
-        self.tode_last = intg.tcurr
-
-        if self.dt_ode is not None:
-            intg.call_plugin_dt(intg.tcurr, self.dt_ode)
-
-        params = nirf_src_params(self.ndims)
-        self._tplargs = {_to_tplkey(p): _to_extern(p) for p in params}
-        self._tplargs |= nirf_origin_tplargs(self.cfg, cfgsect, self.ndims)
-
-        self._init_nirf_R()
-        self._register_externs(intg, [_to_extern(p) for p in params])
-
-        self._init_force_output(cfgsect)
+            self.cfg, cfgsect, intg.system, bcname, fx0, viscous)
 
     def _init_force_output(self, cfgsect):
         if not self.cfg.hasopt(cfgsect, 'boundary'):
@@ -571,8 +761,6 @@ class NIRFPlugin(BaseSolverPlugin):
             ev[f'frame_velo_{c}'] = self._fvelo[i]
             ev[f'frame_accel_{c}'] = self._faccel[i]
 
-        self._update_nirf_R()
-
     def _init_nirf_R(self):
         intg = self._intg
         R0 = _quat_to_rotmat(self._fquat).T
@@ -592,162 +780,28 @@ class NIRFPlugin(BaseSolverPlugin):
         R = _quat_to_rotmat(self._fquat)
         self._nirf_R.set(R.T)
 
-    def _compute_forces(self, intg):
-        comm, rank, root = get_comm_rank_root()
-
-        ndims, nvars = self.ndims, self.nvars
-        mcomp = 3 if ndims == 3 else 1
-
-        solns = dict(zip(intg.system.ele_types, intg.soln))
-        fm = np.zeros((2 if self._viscous else 1, ndims + mcomp))
-
-        for (etype, fidx), m0 in self._ff_int.m0.items():
-            nfpts, nupts = m0.shape
-
-            uupts = solns[etype][..., self._ff_int.eidxs[etype, fidx]]
-
-            ufpts = m0 @ uupts.reshape(nupts, -1)
-            ufpts = ufpts.reshape(nfpts, nvars, -1).swapaxes(0, 1)
-
-            p = self._elementscls.con_to_pri(ufpts, self.cfg)[-1]
-
-            qwts = self._ff_int.qwts[etype, fidx]
-
-            # Reorient to (nfpts, neles, ndims) for einsums: i,j,k
-            norms = self._ff_int.norms[etype, fidx].transpose(1, 2, 0)
-            rfpts = self._ff_int.rfpts[etype, fidx].transpose(1, 2, 0)
-
-            # Pressure force and moment
-            fm[0, :ndims] += np.einsum('i,ij,ijk', qwts, p, norms)
-
-            rcn = np.atleast_3d(np.cross(rfpts, norms))
-            fm[0, ndims:] += np.einsum('i,ij,ijk->k', qwts, p, rcn)
-
-            if self._viscous:
-                m4 = self._ff_int.m4[etype]
-                rcpjact = self._ff_int.rcpjact[etype, fidx]
-
-                tduupts = m4 @ uupts.reshape(nupts, -1)
-                tduupts = tduupts.reshape(ndims, nupts, nvars, -1)
-
-                duupts = np.einsum('ijkl,jkml->ikml', rcpjact, tduupts)
-                duupts = duupts.reshape(ndims, nupts, -1)
-
-                dufpts = np.array([m0 @ du for du in duupts])
-                dufpts = dufpts.reshape(ndims, nfpts, nvars, -1).swapaxes(1, 2)
-
-                vis = self._stress_tensor(ufpts, dufpts).transpose(2, 3, 0, 1)
-
-                # Viscous force and moment
-                fm[1, :ndims] += np.einsum('i,ijdk,ijk', qwts, vis, norms)
-
-                viscf = np.einsum('ijdk,ijk->ijd', vis, norms)
-                rcf = np.atleast_3d(np.cross(rfpts, viscf))
-                fm[1, ndims:] += np.einsum('i,ijk->k', qwts, rcf)
-
-        if rank != root:
-            comm.Reduce(fm, None, op=mpi.SUM, root=root)
-        else:
-            comm.Reduce(mpi.IN_PLACE, fm, op=mpi.SUM, root=root)
-
-        totals = fm.sum(axis=0) if rank == root else np.zeros(ndims + mcomp)
-        comm.Bcast(totals, root=root)
-
-        return totals[:ndims], totals[ndims:]
-
-    def _stress_tensor(self, u, du):
-        c = self._constants
-        ndims = self.ndims
-
-        rho, E = u[0], u[-1]
-        gradrho, gradrhou = du[:, 0], du[:, 1:-1]
-
-        gradu = (gradrhou - gradrho[:, None]*u[None, 1:-1]/rho) / rho
-        bulk = np.eye(ndims)[:, :, None, None]*np.trace(gradu)
-
-        mu = c['mu']
-
-        if self._viscorr == 'sutherland':
-            cpT = c['gamma']*(E/rho - 0.5*np.sum(u[1:-1]**2, axis=0)/rho**2)
-            Trat = np.maximum(cpT/c['cpTref'], 1e-10)
-            mu *= (c['cpTref'] + c['cpTs'])*Trat**1.5 / (cpT + c['cpTs'])
-
-        return -mu*(gradu + gradu.swapaxes(0, 1) - 2/3*bulk)
-
-    def _solve_rigid_body_ode(self, force, moment, dt):
-        faccel_new = force / self._mass
-        faccel_new *= self._trans_mask
-
-        falpha_new = np.zeros(3)
-        if self.ndims == 2:
-            falpha_new[2] = moment[0] / self._inertia
-        else:
-            gyro = np.cross(self._fomega, self._inertia @ self._fomega)
-            falpha_new = np.linalg.solve(self._inertia, moment - gyro)
-        falpha_new *= self._rot_mask
-
-        # Heun's method
-        fomega_new = self._fomega + 0.5*dt*(self._falpha + falpha_new)
-        fvelo_new = self._fvelo + 0.5*dt*(self._faccel + faccel_new)
-
-        omega_avg = 0.5*(self._fomega + fomega_new)
-        dqdt = 0.5*_quat_mult(self._fquat, np.array([0, *omega_avg]))
-        self._fquat += dt*dqdt
-        self._fquat /= np.linalg.norm(self._fquat)
-
-        self._floc += 0.5*dt*(self._fvelo + fvelo_new)
-
-        self._fomega = fomega_new
-        self._falpha = falpha_new
-        self._fvelo = fvelo_new
-        self._faccel = faccel_new
-
     def __call__(self, intg):
-        self._call(intg)
-        self._update_nirf_R()
-
-    def _eval_prescribed(self, t):
-        comps = 'xyz'[:self.ndims]
-        self._floc = np.array([_eval_expr(e, t) for e in self._loc_exprs])
-        self._fvelo = np.array([_eval_expr(e, t) for e in self._velo_exprs])
-        self._faccel = np.array([_eval_expr(self._tplargs[_to_tplkey(f'frame-accel-{c}')], t)
-                                 for c in comps])
-        self._fomega = np.array([_eval_expr(self._tplargs[_to_tplkey(f'frame-omega-{c}')], t)
-                                 for c in 'xyz'])
-        self._falpha = np.array([_eval_expr(self._tplargs[_to_tplkey(f'frame-alpha-{c}')], t)
-                                 for c in 'xyz'])
-        if self.ndims == 2:
-            self._fquat = _euler_to_quat(_eval_expr(self._rot_exprs[0], t), 0, 0)
-        else:
-            self._fquat = _euler_to_quat(*[_eval_expr(e, t) for e in self._rot_exprs[::-1]])
-        self.tode_last = t
-
-    def _call_prescribed(self, intg):
-        self._eval_prescribed(intg.tcurr)
-
-        if self._ff_int is None:
+        if not self.motion.should_advance(intg):
             return
 
-        force, moment = self._compute_forces(intg)
-        self._ode_count += 1
-        if self._ode_count % self._ode_nout == 0:
-            self._write_csv(intg, force, moment)
+        need_force = self.motion.needs_force or self._ff_int is not None
+        if need_force:
+            force, moment = self._ff_int.compute(intg.soln)
+        else:
+            force, moment = None, None
 
-    def _call_free(self, intg):
-        if self.dt_ode is not None:
-            if intg.tcurr - self.tode_last < self.dt_ode - self.tol:
-                return
+        self.motion.advance(intg, force, moment)
 
-        force, moment = self._compute_forces(intg)
-        ode_dt = intg.tcurr - self.tode_last if self.dt_ode else intg.dt
-        self._solve_rigid_body_ode(force, moment, ode_dt)
-        self.tode_last = intg.tcurr
-        self._update_extern_values()
-        self.bind_externs()
+        if self.motion.has_externs:
+            self._update_extern_values()
+            self.bind_externs()
 
-        self._ode_count += 1
-        if self._ode_count % self._ode_nout == 0:
-            self._write_csv(intg, force, moment)
+        self._update_nirf_R()
+
+        if self._ff_int is not None:
+            self._ode_count += 1
+            if self._ode_count % self._ode_nout == 0:
+                self._write_csv(intg, force, moment)
 
     def _write_csv(self, intg, force, moment):
         if not self._csv:
@@ -760,23 +814,13 @@ class NIRFPlugin(BaseSolverPlugin):
         phi, theta, psi = _quat_to_euler(self._fquat)
 
         if self.ndims == 2:
-            args = [intg.tcurr, phi,
-                    self._fomega[2], self._falpha[2],
-                    self._floc[0], self._floc[1],
-                    self._fvelo[0], self._fvelo[1],
-                    self._faccel[0], self._faccel[1],
-                    force[0], force[1], moment[0]]
+            ang = [phi, self._fomega[2], self._falpha[2]]
         else:
-            args = [intg.tcurr, phi, theta, psi,
-                    self._fomega[0], self._fomega[1], self._fomega[2],
-                    self._falpha[0], self._falpha[1], self._falpha[2],
-                    self._floc[0], self._floc[1], self._floc[2],
-                    self._fvelo[0], self._fvelo[1], self._fvelo[2],
-                    self._faccel[0], self._faccel[1], self._faccel[2],
-                    force[0], force[1], force[2],
-                    moment[0], moment[1], moment[2]]
+            ang = [phi, theta, psi, *self._fomega, *self._falpha]
 
-        self._csv(*args)
+        self._csv(intg.tcurr, *ang,
+                  *self._floc, *self._fvelo, *self._faccel,
+                  *force, *moment)
 
     _sdata_dtype = np.dtype([
         ('loc', 'f8', 3), ('velo', 'f8', 3), ('accel', 'f8', 3),
@@ -787,15 +831,19 @@ class NIRFPlugin(BaseSolverPlugin):
     def setup(self, sdata, prevcfg, serialiser):
         if sdata is not None:
             ndims = self.ndims
-            self._floc = np.array(sdata['loc'])[:ndims].copy()
-            self._fvelo = np.array(sdata['velo'])[:ndims].copy()
-            self._faccel = np.array(sdata['accel'])[:ndims].copy()
-            self._fquat = np.array(sdata['quat'])
-            self._fomega = np.array(sdata['omega'])
-            self._falpha = np.array(sdata['alpha'])
-            self.tode_last = float(sdata['tode_last'])
-            if self._motion == 'free':
+            m = self.motion
+            m.floc = np.array(sdata['loc'])[:ndims].copy()
+            m.fvelo = np.array(sdata['velo'])[:ndims].copy()
+            m.faccel = np.array(sdata['accel'])[:ndims].copy()
+            m.fquat = np.array(sdata['quat'])
+            m.fomega = np.array(sdata['omega'])
+            m.falpha = np.array(sdata['alpha'])
+            m.tode_last = float(sdata['tode_last'])
+            if m.has_externs:
                 self._update_extern_values()
+
+            # Reflect the restored orientation in the backend R matrix
+            self._update_nirf_R()
 
         serialiser.register(self.sprefix,
                             self._serialise_data)
