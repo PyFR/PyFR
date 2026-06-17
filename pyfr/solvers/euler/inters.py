@@ -1,11 +1,12 @@
-import numpy as np
-
 from pyfr.mpiutil import mpi, scal_coll
 from pyfr.quadrules.surface import SurfaceIntegrator
 from pyfr.solvers.baseadvec import (BaseAdvectionIntInters,
                                     BaseAdvectionMPIInters,
                                     BaseAdvectionBCInters)
+from pyfr.solvers.euler.mixins import NSCBCMixin
 from pyfr.util import CSVStream, first
+
+import numpy as np
 
 
 class TplargsMixin:
@@ -319,3 +320,35 @@ class PressureBCMixin(ControlledBCMixin):
 
 class EulerCharRiemInvPressureBCInters(PressureBCMixin, EulerBaseBCInters):
     type = 'char-riem-inv-pressure'
+
+
+class EulerNSCBCSubOutFpBCInters(NSCBCMixin, EulerBaseBCInters):
+    type = 'sub-out-nscbc-fp'
+    waves = ['acoustic-']
+
+    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
+        super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
+
+        for face in self.nscbc_faces:
+            self.c |= self._exp_opts_ele(['p'], face.lhs, face.extern_args,
+                                         face.extern_vals)
+        self.c['K_p'] = self.cfg.getfloat(cfgsect, 'K_p', default=1.0)
+
+
+class EulerNSCBCSubInNRIBCInters(NSCBCMixin, EulerBaseBCInters):
+    type = 'sub-in-nscbc-nri'
+    flip_norm = True
+    waves = ['entropy', 'vortical', 'acoustic+']
+
+    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
+        super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
+
+        force = ['u_a', 'du_a_dt', 'u_v', 'du_v_dt']
+        for face in self.nscbc_faces:
+            self.c |= self._exp_opts_ele(['rho', 'un'], face.lhs,
+                                         face.extern_args, face.extern_vals)
+            self.c |= self._exp_opts_ele(force, face.lhs, face.extern_args,
+                                         face.extern_vals,
+                                         default={f: 0.0 for f in force})
+        for n in ['isen', 'ut']:
+            self.c[f'K_{n}'] = self.cfg.getfloat(cfgsect, f'K_{n}', default=1.0)

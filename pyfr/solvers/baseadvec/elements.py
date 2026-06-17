@@ -19,6 +19,7 @@ class BaseAdvectionElements(BaseElements):
 
         self._ploc_in_src_macros = False
         self._soln_in_src_macros = False
+        self._soln_copy_required = False
 
     @property
     def has_src_macros(self):
@@ -99,10 +100,8 @@ class BaseAdvectionElements(BaseElements):
             out=self.scal_upts[fout], beta=float(self.basis.order > 0)
         )
 
-        ## HACK alwasy copy solution for nscbcs
         def copy_soln(uin):
-            #if self._soln_in_src_macros:
-            if True:
+            if self._soln_in_src_macros or self._soln_copy_required:
                 return self._be.kernel('copy', self._scal_upts_cpy,
                                        self.scal_upts[uin])
             else:

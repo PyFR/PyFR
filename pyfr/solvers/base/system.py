@@ -66,7 +66,6 @@ class BaseSystem:
         self.ele_ploc_upts = [e.ploc_at_np('upts') for e in eles]
 
         self.eles_vect_upts = None
-
         if hasattr(eles[0], '_grad_upts'):
             self.eles_vect_upts = [e._grad_upts for e in eles]
 
