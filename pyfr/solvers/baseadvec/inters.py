@@ -93,11 +93,10 @@ class BaseAdvectionBCInters(BaseInters):
         else:
             return [npeval(cfg.getexpr(sect, k), cc) for k in opts]
 
-    def _exp_opts(self, opts, lhs, default={}):
+    def _getexprs(self, opts, default, ploc_subs):
         cfg, sect = self.cfg, self.cfgsect
 
-        subs = cfg.items('constants')
-        subs |= dict(x='ploc[0]', y='ploc[1]', z='ploc[2]')
+        subs = cfg.items('constants') | ploc_subs
         subs |= dict(abs='fabs', pi=str(math.pi))
 
         exprs = {}
@@ -106,6 +105,12 @@ class BaseAdvectionBCInters(BaseInters):
                 exprs[k] = cfg.getexpr(sect, k, default[k], subs=subs)
             else:
                 exprs[k] = cfg.getexpr(sect, k, subs=subs)
+
+        return exprs
+
+    def _exp_opts(self, opts, lhs, default={}):
+        exprs = self._getexprs(opts, default,
+                               dict(x='ploc[0]', y='ploc[1]', z='ploc[2]'))
 
         if (any('ploc' in ex for ex in exprs.values()) and
             'ploc' not in self._external_args):
@@ -117,18 +122,9 @@ class BaseAdvectionBCInters(BaseInters):
         return exprs
 
     def _exp_opts_ele(self, opts, lhs, ex_args, ex_vals, default={}):
-        cfg, sect = self.cfg, self.cfgsect
-
-        subs = cfg.items('constants')
-        subs |= dict(x='ploc[fidx][0]', y='ploc[fidx][1]', z='ploc[fidx][2]')
-        subs |= dict(abs='fabs', pi=str(math.pi))
-
-        exprs = {}
-        for k in opts:
-            if k in default:
-                exprs[k] = cfg.getexpr(sect, k, default[k], subs=subs)
-            else:
-                exprs[k] = cfg.getexpr(sect, k, subs=subs)
+        exprs = self._getexprs(opts, default,
+                               dict(x='ploc[fidx][0]', y='ploc[fidx][1]',
+                                    z='ploc[fidx][2]'))
 
         if (any('ploc' in ex for ex in exprs.values()) and
             'ploc' not in self._external_args):
