@@ -23,6 +23,9 @@
               u_fpts='inout view fpdtype_t[${str(nfpts)}][${str(nvars)}]'
               gradu_upts='in view fpdtype_t[${str(ndims*nupts)}][${str(nvars)}]'
               smats_upts='in fpdtype_t[${str(nupts)}][${str(ndims*ndims)}]'
-              jacs_ffpts='in fpdtype_t[${str(nfacefpts)}]'>
+              jacs_ffpts='in fpdtype_t[${str(nfacefpts)}]'
+              m0='in broadcast fpdtype_t[${str(nfacefpts)}][${str(nupts)}]'
+              m2='in broadcast fpdtype_t[${str(nfpts)}][${str(ndims*nupts)}]'
+              m_div='in broadcast fpdtype_t[${str(nfacefpts)}][${str(ndims*nupts)}]'>
 ${nscbc_body()}
 </%pyfr:kernel>
