@@ -248,6 +248,9 @@ class NSCBCMixin:
         ele._soln_copy_required = True
 
         jac_fpts = np.rollaxis(basis.ubasis.jac_nodal_basis_at(basis.fpts), 2)
+        m0 = basis.m0[facefpts]
+        m2 = basis.m2.reshape(nfpts, ndims*nupts)
+        m_div = jac_fpts[facefpts].reshape(nfacefpts, ndims*nupts)
 
         kdata = dict(
             u_upts=self._ewise_view(etype, eidxs, '_scal_upts_cpy',
@@ -255,7 +258,10 @@ class NSCBCMixin:
             u_fpts=self._ewise_view(etype, eidxs, '_scal_fpts',
                                     (nfpts, self.nvars)),
             smats_upts=self._be.const_matrix(smats),
-            jacs_ffpts=self._be.const_matrix(jacs)
+            jacs_ffpts=self._be.const_matrix(jacs),
+            m0=self._be.const_matrix(m0),
+            m2=self._be.const_matrix(m2),
+            m_div=self._be.const_matrix(m_div)
         )
         if visc:
             kdata['gradu_upts'] = self._ewise_view(etype, eidxs, '_grad_upts',
@@ -263,10 +269,8 @@ class NSCBCMixin:
 
         tplargs = self._tplargs | dict(
             nupts=nupts, nfpts=nfpts, nfacefpts=nfacefpts,
-            facefpts=facefpts, fptidx=allfpts, intfpts=intfpts,
-            m0=basis.m0[facefpts], m2=basis.m2.reshape(nfpts, ndims, nupts),
-            m12=jac_fpts[facefpts], norm_ref=norm_ref, GB_inv=GB_inv,
-            GB_inv_GI=GB_inv @ GI, waves=self.waves
+            facefpts=facefpts, intfpts=intfpts, norm_ref=norm_ref,
+            GB_inv=GB_inv, GB_inv_GI=GB_inv @ GI, waves=self.waves
         )
 
         return _NSCBCFace(

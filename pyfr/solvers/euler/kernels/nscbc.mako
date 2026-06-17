@@ -42,32 +42,29 @@ def _wave_idx(names, nvars, ndims):
 
 ## Discontinuous normal flux at all NSCBC face flux points
 <%pyfr:macro name='disc_nflux' params='tf, nf'>
-% for fpt_idx in fptidx:
-  % for upt in range(nupts):
-  % for var in range(nvars):
+for (int fpt = 0; fpt < ${nfpts}; fpt++)
+  for (int upt = 0; upt < ${nupts}; upt++)
+  {
   % for comp in range(ndims):
-    % if abs(m2[fpt_idx,comp,upt]) > 0.0:
-  nf[${fpt_idx}][${var}] += tf[${upt}][${comp}][${var}]*${m2[fpt_idx,comp,upt]};
-    % endif
+  % for var in range(nvars):
+    nf[fpt][${var}] += tf[upt][${comp}][${var}]*m2[fpt][${comp*nupts} + upt];
   % endfor
   % endfor
-  % endfor
-% endfor
+  }
 </%pyfr:macro>
 
 
 ## Physical normal and face coordinate system at face f
 <%pyfr:macro name='face_cs' params='smats, norm_nl, t1, t2, py:f'>
 fpdtype_t smats_fpt[${ndims}][${ndims}] = {{0}};
-% for comp in range(ndims):
+for (int upt = 0; upt < ${nupts}; upt++)
+{
+  % for comp in range(ndims):
   % for phys in range(ndims):
-    % for upt in range(nupts):
-      % if abs(m0[f,upt]) > 0.0:
-smats_fpt[${comp}][${phys}] += ${m0[f,upt]} * smats[${upt}][${comp*ndims + phys}];
-      % endif
-    % endfor
+  smats_fpt[${comp}][${phys}] += m0[${f}][upt]*smats[upt][${comp*ndims + phys}];
   % endfor
-% endfor
+  % endfor
+}
 
 % for phys in range(ndims):
 norm_nl[${phys}] = 0.0;
@@ -104,14 +101,15 @@ t2[2] = -norm_nl[1];
 <%pyfr:macro name='ref_div' params='tf, div, py:f'>
 % for var in range(nvars):
 div[${var}] = 0.0;
-  % for dim in range(ndims):
-    % for upt in range(nupts):
-      % if abs(m12[f,dim,upt]) > 0.0:
-div[${var}] += tf[${upt}][${dim}][${var}] * ${m12[f,dim,upt]};
-      % endif
-    % endfor
-  % endfor
 % endfor
+for (int upt = 0; upt < ${nupts}; upt++)
+{
+  % for dim in range(ndims):
+  % for var in range(nvars):
+  div[${var}] += tf[upt][${dim}][${var}]*m_div[${f}][${dim*nupts} + upt];
+  % endfor
+  % endfor
+}
 </%pyfr:macro>
 
 
