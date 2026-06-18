@@ -39,12 +39,12 @@ Free-mode options
   inertia          float  2-D: scalar moment of inertia about z.
                    tuple  3-D: 3×3 inertia tensor as a flat 9-element tuple.
                           Required.
-  boundary         str    Name of the body-surface boundary for force
-                          integration.  Required.
   dof              str    Comma-separated active degrees of freedom.
                           2-D: any subset of {x, y, rz}.
                           3-D: any subset of {x, y, z, rx, ry, rz}.
                           Default: all DOF for the current dimensionality.
+  dt-ode           float  Rigid-body ODE sub-step size (s).  Default: solver
+                          dt.  (Free-mode integration cadence only.)
 
   Initial conditions:
   frame-loc0       tuple  Initial frame position (m).  Default: (0,)*ndims.
@@ -63,9 +63,18 @@ Free-mode options
   frame-alpha0     float  2-D: initial angular acceleration (rad/s²) about z.
                    tuple  3-D: (ax, ay, az).  Default: 0.0 / (0, 0, 0).
 
-  Output options (free mode only):
-  ode-nout         int    Write CSV output every N ODE steps.  Default: 1.
-  dt-ode           float  ODE sub-step size (s).  Default: solver dt.
+  Force/trajectory output (both modes)
+  boundary         str    Body-surface boundary to integrate forces over.
+                          Required in free mode (drives the ODE); optional in
+                          prescribed mode (enables the CSV trace).
+  nsteps-out       int    Write the force/trajectory CSV every N integrator
+                          steps (free: every N ODE sub-steps).  Only the CSV
+                          write is throttled — the frame state and BC rotation
+                          matrix still update every step.  Mutually exclusive
+                          with dt-out.  Default: 1.
+  dt-out           float  Write the CSV every dt-out seconds.  Uses integrator
+                          look-ahead to land on the output times.  Mutually
+                          exclusive with nsteps-out.
   file             str    Path for CSV output.  Optional.
 
 Lab-frame export
@@ -733,20 +742,47 @@ class NIRFPlugin(BaseSolverPlugin):
             self.cfg, cfgsect, intg.system, bcname, fx0, viscous)
 
     def _init_force_output(self, cfgsect):
-        if not self.cfg.hasopt(cfgsect, 'boundary'):
+        # Integrate forces only if something consumes them: the rigid-body ODE
+        # (free) or the CSV trace (both).  Prescribed motion with no file has
+        # no consumer, so skip the surface integral entirely.
+        consumed = self.motion.needs_force or self.cfg.hasopt(cfgsect, 'file')
+        if not (self.cfg.hasopt(cfgsect, 'boundary') and consumed):
             self._ff_int = None
             self._csv = None
             return
 
         self._init_force_integrator(cfgsect)
-        self._ode_nout = self.cfg.getint(cfgsect, 'ode-nout', 1)
-        self._ode_count = 0
+
+        # Output cadence
+        intg = self._intg
+        if self.cfg.hasopt(cfgsect, 'dt-out'):
+            self._fout_dt = self.cfg.getfloat(cfgsect, 'dt-out')
+            self._fout_tlast = intg.tcurr
+            self._fout_nsteps = None
+            intg.call_plugin_dt(intg.tcurr, self._fout_dt)
+        else:
+            self._fout_nsteps = self.cfg.getint(cfgsect, 'nsteps-out', 1)
+            self._fout_dt = None
+            self._fout_count = 0
 
         _, rank, root = get_comm_rank_root()
         if rank == root and self.cfg.hasopt(cfgsect, 'file'):
             self._csv = init_csv(self.cfg, cfgsect, self._csv_header())
         else:
             self._csv = None
+
+    def _output_due(self, intg):
+        if self._ff_int is None:
+            return False
+
+        if self._fout_dt is not None:
+            if intg.tcurr - self._fout_tlast >= self._fout_dt - self.tol:
+                self._fout_tlast = intg.tcurr
+                return True
+            return False
+
+        self._fout_count += 1
+        return self._fout_count % self._fout_nsteps == 0
 
     def _update_extern_values(self):
         comps = 'xyz'[:self.ndims]
@@ -784,8 +820,10 @@ class NIRFPlugin(BaseSolverPlugin):
         if not self.motion.should_advance(intg):
             return
 
-        need_force = self.motion.needs_force or self._ff_int is not None
-        if need_force:
+        # csv sampling due
+        logging = self._output_due(intg)
+
+        if self.motion.needs_force or logging:
             force, moment = self._ff_int.compute(intg.soln)
         else:
             force, moment = None, None
@@ -798,10 +836,8 @@ class NIRFPlugin(BaseSolverPlugin):
 
         self._update_nirf_R()
 
-        if self._ff_int is not None:
-            self._ode_count += 1
-            if self._ode_count % self._ode_nout == 0:
-                self._write_csv(intg, force, moment)
+        if logging:
+            self._write_csv(intg, force, moment)
 
     def _write_csv(self, intg, force, moment):
         if not self._csv:
