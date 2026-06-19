@@ -67,11 +67,11 @@ Free-mode options
   boundary         str    Body-surface boundary to integrate forces over.
                           Required in free mode (drives the ODE); optional in
                           prescribed mode (enables the CSV trace).
-  nsteps-out       int    Write the force/trajectory CSV every N integrator
-                          steps (free: every N ODE sub-steps).  Only the CSV
-                          write is throttled — the frame state and BC rotation
-                          matrix still update every step.  Mutually exclusive
-                          with dt-out.  Default: 1.
+  nsteps-out       int    Write the force/trajectory CSV every N underlying
+                          solver steps (both modes; independent of dt-ode).
+                          Only the CSV write is throttled — the frame state and
+                          BC rotation matrix still update every step.  Mutually
+                          exclusive with dt-out.  Default: 1.
   dt-out           float  Write the CSV every dt-out seconds.  Uses integrator
                           look-ahead to land on the output times.  Mutually
                           exclusive with nsteps-out.
@@ -763,7 +763,6 @@ class NIRFPlugin(BaseSolverPlugin):
         else:
             self._fout_nsteps = self.cfg.getint(cfgsect, 'nsteps-out', 1)
             self._fout_dt = None
-            self._fout_count = 0
 
         _, rank, root = get_comm_rank_root()
         if rank == root and self.cfg.hasopt(cfgsect, 'file'):
@@ -781,8 +780,7 @@ class NIRFPlugin(BaseSolverPlugin):
                 return True
             return False
 
-        self._fout_count += 1
-        return self._fout_count % self._fout_nsteps == 0
+        return intg.nacptsteps % self._fout_nsteps == 0
 
     def _update_extern_values(self):
         comps = 'xyz'[:self.ndims]
@@ -817,24 +815,27 @@ class NIRFPlugin(BaseSolverPlugin):
         self._nirf_R.set(R.T)
 
     def __call__(self, intg):
-        if not self.motion.should_advance(intg):
-            return
-
-        # csv sampling due
+        # State advance / ODE integration is throttled (free: dt-ode); CSV
+        # output is independent (every nsteps-out solver steps or dt-out s).
+        advancing = self.motion.should_advance(intg)
         logging = self._output_due(intg)
 
-        if self.motion.needs_force or logging:
+        if not (advancing or logging):
+            return
+
+        if (self.motion.needs_force and advancing) or logging:
             force, moment = self._ff_int.compute(intg.soln)
         else:
             force, moment = None, None
 
-        self.motion.advance(intg, force, moment)
+        if advancing:
+            self.motion.advance(intg, force, moment)
 
-        if self.motion.has_externs:
-            self._update_extern_values()
-            self.bind_externs()
+            if self.motion.has_externs:
+                self._update_extern_values()
+                self.bind_externs()
 
-        self._update_nirf_R()
+            self._update_nirf_R()
 
         if logging:
             self._write_csv(intg, force, moment)
