@@ -85,8 +85,7 @@ class BaselinePartitioner(BasePartitioner):
         self._rng = np.random.default_rng(self.opts['seed'])
 
     def _partition_graph(self, graph, partwts):
-        nv = len(graph.vtab) - 1
-        ne = len(graph.etab)
+        nv, ne = len(graph.vtab) - 1, len(graph.etab)
         self._idxdtype = idt = np.int32 if max(nv, ne) < 2**31 else np.int64
 
         vtab = graph.vtab.astype(idt)
