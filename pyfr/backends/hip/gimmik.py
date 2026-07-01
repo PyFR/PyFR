@@ -34,10 +34,6 @@ class HIPGiMMiKKernels(HIPKernelProvider):
         arr = a.get()
         nnz, nuq = np.count_nonzero(arr), len(np.unique(np.abs(arr)))
 
-        # Check that A is suitable
-        if nuq > 128 and nnz / arr.size > 0.15:
-            raise NotSuitableError('Matrix inappropriate GiMMiK')
-
         # Dimensions
         n = b.ncol
         ldb, ldc = b.leaddim, out.leaddim
