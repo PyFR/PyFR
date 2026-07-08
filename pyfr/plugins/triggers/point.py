@@ -1,5 +1,6 @@
 import numpy as np
 
+from pyfr.fluids import get_fluid
 from pyfr.mpiutil import get_comm_rank_root
 from pyfr.nputil import npeval
 from pyfr.plugins.triggers.base import BaseTriggerSource
@@ -27,7 +28,7 @@ class PointTriggerSource(BaseTriggerSource):
         self._threshold = threshold
 
         system = intg.system
-        self._elementscls = system.elementscls
+        self._fluid = get_fluid(cfg, system.ndims)
         self._privars = first(system.ele_map.values()).privars
 
         self._psampler = PointSampler(system.mesh,
@@ -46,7 +47,7 @@ class PointTriggerSource(BaseTriggerSource):
 
         if rank == root:
             # Convert conservative to primitive
-            psamps = self._elementscls.con_to_pri(samps.T, self.cfg)
+            psamps = self._fluid.con_to_pri(samps.T)
             subs = dict(zip(self._privars, psamps))
             vals = npeval(self._expr, subs)
 

@@ -1,7 +1,7 @@
 from pyfr.plugins.base import BasePlugin, BaseCLIPlugin
 from pyfr.plugins.soln.base import BaseSolnPlugin
 from pyfr.plugins.solver.base import BaseSolverPlugin
-from pyfr.plugins import cli, postproc, soln, solver
+from pyfr.plugins import cli, soln, solver
 from pyfr.util import subclass_where
 
 

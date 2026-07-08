@@ -35,9 +35,7 @@
     % endif
 
         // Compute pressure
-        fpdtype_t invrho = 1.0/ufpt[0];
-        fpdtype_t p = ${c['gamma'] - 1}*(ufpt[${nvars - 1}]
-            - 0.5*invrho*(${pyfr.dot('ufpt[{i}]', i=(1, ndims + 1))}));
+        ${fluid.decl('ufpt', 'p')}
 
         // Pressure force at this face point
     % if mcomp:
@@ -74,15 +72,7 @@
     % endfor
 
         // Compute viscosity
-    % if visc_corr == 'sutherland':
-        fpdtype_t cpT = ${c['gamma']}*(invrho*ufpt[${nvars - 1}]
-                      - 0.5*(${pyfr.dot('vel{i}', i=ndims)}));
-        fpdtype_t Trat = ${1.0/c['cpTref']}*cpT;
-        fpdtype_t mu_c = ${c['mu']*(c['cpTref'] + c['cpTs'])}*Trat*sqrt(Trat)
-                       / (cpT + ${c['cpTs']});
-    % else:
-        fpdtype_t mu_c = ${c['mu']};
-    % endif
+        ${fluid.decl('ufpt', 'mu', suffix='_c')}
 
         // Divergence of velocity
         fpdtype_t div_v = ${ ' + '.join(f'dv{i}_d{i}' for i in range(ndims)) };

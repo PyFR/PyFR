@@ -3,14 +3,17 @@
 
 // RoeM scheme (ref: JCP 185(2), 342-374)
 <%pyfr:macro name='rsolve' params='ul, ur, n, nf'>
-    // Compute the left and right fluxes + velocities and pressures
-    fpdtype_t fl[${ndims}][${nvars}], fr[${ndims}][${nvars}];
-    fpdtype_t vl[${ndims}], vr[${ndims}], va[${ndims}], dv[${ndims}];
-    fpdtype_t du[${nvars}], bdq[${nvars}];
-    fpdtype_t pl, pr;
+    // Compute the left and right primitive state
+    ${fluid.decl('ul', 'v, p', suffix='l')}
+    ${fluid.decl('ur', 'v, p', suffix='r')}
 
-    ${pyfr.expand('inviscid_flux', 'ul', 'fl', 'pl', 'vl')};
-    ${pyfr.expand('inviscid_flux', 'ur', 'fr', 'pr', 'vr')};
+    // Compute the left and right fluxes
+    fpdtype_t fl[${ndims}][${nvars}], fr[${ndims}][${nvars}];
+    fpdtype_t va[${ndims}], dv[${ndims}];
+    fpdtype_t du[${nvars}], bdq[${nvars}];
+
+    ${pyfr.expand('inviscid_flux', 'ul', 'pl', 'vl', 'fl')};
+    ${pyfr.expand('inviscid_flux', 'ur', 'pr', 'vr', 'fr')};
 
     // Specific enthalpy, contra velocity for left / right
     fpdtype_t hl = (ul[${ndims + 1}] + pl)/ul[0];

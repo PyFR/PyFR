@@ -3,6 +3,7 @@ import re
 import numpy as np
 
 from pyfr.cache import memoize
+from pyfr.fields import FieldRegistry
 from pyfr.inifile import NoOptionError
 from pyfr.quadrules import get_quadrule
 from pyfr.regions import ConstructiveRegion
@@ -35,6 +36,17 @@ class BackendFieldReducer:
         self._nvars = efrst.nvars
         self._ndims = efrst.ndims
 
+        # Expand any registry fields in the expressions
+        reg = FieldRegistry(cfg, self._ndims)
+        fnames = set()
+        exprs = list(exprs)
+        for i, e in enumerate(exprs):
+            exprs[i], fn = reg.expand(e)
+            fnames.update(fn)
+
+        self._fluid = reg.fluid
+        self._fluid_names = ', '.join(sorted(fnames))
+
         # Compile expressions
         cexprs = [compile_expr(e, privars, self._ndims) for e in exprs]
 
@@ -65,6 +77,7 @@ class BackendFieldReducer:
             'reduceop': reduceop, 'c': cfg.items_as('constants', float),
             'has_grads': self._has_grads, 'use_views': False,
             'eos_mod': efrst.eos_kernel_module,
+            'fluid': self._fluid, 'fluid_names': self._fluid_names,
         }
 
         # Per-element-type kernel data

@@ -2,13 +2,14 @@
 <%include file='pyfr.solvers.euler.kernels.flux'/>
 
 <%pyfr:macro name='rsolve' params='ul, ur, n, nf'>
-    // Compute the left and right fluxes + velocities and pressures
-    fpdtype_t fl[${ndims}][${nvars}], fr[${ndims}][${nvars}];
-    fpdtype_t vl[${ndims}], vr[${ndims}];
-    fpdtype_t pl, pr;
+    // Compute the left and right primitive state
+    ${fluid.decl('ul', 'v, p', suffix='l')}
+    ${fluid.decl('ur', 'v, p', suffix='r')}
 
-    ${pyfr.expand('inviscid_flux', 'ul', 'fl', 'pl', 'vl')};
-    ${pyfr.expand('inviscid_flux', 'ur', 'fr', 'pr', 'vr')};
+    // Compute the left and right fluxes
+    fpdtype_t fl[${ndims}][${nvars}], fr[${ndims}][${nvars}];
+    ${pyfr.expand('inviscid_flux', 'ul', 'pl', 'vl', 'fl')};
+    ${pyfr.expand('inviscid_flux', 'ur', 'pr', 'vr', 'fr')};
 
     // Sum the left and right velocities and take the normal
     fpdtype_t nv = ${pyfr.dot('n[{i}]', 'vl[{i}] + vr[{i}]', i=ndims)};

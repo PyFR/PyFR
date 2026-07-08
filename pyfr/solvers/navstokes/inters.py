@@ -1,9 +1,11 @@
 import numpy as np
 
+from pyfr.fluids import get_fluid
 from pyfr.solvers.baseadvecdiff import (BaseAdvectionDiffusionBCInters,
                                         BaseAdvectionDiffusionIntInters,
                                         BaseAdvectionDiffusionMPIInters)
-from pyfr.solvers.euler.inters import MassFlowBCMixin, PressureBCMixin
+from pyfr.solvers.euler.inters import (MassFlowBCMixin, PressureBCMixin,
+                                       RSOLVER_EOS)
 
 
 class TplargsMixin:
@@ -11,7 +13,12 @@ class TplargsMixin:
         super().__init__(*args, **kwargs)
 
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
-        visc_corr = self.cfg.get('solver', 'viscosity-correction', 'none')
+        self.fluid = get_fluid(self.cfg, self.ndims)
+
+        if self.fluid.name not in RSOLVER_EOS.get(rsolver, ()):
+            raise ValueError(f'Riemann solver {rsolver!r} does not support '
+                             f'eos {self.fluid.name!r}')
+
         shock_capturing = self.cfg.get('solver', 'shock-capturing', 'none')
         if shock_capturing == 'entropy-filter':
             self.p_min = self.cfg.getfloat('solver-entropy-filter', 'p-min',
@@ -21,9 +28,9 @@ class TplargsMixin:
                                            5*self._be.fpdtype_eps)
 
         self._tplargs = dict(ndims=self.ndims, nvars=self.nvars,
-                             rsolver=rsolver, visc_corr=visc_corr,
+                             rsolver=rsolver,
                              shock_capturing=shock_capturing, c=self.c,
-                             p_min=self.p_min)
+                             p_min=self.p_min, fluid=self.fluid)
 
 
 class NavierStokesIntInters(TplargsMixin,
@@ -70,8 +77,15 @@ class NavierStokesMPIInters(TplargsMixin,
 class NavierStokesBaseBCInters(TplargsMixin, BaseAdvectionDiffusionBCInters):
     cflux_state = None
 
+    # Fluids this boundary condition supports as currently implemented
+    eos_compat = ('cpg',)
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        if self.fluid.name not in self.eos_compat:
+            raise ValueError(f'Boundary condition {self.type!r} does not '
+                             f'support eos {self.fluid.name!r}')
 
         # Additional BC specific template arguments
         self._tplargs['bctype'] = self.type

@@ -180,9 +180,6 @@ class VTKSTLWriter(BaseVTKWriter):
             # Pre-process the solution fields only
             svars = self._pre_proc_fields(samps[:nsoln].astype(self.dtype))
 
-            # Run postproc plugins at welded sample points
-            pp_fields = self.pp_runner.run_samples(self.soln.config, svars)
-
             # Rebuild tri vertices from (possibly transformed) welded verts
             pts = spts[pinv].reshape(pts.shape)
 
@@ -197,14 +194,6 @@ class VTKSTLWriter(BaseVTKWriter):
                 a = samps[off:off + n, pinv].astype(self.dtype)
                 pointf[name] = a.reshape(n, *pts.shape[:2]).swapaxes(0, 1)
                 off += n
-
-            # Unpack postproc fields onto STL triangles
-            for name, data in pp_fields.items():
-                a = data[pinv]
-                if a.ndim == 1:
-                    pointf[name] = a.reshape(*pts.shape[:2])
-                else:
-                    pointf[name] = a.reshape(*pts.shape[:2], -1).swapaxes(1, 2)
 
             self.einfo = [('tri', pts.shape[1])]
             self._stl_info = pts, svars, pointf

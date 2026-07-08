@@ -17,10 +17,12 @@
     ${pyfr.expand('calc_smats_detj', 'verts', 'upts', smats, 'djac')};
 % endif
 
+    // Compute the primitive state
+    ${fluid.decl('u', 'v, p')}
+
     // Compute the flux
     fpdtype_t ftemp[${ndims}][${nvars}];
-    fpdtype_t p, v[${ndims}];
-    ${pyfr.expand('inviscid_flux', 'u', 'ftemp', 'p', 'v')};
+    ${pyfr.expand('inviscid_flux', 'u', 'p', 'v', 'ftemp')};
 
     // Transform the fluxes
 % for i, j in pyfr.ndrange(ndims, nvars):

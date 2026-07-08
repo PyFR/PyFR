@@ -1,5 +1,6 @@
 import numpy as np
 
+from pyfr.fluids import get_fluid
 from pyfr.solvers.base.elements import ExportableField
 
 
@@ -109,6 +110,7 @@ class EntropyFilter:
             'nfpts': eles.nfpts, 'nefpts': nefpts,
             'nvars': eles.nvars, 'nfaces': nfaces,
             'c': cfg.items_as('constants', float),
+            'fluid': get_fluid(cfg, eles.ndims),
             'order': eles.basis.order,
             'fpts_in_upts': fpts_in_upts,
             'd_min': cfg.getfloat('solver-entropy-filter', 'd-min', 1e-6),

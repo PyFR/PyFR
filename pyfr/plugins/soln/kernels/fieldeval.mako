@@ -16,6 +16,9 @@
     fpdtype_t grad_pri[${nvars}][${ndims}];
     ${pyfr.expand('grad_con_to_pri', 'u', 'gradu', 'grad_pri')};
 % endif
+% if fluid_names:
+    ${fluid.decl('u', fluid_names, suffix='_qf')}
+% endif
 
 % for j, expr in enumerate(exprs):
 % if reduceop == 'sum':

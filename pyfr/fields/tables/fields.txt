@@ -1,0 +1,51 @@
+; Shipped derived-field definitions
+;
+; Expressions use the ini dialect: primitive variable names (rho, u, v, w,
+; p), gradients (grad_u_x, ...), bare-name constants from [constants], any
+; symbols listed in deps (fluid quantities) and consts (hyphenated constant
+; mappings, written sym: key). Components are separated by |.
+
+[mach]
+deps = a
+expr-2d = sqrt(u*u + v*v)/a
+expr-3d = sqrt(u*u + v*v + w*w)/a
+
+[cp]
+consts = pinf: p-inf, rhoinf: rho-inf, uinf: u-inf
+expr = (p - pinf)/(0.5*rhoinf*uinf*uinf)
+
+[isen-mach]
+consts = pt: p-total
+expr = sqrt(2/(gamma - 1)*(pow(pt/p, (gamma - 1)/gamma) - 1))
+
+[vorticity]
+expr-2d = grad_v_x - grad_u_y
+expr-3d = grad_w_y - grad_v_z | grad_u_z - grad_w_x | grad_v_x - grad_u_y
+
+; Wall shear stress: tangential part of mu*(grad v + grad v^T).n
+; Boundary-only (n_*, wall_dist come from the boundary geometry context)
+[_twx]
+deps = mu
+expr-3d = mu*((grad_u_x + grad_u_x)*n_x + (grad_u_y + grad_v_x)*n_y + (grad_u_z + grad_w_x)*n_z)
+
+[_twy]
+deps = mu
+expr-3d = mu*((grad_v_x + grad_u_y)*n_x + (grad_v_y + grad_v_y)*n_y + (grad_v_z + grad_w_y)*n_z)
+
+[_twz]
+deps = mu
+expr-3d = mu*((grad_w_x + grad_u_z)*n_x + (grad_w_y + grad_v_z)*n_y + (grad_w_z + grad_w_z)*n_z)
+
+[_twn]
+expr-3d = _twx*n_x + _twy*n_y + _twz*n_z
+
+[tau_wall]
+expr-3d = sqrt(pow(_twx - _twn*n_x, 2) + pow(_twy - _twn*n_y, 2) + pow(_twz - _twn*n_z, 2))
+
+[cf]
+consts = rhoinf: rho-inf, uinf: u-inf
+expr-3d = tau_wall/(0.5*rhoinf*uinf*uinf)
+
+[yplus]
+deps = mu
+expr-3d = wall_dist*sqrt(tau_wall/rho)/(mu/rho)
