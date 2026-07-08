@@ -65,6 +65,8 @@ Free-mode options
 
   Force/trajectory output (both modes)
   boundary         str    Body-surface boundary to integrate forces over.
+                          Accepts a comma-separated list of boundary names,
+                          which are fused into a single integration surface.
                           Required in free mode (drives the ODE); optional in
                           prescribed mode (enables the CSV trace).
   nsteps-out       int    Write the force/trajectory CSV every N underlying
@@ -103,7 +105,6 @@ from pyfr.quadrules.surface import SurfaceIntegrator
 from pyfr.util import subclass_where
 
 # TODO: viscous stress not just for nav-stokes but only no-slp
-# TODO: add support for multiple boundary names
 
 def _eval_expr(expr, t):
     return eval(expr, vars(math), {'t': t})
@@ -175,6 +176,17 @@ def _quat_mult(q, r):
                      w1*z2 + x1*y2 - y1*x2 + z1*w2])
 
 
+def _levi_civita_moment(ndims):
+    # Permutation tensor eps with moment_m = eps_mdc r_d f_c
+    if ndims == 2:
+        return np.array([[[0.0, 1.0], [-1.0, 0.0]]])
+
+    eps = np.zeros((3, 3, 3))
+    eps[0, 1, 2] = eps[1, 2, 0] = eps[2, 0, 1] = 1.0
+    eps[0, 2, 1] = eps[2, 1, 0] = eps[1, 0, 2] = -1.0
+    return eps
+
+
 class NIRFForceIntegrator(SurfaceIntegrator):
     def __init__(self, cfg, cfgsect, system, bcname, morigin, viscous):
         con = system.mesh.bcon.get(bcname)
@@ -185,8 +197,9 @@ class NIRFForceIntegrator(SurfaceIntegrator):
         self.viscous = viscous
         self.ele_types = system.ele_types
         self.elementscls = system.elementscls
+        self._eps = _levi_civita_moment(self.ndims)
 
-        if con is not None and morigin is not None:
+        if self.locs and morigin is not None:
             self.rfpts = {k: loc - morigin[:, None, None]
                          for k, loc in self.locs.items()}
 
@@ -261,7 +274,7 @@ class NIRFForceIntegrator(SurfaceIntegrator):
             # Pressure force (d) and moment (m): F = ∮ p n, M = ∮ r × (p n)
             fm[0, :ndims] += np.einsum('f,fe,fed->d', qwts, p, norms)
 
-            rcn = np.atleast_3d(np.cross(rfpts, norms))
+            rcn = np.einsum('mdc,fed,fec->fem', self._eps, rfpts, norms)
             fm[0, ndims:] += np.einsum('f,fe,fem->m', qwts, p, rcn)
 
             if self.viscous:
@@ -273,7 +286,7 @@ class NIRFForceIntegrator(SurfaceIntegrator):
                 fm[1, :ndims] += np.einsum('f,fedc,fec->d', qwts, vis, norms)
 
                 viscf = np.einsum('fedc,fec->fed', vis, norms)
-                rcf = np.atleast_3d(np.cross(rfpts, viscf))
+                rcf = np.einsum('mdc,fed,fec->fem', self._eps, rfpts, viscf)
                 fm[1, ndims:] += np.einsum('f,fem->m', qwts, rcf)
 
         if rank != root:
@@ -304,6 +317,21 @@ class NIRFForceIntegrator(SurfaceIntegrator):
             mu *= (c['cpTref'] + c['cpTs'])*Trat**1.5 / (cpT + c['cpTs'])
 
         return -mu*(gradu + gradu.swapaxes(0, 1) - 2/3*bulk)
+
+
+class NIRFForceSum:
+    def __init__(self, cfg, cfgsect, system, bcnames, morigin, viscous):
+        self.ints = [NIRFForceIntegrator(cfg, cfgsect, system, b, morigin,
+                                         viscous) for b in bcnames]
+
+    def compute(self, soln):
+        force, moment = self.ints[0].compute(soln)
+        for ff in self.ints[1:]:
+            f, m = ff.compute(soln)
+            force = force + f
+            moment = moment + m
+
+        return force, moment
 
 
 class BaseMotion:
@@ -724,7 +752,7 @@ class NIRFPlugin(BaseSolverPlugin):
         intg = self._intg
         comm, rank, root = get_comm_rank_root()
 
-        bcname = self.cfg.get(cfgsect, 'boundary')
+        bcnames = self._parse_boundaries(cfgsect)
         viscous = 'navier-stokes' in intg.system.name
 
         self.cfg.set(cfgsect, 'quad-deg',
@@ -734,12 +762,19 @@ class NIRFPlugin(BaseSolverPlugin):
         fx0 = np.array(self.cfg.getliteral(cfgsect, 'center-of-rot',
                                            (0.,) * self.ndims), dtype=float)
 
-        bcranks = comm.gather(bcname in intg.system.mesh.bcon, root=root)
-        if rank == root and not any(bcranks):
-            raise RuntimeError(f'Boundary {bcname} does not exist')
+        # Ensure every requested boundary exists on at least one rank
+        allbcs = comm.gather(set(intg.system.mesh.bcon), root=root)
+        if rank == root:
+            have = set().union(*allbcs)
+            if missing := [b for b in bcnames if b not in have]:
+                raise RuntimeError(f'Boundaries do not exist: {missing}')
 
-        self._ff_int = NIRFForceIntegrator(
-            self.cfg, cfgsect, intg.system, bcname, fx0, viscous)
+        self._ff_int = NIRFForceSum(
+            self.cfg, cfgsect, intg.system, bcnames, fx0, viscous)
+
+    def _parse_boundaries(self, cfgsect):
+        raw = self.cfg.get(cfgsect, 'boundary')
+        return [b.strip() for b in raw.split(',') if b.strip()]
 
     def _init_force_output(self, cfgsect):
         # Integrate forces only if something consumes them: the rigid-body ODE
