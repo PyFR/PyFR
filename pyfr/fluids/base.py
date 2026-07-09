@@ -132,6 +132,10 @@ class BaseFluid:
 
         return '\n'.join(lines)
 
+    # Seed values for graph evaluation from a known primitive state
+    def pri_seed(self, pris):
+        return {}
+
     def provides(self, name):
         return name in self._quantities
 

@@ -76,6 +76,9 @@ class CPGFluid(BaseFluid):
                 'pressure': ['p']
             }
 
+    def pri_seed(self, pris):
+        return {'rho': pris[0], 'v': list(pris[1:-1]), 'p': pris[-1]}
+
     def con_to_pri(self, cons):
         q = self.eval('v, p', cons)
 

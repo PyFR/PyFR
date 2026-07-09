@@ -168,7 +168,7 @@ class FieldRegistry:
     def eval_quantities(self, names, pris):
         fluid = self.fluid
 
-        seed = {'rho': pris[0], 'v': list(pris[1:-1]), 'p': pris[-1]}
+        seed = fluid.pri_seed(list(pris))
         cons = fluid.pri_to_con(list(pris))
         vals = fluid.eval(', '.join(names), cons, seed=seed) if names else {}
 
