@@ -10,7 +10,7 @@ class EntropyFilter:
         self._be = backend
 
         # Register pointwise kernel templates
-        kprefix = f'pyfr.solvers.{system.ef_solver}.kernels'
+        kprefix = 'pyfr.solvers.baseadvec.kernels'
         backend.pointwise.register(f'{kprefix}.entropylocal')
         backend.pointwise.register(f'{kprefix}.entropyfilter')
 
