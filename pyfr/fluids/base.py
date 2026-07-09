@@ -17,7 +17,7 @@ class Quantity:
 
 _host_syms = {
     'sqrt': np.sqrt, 'fabs': np.abs, 'pow': np.power,
-    'min': np.minimum, 'max': np.maximum,
+    'min': np.minimum, 'max': np.maximum, 'fmax': np.maximum,
     'log': np.log, 'exp': np.exp
 }
 
