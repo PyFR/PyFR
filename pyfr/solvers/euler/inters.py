@@ -10,23 +10,12 @@ from pyfr.writers.csv import CSVStream
 import numpy as np
 
 
-# Fluids supported by each Riemann solver as currently implemented
-RSOLVER_EOS = {
-    'rusanov': ('cpg',), 'hll': ('cpg',), 'hllc': ('cpg',),
-    'roe': ('cpg',), 'roem': ('cpg',), 'exact': ('cpg',)
-}
-
-
 class TplargsMixin:
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
         self.fluid = get_fluid(self.cfg, self.ndims)
-
-        if self.fluid.name not in RSOLVER_EOS.get(rsolver, ()):
-            raise ValueError(f'Riemann solver {rsolver!r} does not support '
-                             f'eos {self.fluid.name!r}')
 
         if self.cfg.get('solver', 'shock-capturing', 'none') == 'entropy-filter':
             self.p_min = self.cfg.getfloat('solver-entropy-filter', 'p-min',

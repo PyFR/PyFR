@@ -1,4 +1,5 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
+${pyfr.eos_check('roe', fluid, 'cpg')}\
 <%include file='pyfr.solvers.euler.kernels.flux'/>
 
 <% eps = 0.001 %>

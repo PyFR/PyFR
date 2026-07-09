@@ -1,4 +1,5 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
+${pyfr.eos_check('roem', fluid, 'cpg')}\
 <%include file='pyfr.solvers.euler.kernels.flux'/>
 
 // RoeM scheme (ref: JCP 185(2), 342-374)

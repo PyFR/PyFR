@@ -4,8 +4,7 @@ from pyfr.fluids import get_fluid
 from pyfr.solvers.baseadvecdiff import (BaseAdvectionDiffusionBCInters,
                                         BaseAdvectionDiffusionIntInters,
                                         BaseAdvectionDiffusionMPIInters)
-from pyfr.solvers.euler.inters import (MassFlowBCMixin, PressureBCMixin,
-                                       RSOLVER_EOS)
+from pyfr.solvers.euler.inters import MassFlowBCMixin, PressureBCMixin
 
 
 class TplargsMixin:
@@ -14,10 +13,6 @@ class TplargsMixin:
 
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
         self.fluid = get_fluid(self.cfg, self.ndims)
-
-        if self.fluid.name not in RSOLVER_EOS.get(rsolver, ()):
-            raise ValueError(f'Riemann solver {rsolver!r} does not support '
-                             f'eos {self.fluid.name!r}')
 
         shock_capturing = self.cfg.get('solver', 'shock-capturing', 'none')
         if shock_capturing == 'entropy-filter':
