@@ -41,9 +41,19 @@ class FieldRegistry:
                 continue
 
             comps = [e.strip() for e in expr.split('|')]
-            self._entries[sect] = (deps, consts, comps)
+
+            grad = (tbl.get(sect, f'grad-{ndims}d', '')
+                    or tbl.get(sect, 'grad', '')).strip() or None
+            if grad and len(comps) != 1:
+                raise ValueError(f'Field {sect!r}: gradients may only be '
+                                 'declared for scalar fields')
+
+            self._entries[sect] = (deps, consts, comps, grad)
 
         self._flatten_entries()
+
+        # Ad-hoc expression cache for non-table field requests
+        self._adhoc = {}
 
     def _flatten_entries(self):
         # Inline references between entries, merging deps and consts
@@ -57,7 +67,8 @@ class FieldRegistry:
         for _ in range(5):
             changed = False
 
-            for name, (deps, consts, comps) in list(self._entries.items()):
+            for name, (deps, consts, comps, grad) in list(
+                    self._entries.items()):
                 def sub(m):
                     nonlocal changed
 
@@ -66,7 +77,7 @@ class FieldRegistry:
 
                     changed = True
 
-                    rdeps, rconsts, rcomps = self._entries[m[1]]
+                    rdeps, rconsts, rcomps = self._entries[m[1]][:3]
                     deps.extend(d for d in rdeps if d not in deps)
                     for sym, key in rconsts.items():
                         if consts.setdefault(sym, key) != key:
@@ -78,10 +89,125 @@ class FieldRegistry:
                     return f'({rcomps[0]})'
 
                 ncomps = [pat.sub(sub, c) for c in comps]
-                self._entries[name] = (deps, consts, ncomps)
+                self._entries[name] = (deps, consts, ncomps, grad)
 
             if not changed:
                 break
+
+    # Inline the differential of a fluid quantity in privar-gradient form
+    def _quantity_grad(self, name, dim, stack=()):
+        fluid = self.fluid
+
+        if name in stack:
+            raise ValueError(f'Cyclic differential for quantity {name!r}')
+
+        de = fluid.diff_expr(name)
+        if isinstance(de, list):
+            raise ValueError(f"'grad_{name}_{dim}': quantity {name!r} is "
+                             'not a scalar')
+
+        # Map differential symbols of privar quantities to their gradients
+        dmap = {}
+        for pn, (qn, comp) in zip(fluid.privars, fluid.pri_map):
+            dmap[f'd_{qn}' if comp is None else f'd_{qn}[{comp}]'] = pn
+
+        def sub(m):
+            key = m[0]
+            if key in dmap:
+                return f'grad_{dmap[key]}_{dim}'
+            if m[2] is None and fluid.diffable(m[1]):
+                return f'({self._quantity_grad(m[1], dim, (*stack, name))})'
+
+            raise ValueError(
+                f"'grad_{name}_{dim}': differential of {name!r} requires "
+                f'{key!r} which cannot be expressed in primitive-variable '
+                'gradients'
+            )
+
+        de = re.sub(r'\bd_(\w+)(\[(?:\d+)\])?', sub, de)
+
+        if re.search(r'\bdu\b', de):
+            raise ValueError(
+                f"'grad_{name}_{dim}': differential of {name!r} references "
+                'the conservative state directly'
+            )
+
+        return de
+
+    # Rewrite non-primitive gradient symbols down to privar gradients
+    def _expand_grads(self, expr):
+        pv = set(self.fluid.privars)
+
+        for _ in range(5):
+            if all(m[1] in pv for m in GRAD_RE.finditer(expr)):
+                return expr
+
+            def sub(m):
+                base, dim = m[1], m[2]
+
+                if base in pv:
+                    return m[0]
+
+                if base in self._entries and not base.startswith('_'):
+                    grad = self._entries[base][3]
+                    if grad:
+                        return '(' + grad.replace('{d}', dim) + ')'
+
+                    raise ValueError(
+                        f"'{m[0]}': field {base!r} does not declare a "
+                        "gradient (no 'grad' entry in its definition)"
+                    )
+
+                if self.fluid.diffable(base):
+                    return f'({self._quantity_grad(base, dim)})'
+
+                raise ValueError(
+                    f"'{m[0]}': gradients are available for primitive "
+                    f"variables ({', '.join(self.fluid.privars)}), fields "
+                    "with a declared 'grad' line, and fluid quantities "
+                    'with a declared differential'
+                )
+
+            expr = GRAD_RE.sub(sub, expr)
+
+        raise ValueError('Unable to resolve gradients in field expression')
+
+    # Inline scalar table entries into an expression
+    def _inline_entries(self, expr):
+        ent = [n for n, v in self._entries.items()
+               if n.isidentifier() and len(v[2]) == 1
+               and not n.startswith('_')]
+        if not ent:
+            return expr
+
+        p = '|'.join(re.escape(n) for n in ent)
+        for _ in range(5):
+            expr, n = re.subn(rf'\b({p})\b',
+                              lambda m: f'({self._inline(m[1])})', expr)
+            if not n:
+                break
+
+        return expr
+
+    # Synthesise an entry for an ad-hoc field expression
+    def _adhoc_entry(self, expr):
+        if expr in self._adhoc:
+            return self._adhoc[expr]
+
+        e = self._inline_entries(expr)
+        e = self._expand_grads(e)
+        e = self._inline_entries(e)
+
+        # Scalar fluid quantities referenced by the expression
+        pv = set(self.fluid.privars)
+        deps = [n for n in self.fluid.quantities()
+                if n not in pv and n.isidentifier()
+                and self.fluid.quantity_shape(n) == 1
+                and re.search(rf'\b{re.escape(n)}\b', e)]
+
+        self._adhoc[expr] = ent = (deps, {}, [e], None)
+
+        return ent
 
     def _resolve(self, names):
         # Fluid quantities required by the requested names
@@ -96,7 +222,7 @@ class FieldRegistry:
 
                 fnames.append(n)
             else:
-                raise ValueError(f'Unknown field {n!r}')
+                fnames.extend(self._adhoc_entry(n)[0])
 
         return list(dict.fromkeys(fnames))
 
@@ -107,7 +233,7 @@ class FieldRegistry:
                 for n in names}
 
     def _inline(self, n):
-        deps, consts, comps = self._entries[n]
+        deps, consts, comps, _ = self._entries[n]
         e = comps[0]
 
         if consts:
@@ -125,17 +251,10 @@ class FieldRegistry:
         return e
 
     def expand(self, expr):
-        # Inline scalar table entries into the expression
-        ent = [n for n, v in self._entries.items()
-               if n.isidentifier() and len(v[2]) == 1
-               and not n.startswith('_')]
-        if ent:
-            p = '|'.join(re.escape(n) for n in ent)
-            for _ in range(5):
-                expr, n = re.subn(rf'\b({p})\b',
-                                  lambda m: f'({self._inline(m[1])})', expr)
-                if not n:
-                    break
+        # Inline scalar table entries and resolve declared gradients
+        expr = self._inline_entries(expr)
+        expr = self._expand_grads(expr)
+        expr = self._inline_entries(expr)
 
         # Rewrite scalar fluid quantities; privars keep their meaning
         pv = set(self.fluid.privars)
@@ -155,15 +274,19 @@ class FieldRegistry:
 
         return expr, sorted(fnames)
 
+    def _comps_of(self, n):
+        if n in self._entries:
+            return self._entries[n][2]
+        elif self.fluid.provides(n):
+            return []
+        else:
+            return self._adhoc_entry(n)[2]
+
     def needs_grads(self, names):
-        return any(GRAD_RE.search(c)
-                   for n in names if n in self._entries
-                   for c in self._entries[n][2])
+        return any(GRAD_RE.search(c) for n in names for c in self._comps_of(n))
 
     def needs_geom(self, names):
-        return any(GEOM_RE.search(c)
-                   for n in names if n in self._entries
-                   for c in self._entries[n][2])
+        return any(GEOM_RE.search(c) for n in names for c in self._comps_of(n))
 
     def eval_quantities(self, names, pris):
         fluid = self.fluid
@@ -201,8 +324,9 @@ class FieldRegistry:
 
         out = {}
         for n in names:
-            if n in self._entries:
-                deps, consts, comps = self._entries[n]
+            if n in self._entries or not self.fluid.provides(n):
+                deps, consts, comps, _ = (self._entries.get(n)
+                                          or self._adhoc_entry(n))
 
                 ens = _host_syms | self.c | ns
                 ens |= {d: vals[d] for d in deps}
@@ -214,7 +338,12 @@ class FieldRegistry:
                             f'Field {n!r} requires constant {key!r}'
                         ) from None
 
-                res = [eval(c, dict(ens)) for c in comps]
+                try:
+                    res = [eval(c, dict(ens)) for c in comps]
+                except NameError as e:
+                    raise ValueError(
+                        f'Unknown symbol in field {n!r}: {e.name}'
+                    ) from None
                 v = np.stack(res, axis=-1) if len(res) > 1 else res[0]
             else:
                 v = vals[n]

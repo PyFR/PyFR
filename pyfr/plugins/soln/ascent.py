@@ -25,7 +25,7 @@ def con_psolns_pgrads(fluid, csolns, cgrads):
     if cgrads is None:
         return psolns, None
     else:
-        return psolns, fluid.grad_con_to_pri(csolns, cgrads)
+        return psolns, fluid.diff_pri(csolns, cgrads)
 
 
 def face_shape_ops(etype, fidx, divisor, nspts, scfg):

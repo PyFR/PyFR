@@ -4,11 +4,18 @@
 ; p), gradients (grad_u_x, ...), bare-name constants from [constants], any
 ; symbols listed in deps (fluid quantities) and consts (hyphenated constant
 ; mappings, written sym: key). Components are separated by |.
+;
+; Scalar fields may declare a gradient with a grad line written with a {d}
+; dimension placeholder; it may reference primitive-variable gradients and
+; gradients of fluid quantities with a declared differential. Fields
+; without a grad line are not differentiable.
 
 [mach]
 deps = a
 expr-2d = sqrt(u*u + v*v)/a
 expr-3d = sqrt(u*u + v*v + w*w)/a
+grad-2d = (u*grad_u_{d} + v*grad_v_{d})/(a*sqrt(u*u + v*v)) - sqrt(u*u + v*v)/(a*a)*grad_a_{d}
+grad-3d = (u*grad_u_{d} + v*grad_v_{d} + w*grad_w_{d})/(a*sqrt(u*u + v*v + w*w)) - sqrt(u*u + v*v + w*w)/(a*a)*grad_a_{d}
 
 [cp]
 consts = pinf: p-inf, rhoinf: rho-inf, uinf: u-inf

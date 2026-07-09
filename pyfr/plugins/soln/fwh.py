@@ -155,7 +155,7 @@ class FWHPlugin(SurfaceRegionMixin, BaseSolnPlugin):
             drift = -d_inf*self.uinf
 
             # Time derivatives
-            pris_t = self.fluid.diff_con_to_pri(s, s_t)
+            pris_t = self.fluid.diff_pri(s, s_t)
             pris_t = np.reshape(pris_t, (self.nvars, -1))
 
             u_t = pris_t[self._vidx]

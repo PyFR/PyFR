@@ -8,11 +8,12 @@ from pyfr.util import subclass_where
 
 
 class Quantity:
-    def __init__(self, deps, expr=None, device=None, host=None):
+    def __init__(self, deps, expr=None, device=None, host=None, diff=None):
         self.deps = deps
         self.expr = expr
         self.device = device
         self.host = host
+        self.diff = diff
 
 
 _host_syms = {
@@ -80,8 +81,8 @@ class BaseFluid:
         self._register_quantities()
 
     def _register_quantity(self, name, deps, expr=None, device=None,
-                           host=None):
-        self._quantities[name] = Quantity(deps, expr, device, host)
+                           host=None, diff=None):
+        self._quantities[name] = Quantity(deps, expr, device, host, diff)
 
     def _closure(self, names):
         order, seen = [], set()
@@ -136,8 +137,91 @@ class BaseFluid:
     def pri_seed(self, pris):
         return {}
 
+    # Primitive variables as (quantity, component) pairs
+    @property
+    def pri_map(self):
+        raise NotImplementedError
+
     def provides(self, name):
         return name in self._quantities
+
+    def diffable(self, name):
+        q = self._quantities.get(name)
+
+        return q is not None and q.diff is not None
+
+    def diff_expr(self, name, u='u', du='du'):
+        q = self._quantities.get(name)
+
+        return q.diff(u, du) if q is not None and q.diff else None
+
+    def _diff_closure(self, names):
+        order, seen = [], set()
+
+        def visit(n):
+            if n in seen:
+                return
+            seen.add(n)
+
+            q = self._quantities.get(n)
+            if q is None or q.diff is None:
+                raise ValueError(
+                    f'Fluid {self.name!r} does not declare a differential '
+                    f'for quantity {n!r}'
+                )
+
+            expr = q.diff('u', 'du')
+            for e in expr if isinstance(expr, list) else [expr]:
+                for m in re.finditer(r'\bd_(\w+)\b', e):
+                    visit(m[1])
+
+            order.append(n)
+
+        for n in names.split(','):
+            visit(n.strip())
+
+        return order
+
+    # Differentials of quantities given a seed differential of the state
+    def eval_diff(self, names, u, du, seed=None):
+        order = self._diff_closure(names)
+
+        # Values referenced by the differential expressions
+        qnames = '|'.join(self._quantities)
+        vnames = list(order)
+        for n in order:
+            expr = self._quantities[n].diff('u', 'du')
+            for e in expr if isinstance(expr, list) else [expr]:
+                for m in re.finditer(rf'\b({qnames})\b', e):
+                    if m[1] not in vnames:
+                        vnames.append(m[1])
+
+        vns = dict(self.eval(', '.join(vnames), u, seed=seed))
+
+        env = {'__builtins__': None, 'u': u, 'du': du} | _host_syms | vns
+        for n in order:
+            q = self._quantities[n]
+
+            expr = q.diff('u', 'du')
+            if isinstance(expr, list):
+                env[f'd_{n}'] = [eval(e, dict(env)) for e in expr]
+            else:
+                env[f'd_{n}'] = eval(expr, dict(env))
+
+        return {n.strip(): env[f'd_{n.strip()}'] for n in names.split(',')}
+
+    # Differentials of the primitive variables (the con-to-pri Jacobian
+    # applied to du; du may carry a leading axis, e.g. one per dimension)
+    def diff_pri(self, cons, dcons):
+        names = []
+        for qn, comp in self.pri_map:
+            if qn not in names:
+                names.append(qn)
+
+        d = self.eval_diff(', '.join(names), cons, dcons)
+
+        return [d[qn] if comp is None else d[qn][comp]
+                for qn, comp in self.pri_map]
 
     def quantities(self):
         return list(self._quantities)

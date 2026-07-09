@@ -93,9 +93,6 @@ class BaseFluidElements:
     def con_to_pri(cons, cfg):
         return get_fluid(cfg, len(cons) - 2).con_to_pri(cons)
 
-    @staticmethod
-    def diff_con_to_pri(cons, diff_cons, cfg):
-        return get_fluid(cfg, len(cons) - 2).diff_con_to_pri(cons, diff_cons)
 
 class EulerElements(BaseFluidElements, BaseAdvectionElements):
     def set_backend(self, *args, **kwargs):

@@ -46,7 +46,7 @@ def _process_con_to_pri(ndims, cfg, *, has_grads=False):
             # Also convert any gradient data
             if has_grads:
                 diff_con = samps[nvars:].reshape(nvars, ndims, -1)
-                diff_pri = fluid.diff_con_to_pri(samps[:nvars], diff_con)
+                diff_pri = fluid.diff_pri(samps[:nvars], diff_con)
 
                 psamps += [f for gf in diff_pri for f in gf]
 

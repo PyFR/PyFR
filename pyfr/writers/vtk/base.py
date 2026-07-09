@@ -131,7 +131,7 @@ class BaseVTKWriter(BaseWriter):
         # Convert any solution gradients to primitive variables
         if self._gradients:
             diff_cons = soln[nvars:].reshape(nvars, -1, *soln.shape[1:])
-            diff_pri = fluid.diff_con_to_pri(soln[:nvars], diff_cons)
+            diff_pri = fluid.diff_pri(soln[:nvars], diff_cons)
 
             fields += [f for gf in diff_pri for f in gf]
 
@@ -273,12 +273,6 @@ class BaseVTKWriter(BaseWriter):
                 self._soln_fields.extend(f'{f}-{d}'
                                          for f in list(self._soln_fields)
                                          for d in range(self.ndims))
-
-                # Update the mapping of VTK variables to solution fields
-                for var, vfields in list(self._vtk_vars.items()):
-                    self._vtk_vars[f'grad {var}'] = nfields = []
-                    for f in vfields:
-                        nfields.extend(f'{f}-{d}' for d in range(self.ndims))
         # Otherwise we're dealing with simple scalar data (e.g., tavg)
         else:
             self._pre_proc_fields = self._pre_proc_fields_scal

@@ -7,10 +7,6 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
     # Use the density field for shock sensing
     shockvar = 'rho'
 
-    @staticmethod
-    def grad_con_to_pri(cons, grad_cons, cfg):
-        return get_fluid(cfg, len(cons) - 2).grad_con_to_pri(cons, grad_cons)
-
     def set_backend(self, *args, **kwargs):
         super().set_backend(*args, **kwargs)
 
