@@ -1,7 +1,6 @@
 from weakref import finalize
 
 from gimmik import HIPMatMul
-import numpy as np
 
 from pyfr.backends.base import NotSuitableError
 from pyfr.backends.hip.provider import HIPKernel, HIPKernelProvider
@@ -29,9 +28,8 @@ class HIPGiMMiKKernels(HIPKernelProvider):
         if 'const' not in a.tags:
             raise NotSuitableError('GiMMiK requires a constant a matrix')
 
-        # Fetch the matrix and tally up the number of non-zeros
+        # Fetch the matrix
         arr = a.get()
-        nnz, nuq = np.count_nonzero(arr), len(np.unique(np.abs(arr)))
 
         # Dimensions
         n = b.ncol
@@ -48,7 +46,7 @@ class HIPGiMMiKKernels(HIPKernelProvider):
 
         # Check the kernel cache
         try:
-            kern, block, width, grid_y, ncols, dt = self._mul_kerns[ckey]
+            kern, block, grid_y, ncolsv, dt = self._mul_kerns[ckey]
         except KeyError:
             ifac = self.backend.autotune_ifac
             kname = f'gimmik_mm_{arr.shape[0]}x{arr.shape[1]}'
@@ -69,11 +67,12 @@ class HIPGiMMiKKernels(HIPKernelProvider):
                     src, meta = kgen.send(kdata)
                     kern = self._build_kernel(kname, src, 'iPiPi')
 
-                    width = meta.get('width', 1)
                     grid_y = meta.get('grid_y', 1)
-                    ncols = meta.get('ncols', meta['block'][0])
-                    vn = -(-n // width)
-                    grid = (-(-vn // ncols), grid_y, 1)
+                    ncolsv = (
+                        meta.get('width', 1) *
+                        meta.get('ncols', meta['block'][0])
+                    )
+                    grid = (-(-n // ncolsv), grid_y, 1)
                     params = kern.make_params(grid, meta['block'])
                     params.set_args(n, b, ldb, out, ldc)
 
@@ -84,7 +83,7 @@ class HIPGiMMiKKernels(HIPKernelProvider):
                     )
 
                     if best_kern is None or dt < ifac*best_kern[-1]:
-                        best_kern = kern, meta['block'], width, grid_y, ncols, dt
+                        best_kern = kern, meta['block'], grid_y, ncolsv, dt
 
                     kdata = {
                         'runtime': dt,
@@ -99,13 +98,12 @@ class HIPGiMMiKKernels(HIPKernelProvider):
 
             # Update the cache
             self._mul_kerns[ckey] = (
-                kern, block, width, grid_y, ncols, dt
+                kern, block, grid_y, ncolsv, dt
             ) = best_kern
             finalize(a, lambda: self._mul_kerns.pop(ckey))
 
         # Set the parameters
-        vn = -(-n // width)
-        grid = (-(-vn // ncols), grid_y, 1)
+        grid = (-(-n // ncolsv), grid_y, 1)
         params = kern.make_params(grid, block)
         params.set_args(n, b, ldb, out, ldc)
 
