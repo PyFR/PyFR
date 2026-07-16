@@ -114,8 +114,13 @@ class BaseSDIRKStepper(BaseImplicitStepper):
                 def residual_fn(u, f, result, un=r_un, fprev=f_prev):
                     self._compute_stage_residual(un, fprev, u, f, dt, result)
 
-                def initial_guess_fn(u, stage=i, un=r_un, fprev=f_prev):
-                    self._compute_stage_initial_guess(stage, un, fprev, dt, u)
+                def initial_guess_fn(u, trivial=False, stage=i, un=r_un,
+                                     fprev=f_prev):
+                    if trivial:
+                        self._add(0, u, 1, un)
+                    else:
+                        self._compute_stage_initial_guess(stage, un, fprev,
+                                                          dt, u)
 
                 stats = self._stage_solve(
                     t_i, r_ui, f_reg, residual_fn, initial_guess_fn,

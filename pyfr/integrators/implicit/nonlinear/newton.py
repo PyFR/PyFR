@@ -30,9 +30,17 @@ class NewtonSolver(BaseNonlinearSolver):
 
         # Pick an initial starting guess
         initial_guess_fn(u_reg)
+        rnorm = self._residual_norm(t, u_reg, f_reg, residual_fn)
+
+        # If the predictor has left the state space use the trivial guess
+        if not math.isfinite(rnorm):
+            initial_guess_fn(u_reg, trivial=True)
+            rnorm = None
+
+        # Choose a suitable finite difference perturbation
+        self._compute_fd_eps(u_reg)
 
         krylov_total = precond_total = 0
-        rnorm = None
 
         for i in range(self._nl_maxiter):
             # Ensure we have a valid (scaled) residual norm
@@ -96,9 +104,6 @@ class NewtonSolver(BaseNonlinearSolver):
                                     out_scale=self._inv_scales)
         else:
             precond = None
-
-        # Choose a suitable finite difference perturbation
-        self._compute_fd_eps(u_reg)
 
         for i in range(self._tol_controller.max_retries + 1):
             pc_built_before_retry = self._precond_computed

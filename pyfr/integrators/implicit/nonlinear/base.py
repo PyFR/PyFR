@@ -1,4 +1,5 @@
 from collections import namedtuple
+import math
 
 from pyfr.integrators.implicit.base import BaseImplicitIntegrator
 from pyfr.integrators.registers import DynamicScalarRegister, ScalarRegister
@@ -75,6 +76,7 @@ class BaseNonlinearSolver(BaseImplicitIntegrator):
 
     def _line_search(self, t, u_reg, f_reg, delta_reg, residual_fn, rnorm_old):
         alpha = 1.0
+        alpha_best = rnorm_best = None
 
         for _ in range(self._linesearch_maxiter):
             self._add(0, self._nl_temp, 1, u_reg, alpha, delta_reg,
@@ -84,10 +86,22 @@ class BaseNonlinearSolver(BaseImplicitIntegrator):
             residual_fn(self._nl_temp, f_reg, self._nl_resid)
             rnorm_new = self._calc_rnorm(self._nl_resid)
 
+            # Note the best finite trial step seen so far
+            if math.isfinite(rnorm_new) and (rnorm_best is None or
+                                             rnorm_new < rnorm_best):
+                alpha_best, rnorm_best = alpha, rnorm_new
+
             if rnorm_new <= (1 - self._linesearch_c1*alpha)*rnorm_old:
                 break
 
             alpha *= self._linesearch_fact
+        # Failed to satisfy the Armijo condition; take the best finite step
+        else:
+            if alpha_best is None:
+                raise NonlinearDivergenceError('Non-finite residual in line '
+                                               'search')
+
+            alpha = alpha_best
 
         # Apply the update
         self._add(1, u_reg, alpha, delta_reg, in_scale=self._scales,

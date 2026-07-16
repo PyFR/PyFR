@@ -39,8 +39,8 @@ class AndersonSolver(BaseNonlinearSolver):
         def precond(in_reg, out_reg):
             self._apply_precond(in_reg, out_reg, out_scale=self._inv_scales)
 
-        self._compute_fd_eps(u_reg)
         initial_guess_fn(u_reg)
+        self._compute_fd_eps(u_reg)
 
         nrhs = nprec = 0
         rnorm = rnorm0 = self._residual_norm(t, u_reg, f_reg, residual_fn)

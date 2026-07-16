@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 
 from pyfr.integrators.base import (BaseIntegrator, _common_plugin_prop,
@@ -137,6 +139,9 @@ class BaseImplicitIntegrator(BaseIntegrator):
         # If we are adaptive then recompute eps
         if self._fd_eps_adapt:
             unorm = self._norm2(u_reg)
+            if not math.isfinite(unorm):
+                unorm = 0
+
             self._fd_eps = ((1 + unorm)*self.backend.fpdtype_eps)**0.5
 
     @property
