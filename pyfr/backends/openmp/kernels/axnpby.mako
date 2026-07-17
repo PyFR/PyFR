@@ -23,38 +23,29 @@ void axnpby(int ib, const struct kargs *restrict args, int _disp_mask)
   % endif
 
     #define X_IDX(v, nv) ((_xi/SOA_SZ*(nv) + (v))*SOA_SZ + _xj)
-% for start in [1, 0]:
-    ${'if (a0 == 0.0)' if start else 'else'}
+    for (ixdtype_t _y = 0; _y < nrow; _y++)
     {
-        for (ixdtype_t _y = 0; _y < nrow; _y++)
+        for (ixdtype_t _xi = 0; _xi < BLK_SZ; _xi += SOA_SZ)
         {
-            for (ixdtype_t _xi = 0; _xi < BLK_SZ; _xi += SOA_SZ)
+            #pragma omp simd
+            for (ixdtype_t _xj = 0; _xj < SOA_SZ; _xj++)
             {
-                #pragma omp simd
-                for (ixdtype_t _xj = 0; _xj < SOA_SZ; _xj++)
-                {
-                    ixdtype_t base = _y*BLK_SZ*${ncola} + ib*BLK_SZ*${ncola}*nrow;
-                % for k in range(ncola):
-                    x0[base + X_IDX(${k}, ${ncola})] = ${pyfr.axnpby_expr(k, f'base + X_IDX({k}, {ncola})', start, nv=nv, in_scale_idxs=in_scale_idxs, out_scale=out_scale)};
-                % endfor
-                }
+                ixdtype_t base = _y*BLK_SZ*${ncola} + ib*BLK_SZ*${ncola}*nrow;
+            % for k in range(ncola):
+                <% idx = f'base + X_IDX({k}, {ncola})' %>
+                x0[${idx}] = (a0 == 0.0)
+                           ? ${pyfr.axnpby_expr(k, idx, 1, nv=nv, in_scale_idxs=in_scale_idxs, out_scale=out_scale)}
+                           : ${pyfr.axnpby_expr(k, idx, 0, nv=nv, in_scale_idxs=in_scale_idxs, out_scale=out_scale)};
+            % endfor
             }
         }
     }
-% endfor
     #undef X_IDX
 % else:
-    if (a0 == 0.0)
-    {
-        #pragma omp simd
-        for (ixdtype_t i = ib*nrow*BLK_SZ*${ncola}; i < (ib + 1)*nrow*BLK_SZ*${ncola}; i++)
-            x0[i] = ${pyfr.dot('a{l}', 'x{l}[i]', l=(1, nv)) if nv > 1 else '0.0'};
-    }
-    else
-    {
-        #pragma omp simd
-        for (ixdtype_t i = ib*nrow*BLK_SZ*${ncola}; i < (ib + 1)*nrow*BLK_SZ*${ncola}; i++)
-            x0[i] = ${pyfr.dot('a{l}', 'x{l}[i]', l=nv)};
-    }
+    #pragma omp simd
+    for (ixdtype_t i = ib*nrow*BLK_SZ*${ncola}; i < (ib + 1)*nrow*BLK_SZ*${ncola}; i++)
+        x0[i] = (a0 == 0.0)
+              ? ${pyfr.dot('a{l}', 'x{l}[i]', l=(1, nv)) if nv > 1 else '0.0'}
+              : ${pyfr.dot('a{l}', 'x{l}[i]', l=nv)};
 % endif
 }
