@@ -1,4 +1,5 @@
 from pyfr.plugins.soln.ascent import AscentPlugin
+from pyfr.plugins.soln.catalyst import CatalystPlugin
 from pyfr.plugins.soln.dtstats import DtStatsPlugin
 from pyfr.plugins.soln.fluidforce import FluidForcePlugin
 from pyfr.plugins.soln.fwh import FWHPlugin
