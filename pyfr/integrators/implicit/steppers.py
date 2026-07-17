@@ -37,15 +37,8 @@ class BaseSDIRKStepper(BaseImplicitStepper):
         # Precompute interpolation weights for initial guesses
         self._guess_weights = self._compute_guess_weights()
 
-        # Predictor levels to attempt for each stage, most accurate first
-        self._guess_levels = []
-        for cw in self._guess_weights:
-            if cw is None:
-                self._guess_levels.append(None)
-            elif cw[1] is None or len(cw[1]) == 1:
-                self._guess_levels.append((1, 0))
-            else:
-                self._guess_levels.append((2, 1, 0))
+        # Per-step cache of norms used to damp the predictors
+        self._guess_norms = {}
 
         self._fsal = self.A[0][0] == 0 and self.A[-1] == self.b
         self._fsal_valid = False
@@ -61,17 +54,20 @@ class BaseSDIRKStepper(BaseImplicitStepper):
         weights = []
 
         for i, Ai in enumerate(self.A):
-            # Explicit stage; no interpolation needed
+            # Explicit stage; no initial guess is required
             if Ai[i] == 0:
                 weights.append(None)
             # No prior stages, linearly extrapolate from previous time step
             elif i == 0:
-                weights.append((self.c[i], None))
-            # Prior stages; smoothly extrapolate from prior stages
+                weights.append((self.c[i], [None]))
+            # One prior stage; first-order through its derivative
+            elif i == 1:
+                weights.append((self.c[i], [[1]]))
+            # Prior stages; smoothly extrapolate, then first-order fallback
             else:
                 w = [pfit(self.c[:i], np.arange(i) == j, i - 1)(self.c[i])
                      for j in range(i)]
-                weights.append((self.c[i], w))
+                weights.append((self.c[i], [w, [0]*(i - 1) + [1]]))
 
         return weights
 
@@ -82,37 +78,45 @@ class BaseSDIRKStepper(BaseImplicitStepper):
 
         self._addv_nz(result, pairs)
 
-    def _compute_stage_initial_guess(self, stage, u_n, f_prev_list, dt,
-                                     u_i_reg, level):
-        c_i, w = self._guess_weights[stage]
+    def _compute_stage_initial_guess(self, stage, t_i, u_n, f_prev_list,
+                                     f_reg, dt, u_i_reg, residual_fn):
+        c_i, wcands = self._guess_weights[stage]
+        norms = self._guess_norms
 
-        # Trivial guess; take the current state
-        if level == 0:
-            self._add(0, u_i_reg, 1, u_n)
-            return
-
-        # Reduce to a first-order predictor through the latest derivative
-        if level == 1 and w is not None:
-            w = [0]*(len(w) - 1) + [1]
+        # Reference norms for damping; these are constant over a step
+        f_ref = self._r_f[-1] if wcands[0] is None else f_prev_list[0]
+        for r in (f_ref, u_n):
+            if r not in norms:
+                norms[r] = self._norm2(r)
 
         # Damp dt to bound the predictor for large time steps
-        f_ref = self._r_f[-1] if w is None else f_prev_list[0]
-        inc = c_i*dt*self._norm2(f_ref)
-        u_norm = self._norm2(u_n)
+        inc = c_i*dt*norms[f_ref]
+        u_norm = norms[u_n]
         adt = dt*u_norm / (u_norm + inc) if u_norm + inc else dt
 
-        # If we don't have weights then use a forward Euler predictor
-        if w is None:
-            self._add(0, u_i_reg, 1, u_n, c_i*adt, self._r_f[-1])
-        # Lagrange interpolation: u = u_n + c_i * dt * sum_j(w_j * f_j)
-        else:
-            pairs = [(1, u_n)]
-            pairs += [(wj*c_i*adt, fj) for wj, fj in zip(w, f_prev_list)]
-            self._addv_nz(u_i_reg, pairs)
+        # Try each predictor in turn, ending with the trivial guess
+        for w in [*wcands, []]:
+            # If we don't have weights then use a forward Euler predictor
+            if w is None:
+                self._add(0, u_i_reg, 1, u_n, c_i*adt, self._r_f[-1])
+            # Lagrange interpolation: u = u_n + c_i * dt * sum_j(w_j * f_j)
+            else:
+                pairs = [(1, u_n)]
+                pairs += [(wj*c_i*adt, fj) for wj, fj in zip(w, f_prev_list)]
+                self._addv_nz(u_i_reg, pairs)
+
+            rnorm = self._residual_norm(t_i, u_i_reg, f_reg, residual_fn)
+            if math.isfinite(rnorm):
+                break
+
+        return rnorm
 
     def step(self, t, dt):
         r_f = self._r_f
         r_un, r_ui = self._r_u
+
+        # Invalidate the predictor damping norm cache
+        self._guess_norms.clear()
 
         # Ensure r_un references the bank containing u(t)
         if r_un != self.idxcurr:
@@ -137,17 +141,9 @@ class BaseSDIRKStepper(BaseImplicitStepper):
 
                 def initial_guess_fn(u, t_i=t_i, f_reg=f_reg, stage=i,
                                      un=r_un, fprev=f_prev):
-                    # Try progressively more conservative predictors
-                    for level in self._guess_levels[stage]:
-                        self._compute_stage_initial_guess(stage, un, fprev,
-                                                          dt, u, level)
-                        rnorm = self._residual_norm(t_i, u, f_reg,
-                                                    residual_fn)
-
-                        if math.isfinite(rnorm):
-                            break
-
-                    return rnorm
+                    return self._compute_stage_initial_guess(
+                        stage, t_i, un, fprev, f_reg, dt, u, residual_fn
+                    )
 
                 stats = self._stage_solve(
                     t_i, r_ui, f_reg, residual_fn, initial_guess_fn,
