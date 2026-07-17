@@ -29,7 +29,7 @@ class MetalKernelGenerator(BaseGPUKernelGenerator):
 
                 if self.ndim == 2 and not va.isbroadcastc:
                     kargs.append(f'constant ixdtype_t& {va.name}_vrstri')
-                elif va.ncdim == 2:
+                elif va.ncdim == 2 and va.cdims[0] > 1:
                     kargs.append(f'device const ixdtype_t* {va.name}_vrstri')
             # Arrays
             elif self.needs_ldim(va):

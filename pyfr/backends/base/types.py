@@ -344,7 +344,7 @@ class View:
         self.mapping = backend.const_matrix(mapping, dtype=ixdtype, tags=tags)
 
         # Row strides
-        if len(vshape) == 2:
+        if self.nvrow > 1:
             rstrides = (rstridemap*leaddim)[None, :]
             self.rstrides_val = int(rstrides.flat[0])
             self.rstrides = backend.const_matrix(rstrides, dtype=ixdtype,

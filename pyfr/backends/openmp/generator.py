@@ -233,7 +233,7 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                 if self.ndim == 2 and not va.isbroadcastc:
                     kargs.append(('ixdtype_t', f'{va.name}_vrstri', None,
                                   None))
-                elif va.ncdim == 2:
+                elif va.ncdim == 2 and va.cdims[0] > 1:
                     kargs.append(('const ixdtype_t*', f'{va.name}_vrstri',
                                   '_ib*BLK_SZ', None))
 

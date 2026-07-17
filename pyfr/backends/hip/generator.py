@@ -31,7 +31,7 @@ class HIPKernelGenerator(BaseGPUKernelGenerator):
 
                 if self.ndim == 2 and not va.isbroadcastc:
                     kargs.append(f'ixdtype_t {va.name}_vrstri')
-                elif va.ncdim == 2:
+                elif va.ncdim == 2 and va.cdims[0] > 1:
                     kargs.append(f'const ixdtype_t* {res} {va.name}_vrstri')
             # Arrays
             elif self.needs_ldim(va):

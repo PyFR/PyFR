@@ -130,7 +130,7 @@ class BaseKernelGenerator:
                         argt.append([np.uintp, np.uintp])
                     case 2, _:
                         argt.append([np.uintp, np.uintp, self.ixdtype])
-                    case _, 2:
+                    case _, 2 if va.cdims[0] > 1:
                         argt.append([np.uintp]*3)
                     case _:
                         argt.append([np.uintp]*2)
@@ -180,6 +180,9 @@ class BaseKernelGenerator:
             return f'{n}_v[{vix}]'
         elif arg.ncdim == 1:
             return fr'{n}_v[{vix} + SOA_SZ*(\1)]'
+        # Views with a unit row dimension do not require a stride
+        elif arg.cdims[0] == 1:
+            return fr'{n}_v[{vix} + SOA_SZ*(\2)]'
         else:
             return fr'{n}_v[{vix} + {vs}[X_IDX]*(\1) + SOA_SZ*(\2)]'
 
