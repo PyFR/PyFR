@@ -37,6 +37,16 @@ class BaseSDIRKStepper(BaseImplicitStepper):
         # Precompute interpolation weights for initial guesses
         self._guess_weights = self._compute_guess_weights()
 
+        # Predictor levels to attempt for each stage, most accurate first
+        self._guess_levels = []
+        for cw in self._guess_weights:
+            if cw is None:
+                self._guess_levels.append(None)
+            elif cw[1] is None or len(cw[1]) == 1:
+                self._guess_levels.append((1, 0))
+            else:
+                self._guess_levels.append((2, 1, 0))
+
         self._fsal = self.A[0][0] == 0 and self.A[-1] == self.b
         self._fsal_valid = False
 
@@ -73,8 +83,17 @@ class BaseSDIRKStepper(BaseImplicitStepper):
         self._addv_nz(result, pairs)
 
     def _compute_stage_initial_guess(self, stage, u_n, f_prev_list, dt,
-                                     u_i_reg):
+                                     u_i_reg, level):
         c_i, w = self._guess_weights[stage]
+
+        # Trivial guess; take the current state
+        if level == 0:
+            self._add(0, u_i_reg, 1, u_n)
+            return
+
+        # Reduce to a first-order predictor through the latest derivative
+        if level == 1 and w is not None:
+            w = [0]*(len(w) - 1) + [1]
 
         # Damp dt to bound the predictor for large time steps
         f_ref = self._r_f[-1] if w is None else f_prev_list[0]
@@ -118,15 +137,15 @@ class BaseSDIRKStepper(BaseImplicitStepper):
 
                 def initial_guess_fn(u, t_i=t_i, f_reg=f_reg, stage=i,
                                      un=r_un, fprev=f_prev):
-                    self._compute_stage_initial_guess(stage, un, fprev, dt, u)
-                    rnorm = self._residual_norm(t_i, u, f_reg, residual_fn)
-
-                    # If the predictor has left the state space then fall
-                    # back to the trivial guess
-                    if not math.isfinite(rnorm):
-                        self._add(0, u, 1, un)
+                    # Try progressively more conservative predictors
+                    for level in self._guess_levels[stage]:
+                        self._compute_stage_initial_guess(stage, un, fprev,
+                                                          dt, u, level)
                         rnorm = self._residual_norm(t_i, u, f_reg,
                                                     residual_fn)
+
+                        if math.isfinite(rnorm):
+                            break
 
                     return rnorm
 
