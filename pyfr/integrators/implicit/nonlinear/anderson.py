@@ -40,6 +40,9 @@ class AndersonSolver(BaseNonlinearSolver):
             self._apply_precond(in_reg, out_reg, out_scale=self._inv_scales)
 
         rnorm = rnorm0 = initial_guess_fn(u_reg)
+        if not math.isfinite(rnorm):
+            raise NonlinearDivergenceError('Non-finite residual')
+
         self._compute_fd_eps(u_reg)
 
         nrhs, nprec = 1, 0
