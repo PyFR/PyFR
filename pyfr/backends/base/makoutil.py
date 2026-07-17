@@ -98,7 +98,7 @@ def _locals(body):
     body = re.sub(r'//.*?\n', '', body)
 
     # Strip away any preprocessor directives
-    body = re.sub(r'(?m)^\s*#.*(?:\\\n.*)*', '', body)
+    body = re.sub(r'(?m)^[ \t]*#(?:[^\n]*\\\n)*[^\n]*', '', body)
 
     # Strip away string literals
     body = re.sub(r'"(?:[^"\\]|\\.)*"', '""', body)
