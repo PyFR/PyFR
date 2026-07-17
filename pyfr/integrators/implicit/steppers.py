@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 
 from pyfr.integrators.implicit.base import BaseImplicitIntegrator
@@ -114,13 +116,19 @@ class BaseSDIRKStepper(BaseImplicitStepper):
                 def residual_fn(u, f, result, un=r_un, fprev=f_prev):
                     self._compute_stage_residual(un, fprev, u, f, dt, result)
 
-                def initial_guess_fn(u, trivial=False, stage=i, un=r_un,
-                                     fprev=f_prev):
-                    if trivial:
+                def initial_guess_fn(u, t_i=t_i, f_reg=f_reg, stage=i,
+                                     un=r_un, fprev=f_prev):
+                    self._compute_stage_initial_guess(stage, un, fprev, dt, u)
+                    rnorm = self._residual_norm(t_i, u, f_reg, residual_fn)
+
+                    # If the predictor has left the state space then fall
+                    # back to the trivial guess
+                    if not math.isfinite(rnorm):
                         self._add(0, u, 1, un)
-                    else:
-                        self._compute_stage_initial_guess(stage, un, fprev,
-                                                          dt, u)
+                        rnorm = self._residual_norm(t_i, u, f_reg,
+                                                    residual_fn)
+
+                    return rnorm
 
                 stats = self._stage_solve(
                     t_i, r_ui, f_reg, residual_fn, initial_guess_fn,

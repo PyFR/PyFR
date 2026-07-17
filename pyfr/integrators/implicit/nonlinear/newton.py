@@ -29,13 +29,7 @@ class NewtonSolver(BaseNonlinearSolver):
                               v, result)
 
         # Pick an initial starting guess
-        initial_guess_fn(u_reg)
-        rnorm = self._residual_norm(t, u_reg, f_reg, residual_fn)
-
-        # If the predictor has left the state space use the trivial guess
-        if not math.isfinite(rnorm):
-            initial_guess_fn(u_reg, trivial=True)
-            rnorm = None
+        rnorm = initial_guess_fn(u_reg)
 
         # Choose a suitable finite difference perturbation
         self._compute_fd_eps(u_reg)
