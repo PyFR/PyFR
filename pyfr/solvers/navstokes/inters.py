@@ -3,7 +3,8 @@ import numpy as np
 from pyfr.solvers.baseadvecdiff import (BaseAdvectionDiffusionBCInters,
                                         BaseAdvectionDiffusionIntInters,
                                         BaseAdvectionDiffusionMPIInters)
-from pyfr.solvers.euler.inters import MassFlowBCMixin, PressureBCMixin
+from pyfr.solvers.euler.mixins import (MassFlowBCMixin, NSCBCMixin,
+                                       PressureBCMixin)
 
 
 class TplargsMixin:
@@ -24,7 +25,6 @@ class TplargsMixin:
                              rsolver=rsolver, visc_corr=visc_corr,
                              shock_capturing=shock_capturing, c=self.c,
                              p_min=self.p_min)
-
 
 class NavierStokesIntInters(TplargsMixin,
                             BaseAdvectionDiffusionIntInters):
@@ -217,3 +217,37 @@ class NavierStokesCharRiemInvPressureBCInters(PressureBCMixin,
                                               NavierStokesBaseBCInters):
     type = 'char-riem-inv-pressure'
     cflux_state = 'ghost'
+
+
+class NavierStokesNSCBCSubOutFpBCInters(NSCBCMixin, NavierStokesBaseBCInters):
+    type = 'sub-out-nscbc-fp'
+    waves = ['acoustic-']
+    _nscbc_kern = 'pyfr.solvers.navstokes.kernels.bccflux_nscbc'
+
+    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
+        super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
+
+        for face in self.nscbc_faces:
+            self.c |= self._exp_opts_ele(['p'], face.lhs, face.extern_args,
+                                         face.extern_vals)
+        self.c['K_p'] = self.cfg.getfloat(cfgsect, 'K_p', default=1.0)
+
+
+class NavierStokesNSCBCSubInNRIBCInters(NSCBCMixin, NavierStokesBaseBCInters):
+    type = 'sub-in-nscbc-nri'
+    flip_norm = True
+    waves = ['entropy', 'vortical', 'acoustic+']
+    _nscbc_kern = 'pyfr.solvers.navstokes.kernels.bccflux_nscbc'
+
+    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
+        super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
+
+        force = ['u_a', 'du_a_dt', 'u_v', 'du_v_dt']
+        for face in self.nscbc_faces:
+            self.c |= self._exp_opts_ele(['rho', 'un'], face.lhs,
+                                         face.extern_args, face.extern_vals)
+            self.c |= self._exp_opts_ele(force, face.lhs, face.extern_args,
+                                         face.extern_vals,
+                                         default={f: 0.0 for f in force})
+        for n in ['isen', 'ut']:
+            self.c[f'K_{n}'] = self.cfg.getfloat(cfgsect, f'K_{n}', default=1.0)

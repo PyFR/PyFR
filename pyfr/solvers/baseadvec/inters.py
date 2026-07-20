@@ -1,4 +1,5 @@
 import itertools as it
+import numpy as np
 import math
 
 from pyfr.nputil import npeval
@@ -92,11 +93,10 @@ class BaseAdvectionBCInters(BaseInters):
         else:
             return [npeval(cfg.getexpr(sect, k), cc) for k in opts]
 
-    def _exp_opts(self, opts, lhs, default={}):
+    def _getexprs(self, opts, default, ploc_subs):
         cfg, sect = self.cfg, self.cfgsect
 
-        subs = cfg.items('constants')
-        subs |= dict(x='ploc[0]', y='ploc[1]', z='ploc[2]')
+        subs = cfg.items('constants') | ploc_subs
         subs |= dict(abs='fabs', pi=str(math.pi))
 
         exprs = {}
@@ -106,11 +106,36 @@ class BaseAdvectionBCInters(BaseInters):
             else:
                 exprs[k] = cfg.getexpr(sect, k, subs=subs)
 
+        return exprs
+
+    def _exp_opts(self, opts, lhs, default={}):
+        exprs = self._getexprs(opts, default,
+                               dict(x='ploc[0]', y='ploc[1]', z='ploc[2]'))
+
         if (any('ploc' in ex for ex in exprs.values()) and
             'ploc' not in self._external_args):
             spec = f'in fpdtype_t[{self.ndims}]'
             value = self._const_mat(lhs, 'get_ploc_for_inters')
 
             self.set_external('ploc', spec, value=value)
+
+        return exprs
+
+    def _exp_opts_ele(self, opts, lhs, ex_args, ex_vals, default={}):
+        exprs = self._getexprs(opts, default,
+                               dict(x='ploc[fidx][0]', y='ploc[fidx][1]',
+                                    z='ploc[fidx][2]'))
+
+        if (any('ploc' in ex for ex in exprs.values()) and
+            'ploc' not in self._external_args):
+            etype, fidx, eidxs = next(lhs.items())
+            ele = self.elemap[etype]
+            fpts_idx = ele.basis.facefpts[fidx]
+            spec = f'in fpdtype_t[{len(fpts_idx)}][{self.ndims}]'
+            ploc = ele.plocfpts[np.ix_(fpts_idx, eidxs)]
+            value = self._be.const_matrix(ploc.transpose(0, 2, 1))
+
+            ex_args['ploc'] = spec
+            ex_vals['ploc'] = value
 
         return exprs
