@@ -1,4 +1,5 @@
 from collections import defaultdict
+from functools import partial
 
 import numpy as np
 from rtree.index import Index, Property
@@ -286,8 +287,8 @@ class PointLocator:
 
     def _newton_tlocs(self, basis, spts, plocs, ktlocs, niters=20, rtol=1e-10):
         # Helpers for obtaining the nodal basis operators
-        def nb_op(pts): return basis.nodal_basis_at(pts, clean=False)
-        def jac_nb_op(pts): return basis.jac_nodal_basis_at(pts, clean=False)
+        nb_op = partial(basis.nodal_basis_at, clean=False)
+        jac_nb_op = partial(basis.jac_nodal_basis_at, clean=False)
 
         # Convergence tolerance criteria
         tol = rtol*np.linalg.norm(np.ptp(spts, axis=0), axis=-1)
@@ -435,7 +436,7 @@ class PointSampler:
 
         # Post-process the samples
         if process:
-            samples = np.ascontiguousarray(process(samples))
+            samples = np.ascontiguousarray(process(samples.T).T)
 
         # Gather to the root rank and return
         return self.gather(samples)

@@ -6,11 +6,11 @@ from pyfr.shapes import BaseShape, LineShape, QuadShape, TriShape, proj_pts
 from pyfr.util import subclass_where
 
 
-def get_vtk_shape(name, n):
-    return subclass_where(BaseVTKShape, name=name)(n)
+def get_subdiv(name, n):
+    return subclass_where(BaseSubDiv, name=name)(n)
 
 
-class VTKSubDOFMap:
+class SubDOFMap:
     # Quad-face corner positions in the local (i, j) frame
     _qpos = np.array([[0, 0], [1, 0], [0, 1], [1, 1]])
 
@@ -128,11 +128,11 @@ class VTKSubDOFMap:
         return keys, self._fsrc(vdofs, neles), cpos, nint
 
 
-class BaseVTKShape:
+class BaseSubDiv:
     _face_shapes = {'line': LineShape, 'quad': QuadShape, 'tri': TriShape}
 
     vtk_types = dict(tri=5, quad=9, tet=10, pyr=14, pri=13, hex=12)
-    vtk_nodes = dict(tri=3, quad=4, tet=4, pyr=5, pri=6, hex=8)
+    cell_nodes = dict(tri=3, quad=4, tet=4, pyr=5, pri=6, hex=8)
 
     def __init__(self, n):
         self.n = n
@@ -143,10 +143,10 @@ class BaseVTKShape:
 
     @property
     def subcelloffs(self):
-        return np.cumsum([self.vtk_nodes[t] for t in self.subcells])
+        return np.cumsum([self.cell_nodes[t] for t in self.subcells])
 
     @property
-    def subcelltypes(self):
+    def vtk_subcelltypes(self):
         return np.array([self.vtk_types[t] for t in self.subcells])
 
     @staticmethod
@@ -199,10 +199,10 @@ class BaseVTKShape:
                     items['qface'][vdof] = (*verts, *fp)
 
         body = sorted(set(range(len(svpts))) - touched)
-        return VTKSubDOFMap(self.n, len(svpts), items, body)
+        return SubDOFMap(self.n, len(svpts), items, body)
 
 
-class TensorProdVTKShape(BaseVTKShape):
+class TensorProdSubDiv(BaseSubDiv):
     @property
     def subnodes(self):
         conbase = np.array([0, 1, self.n + 2, self.n + 1])
@@ -223,12 +223,12 @@ class TensorProdVTKShape(BaseVTKShape):
         return np.hstack(internal_con)
 
 
-class QuadVTKShape(TensorProdVTKShape):
+class QuadSubDiv(TensorProdSubDiv):
     name = 'quad'
     ndims = 2
     vtk_ho_type = 70
 
-    nodemaps = {
+    vtk_nodemaps = {
         4: [0, 1, 3, 2],
         9: [0, 2, 8, 6, 1, 5, 7, 3, 4],
         16: [0, 3, 15, 12, 1, 2, 7, 11, 13, 14, 4, 8, 5, 6, 9, 10],
@@ -257,12 +257,12 @@ class QuadVTKShape(TensorProdVTKShape):
     }
 
 
-class HexVTKShape(TensorProdVTKShape):
+class HexSubDiv(TensorProdSubDiv):
     name = 'hex'
     ndims = 3
     vtk_ho_type = 72
 
-    nodemaps = {
+    vtk_nodemaps = {
         8: [0, 1, 3, 2, 4, 5, 7, 6],
         27: [0, 2, 8, 6, 18, 20, 26, 24, 1, 5, 7, 3, 19, 23, 25, 21,
              9, 11, 17, 15, 12, 14, 10, 16, 4, 22, 13],
@@ -426,12 +426,12 @@ class HexVTKShape(TensorProdVTKShape):
     }
 
 
-class TriVTKShape(BaseVTKShape):
+class TriSubDiv(BaseSubDiv):
     name = 'tri'
     ndims = 2
     vtk_ho_type = 69
 
-    nodemaps = {
+    vtk_nodemaps = {
         3: [2, 0, 1],
         6: [5, 0, 2, 3, 1, 4],
         10: [9, 0, 3, 7, 4, 1, 2, 6, 8, 5],
@@ -466,12 +466,12 @@ class TriVTKShape(BaseVTKShape):
         return np.hstack(conlst)
 
 
-class TetVTKShape(BaseVTKShape):
+class TetSubDiv(BaseSubDiv):
     name = 'tet'
     ndims = 3
     vtk_ho_type = 71
 
-    nodemaps = {
+    vtk_nodemaps = {
         4: [3, 0, 1, 2],
         10: [9, 0, 2, 5, 6, 1, 7, 8, 3, 4],
         20: [19, 0, 3, 9, 16, 10, 1, 2, 12, 17, 18, 15, 4, 7, 6, 8,
@@ -543,12 +543,12 @@ class TetVTKShape(BaseVTKShape):
         return np.hstack([np.ravel(c) for c in conlst])
 
 
-class PriVTKShape(BaseVTKShape):
+class PriSubDiv(BaseSubDiv):
     name = 'pri'
     ndims = 3
     vtk_ho_type = 73
 
-    nodemaps = {
+    vtk_nodemaps = {
         6: [0, 1, 2, 3, 4, 5],
         18: [0, 2, 5, 12, 14, 17, 1, 4, 3, 13, 16, 15, 6, 8, 11, 7,
              10, 9],
@@ -648,14 +648,14 @@ class PriVTKShape(BaseVTKShape):
     @property
     def subnodes(self):
         # Triangle connectivity, layered to define prisms
-        tcon = TriVTKShape(self.n).subnodes.reshape(-1, 3)
+        tcon = TriSubDiv(self.n).subnodes.reshape(-1, 3)
         loff = (self.n + 1)*(self.n + 2) // 2
         lcon = [[tcon + i*loff, tcon + (i + 1)*loff]
                 for i in range(self.n)]
         return np.hstack([np.hstack(l).flat for l in lcon])
 
 
-class PyrVTKShape(BaseVTKShape):
+class PyrSubDiv(BaseSubDiv):
     name = 'pyr'
     ndims = 3
 
@@ -674,7 +674,7 @@ class PyrVTKShape(BaseVTKShape):
         lcon = []
 
         # Quad connectivity per layer
-        qcon = [QuadVTKShape(n + 1).subnodes.reshape(-1, 4)
+        qcon = [QuadSubDiv(n + 1).subnodes.reshape(-1, 4)
                 for n in range(self.n)]
 
         # Adjacent index pairs along quad rows/columns, used to stitch

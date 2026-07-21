@@ -37,7 +37,8 @@ class ResidualPlugin(PublishMixin, BaseSolnPlugin):
             header = ['t'] + self._convars
 
             # Open
-            self.csv = init_csv(self.cfg, cfgsect, ','.join(header), nflush=1)
+            self.csv = init_csv(self.cfg, cfgsect, ','.join(header),
+                                nflush=1, isrestart=intg.isrestart)
 
     def __call__(self, intg):
         # Skip the initial step where dt_soln is not yet meaningful

@@ -1,11 +1,11 @@
 from pyfr.mpiutil import get_comm_rank_root, mpi
-from pyfr.plugins.common import init_csv
-from pyfr.plugins.mixins import BackendMixin, PublishMixin
+from pyfr.plugins.mixins import BackendMixin, PublishMixin, SeriesWriterMixin
 from pyfr.plugins.soln.base import BaseSolnPlugin
 from pyfr.plugins.fieldeval import BackendFieldReducer
 
 
-class IntegratePlugin(PublishMixin, BackendMixin, BaseSolnPlugin):
+class IntegratePlugin(PublishMixin, SeriesWriterMixin, BackendMixin,
+                      BaseSolnPlugin):
     name = 'integrate'
     systems = '.*'
     dimensions = '2|3'
@@ -51,10 +51,7 @@ class IntegratePlugin(PublishMixin, BackendMixin, BaseSolnPlugin):
 
         # The root rank needs to open the output file
         if rank == root:
-            header = ['t', *self.cfg.items(cfgsect, prefix='int-')]
-
-            # Open
-            self.csv = init_csv(self.cfg, cfgsect, ','.join(header), nflush=1)
+            self._init_series(intg, list(self._inames))
 
     def __call__(self, intg):
         comm, rank, root = get_comm_rank_root()
@@ -72,7 +69,7 @@ class IntegratePlugin(PublishMixin, BackendMixin, BaseSolnPlugin):
             iintex = [self._post_func(i) for i in iintex]
 
             # Write
-            self.csv(intg.tcurr, *iintex)
+            self._write(intg.tcurr, iintex)
 
             # Publish integral values
             self._publish(intg, **dict(zip(self._inames, iintex)))

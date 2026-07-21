@@ -300,29 +300,44 @@ Example:
 [trigger-*name*] type = steady
 -------------------------------
 
-Monitors a published scalar value over a sliding window and fires when
-it has converged according to a criterion.  Parameterised with:
+Monitors a published scalar value and fires when it has become steady
+according to a criterion.  Parameterised with:
 
 #. ``source`` --- published value to monitor, as
    ``publisher.field``:
 
     *string*
 
-#. ``window`` --- number of published samples in the sliding window:
+#. ``criterion`` --- steadiness metric:
 
-    *int*
-
-#. ``tolerance`` --- convergence threshold (relative to mean):
-
-    *float*
-
-#. ``criterion`` --- convergence metric:
-
-    ``range`` | ``gradient`` | ``std``
+    ``range`` | ``gradient`` | ``std`` | ``mser``
 
     ``range`` fires when (max |minus| min) / |mean| < tolerance.
     ``gradient`` fires when the normalised slope over the window is
     below tolerance.  ``std`` fires when std / |mean| < tolerance.
+    ``mser`` detects the end of the initial transient with the
+    marginal standard error rule of `Bergmann et al.
+    <https://doi.org/10.1115/1.4052402>`__ applied to the full
+    published history, firing once the detected transient end is
+    at least ``margin`` old and the estimate has stopped moving.
+
+#. ``window`` --- number of published samples in the sliding window
+   (``range``, ``gradient`` and ``std`` criteria):
+
+    *int*
+
+#. ``tolerance`` --- convergence threshold, relative to the mean
+   (``range``, ``gradient`` and ``std`` criteria):
+
+    *float*
+
+#. ``margin`` --- stability horizon for the ``mser`` criterion; the
+   transient-end estimate must be this old and must have varied by
+   less than a quarter of this over it.  Choose a value spanning
+   several periods of the slowest expected dynamics, since a quiet
+   spell before their onset is indistinguishable from stationarity:
+
+    *float*
 
 #. ``mode`` --- trigger mode:
 
@@ -332,12 +347,68 @@ Example:
 
 .. code-block:: ini
 
-    [trigger-cd-converged]
+    [trigger-transient-over]
     type = steady
     source = forces.px
-    window = 200
-    tolerance = 0.001
-    criterion = range
+    criterion = mser
+    margin = 10.0
+
+[trigger-*name*] type = meanci
+------------------------------
+
+Fires when the time-averaged mean of a published value is known to a
+target accuracy.  The standard error accounts for autocorrelation in
+the series via the integrated timescale, following `Bergmann et al.
+<https://doi.org/10.1115/1.4052402>`__; the resulting interval matches
+the offline ``pyfr sampler stats --ci`` command.  Parameterised with:
+
+#. ``source`` --- published value to monitor, as
+   ``publisher.field``:
+
+    *string*
+
+#. ``tolerance`` --- target half-width of the confidence interval:
+
+    *float*
+
+#. ``relative`` --- if the tolerance is relative to the mean:
+
+    ``true`` | ``false``
+
+#. ``level`` --- confidence level; defaults to 0.68:
+
+    *float*
+
+#. ``min-neff`` --- minimum effective sample count before the
+   interval is trusted; defaults to 32:
+
+    *float*
+
+#. ``after`` --- optional trigger to wait for; only samples published
+   after it becomes active enter the estimate.  Chain this behind an
+   ``mser`` steady trigger so startup transients do not bias the mean:
+
+    *string*
+
+#. ``mode`` --- trigger mode:
+
+    ``latch`` | ``level`` | ``edge``
+
+    Note that deterministic periodic content, such as vortex
+    shedding, inflates the estimated interval, and that a verdict may
+    revert as new samples arrive; use ``edge`` to fire once on each
+    upward transition.
+
+Example:
+
+.. code-block:: ini
+
+    [trigger-cd-converged]
+    type = meanci
+    source = forces.px
+    after = transient-over
+    tolerance = 0.005
+    relative = true
 
 [trigger-*name*] type = duration
 --------------------------------
@@ -631,6 +702,57 @@ while an expression trigger detects the onset of lift oscillation.
     fun-avg-upvp = uv - u*v
     trigger = shedding
     trigger-action = activate
+
+Statistical Averaging and Convergence
+-------------------------------------
+
+The heuristics above can be replaced with the statistical methods of
+`Bergmann et al. <https://doi.org/10.1115/1.4052402>`__: the marginal
+standard error rule detects the end of the initial transient, after
+which time averaging begins, and the run emits a final
+gradient-bearing snapshot once the mean drag is known to within 0.5%
+at 68% confidence.  Published force histories are
+serialised into snapshots, so both estimates resume exactly across
+restarts.
+
+.. code-block:: ini
+
+    [soln-plugin-fluidforce-wall]
+    nsteps = 50
+    quad-deg = 6
+    file = forces.csv
+    publish-as = forces
+
+    [trigger-transient-over]
+    type = steady
+    criterion = mser
+    source = forces.px
+    margin = 10.0
+
+    [trigger-drag-converged]
+    type = meanci
+    source = forces.px
+    after = transient-over
+    tolerance = 0.005
+    relative = true
+    mode = edge
+
+    [soln-plugin-tavg]
+    nsteps = 100
+    dt-out = 10.0
+    basedir = .
+    basename = tavg-{t:.2f}
+    mode = continuous
+    stats = mean, moments-2, wall
+    trigger = transient-over
+    trigger-action = activate
+
+    [soln-plugin-writer-final]
+    basedir = .
+    basename = final-{t:.2f}
+    write-gradients = true
+    trigger = drag-converged
+    trigger-action = gate
 
 .. |rarr| unicode:: U+2192
 .. |minus| unicode:: U+2212

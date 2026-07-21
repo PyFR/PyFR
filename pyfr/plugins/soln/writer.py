@@ -24,6 +24,9 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
         # Decide if gradients should be written or not
         self._write_grads = self.cfg.getbool(cfgsect, 'write-gradients', False)
 
+        # Decide if the residual du/dt should be written or not
+        self._write_resid = self.cfg.getbool(cfgsect, 'write-resid', False)
+
         # Output field names
         self.fields = list(first(emap.values()).convars)
 
@@ -31,6 +34,8 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
         field_groups = {'soln': list(self.fields)}
         if self._write_grads:
             field_groups['grad'] = list(self.fields)
+        if self._write_resid:
+            field_groups['resid'] = list(self.fields)
 
         # Extract auxiliary field info and getters from elements
         self._aux_fields, self._aux_getters = {}, {}
@@ -102,19 +107,22 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
     def _prepare_data(self, intg):
         data, aux = {}, {}
 
-        if self._write_grads:
-            soln, grad_soln = intg.soln, intg.grad_soln
-        else:
-            soln, grad_soln = intg.soln, None
+        soln = intg.soln
+        grad_soln = intg.grad_soln if self._write_grads else None
+        dt_soln = intg.dt_soln if self._write_resid else None
 
         for idx, etype, rgn in self._ele_regions:
-            # Solution data: (neles, nvars, nupts)
+            # Solution data (neles, nvars, nupts)
             d = {'soln': soln[idx][..., rgn].T.astype(self.fpdtype)}
 
-            # Gradient data: (neles, nvars, ndims, nupts)
+            # Gradient data (neles, nvars, ndims, nupts)
             if self._write_grads:
                 g = grad_soln[idx][..., rgn].transpose(3, 2, 0, 1)
                 d['grad'] = g.astype(self.fpdtype)
+
+            # Residual data (neles, nvars, nupts)
+            if self._write_resid:
+                d['resid'] = dt_soln[idx][..., rgn].T.astype(self.fpdtype)
 
             data[etype] = d
 

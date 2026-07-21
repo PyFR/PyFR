@@ -21,6 +21,11 @@ Parameterised with
 
     *boolean*
 
+#. ``file-reset`` --- if to clear any existing output when starting a
+   new simulation; restarts always append:
+
+    *boolean*
+
 #. ``stage-file`` --- output file path for per-stage convergence
    statistics (implicit integrators only); if not specified, no stage
    file is written:

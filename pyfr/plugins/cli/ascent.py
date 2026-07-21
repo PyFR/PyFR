@@ -10,6 +10,7 @@ from pyfr.plugins.soln.ascent import (AscentRenderer, con_psolns_pgrads,
                                       face_shape_ops)
 from pyfr.readers.native import NativeReader
 from pyfr.shapes import BaseShape
+from pyfr.stats import tavg_exprs
 from pyfr.util import subclass_where
 
 
@@ -44,16 +45,18 @@ class _CLIAdapter:
     def _tavg_indices(self):
         # Primitive (or grad_X_Y) name -> index in soln.fields for tavg
         section = self._soln.stats.get('tavg', 'cfg-section')
-        mapping = {}
-        for k, raw in self._soln.config.items(section, prefix='avg-').items():
-            if k in self._soln.fields:
-                mapping[raw.strip()] = self._soln.fields.index(k)
+        te = tavg_exprs(self._soln.config, section, self.mesh.ndims,
+                        self.elementscls)
 
-        # User [postproc-input] entries override inferred mapping
-        if 'postproc-input' in self.acfg.sections():
-            for k, tname in self.acfg.items('postproc-input').items():
-                if tname in self._soln.fields:
-                    mapping[k] = self._soln.fields.index(tname)
+        fields = self._soln.fields
+        mapping = {}
+        for name, expr in te.avgs.items():
+            if (sym := expr.strip('() \t')).isidentifier():
+                mapping[sym] = fields.index(f'avg-{name}')
+
+        # Deduplicated moments resolve through their alias
+        for cname, sname in te.aliases.items():
+            mapping[cname] = fields.index(f'avg-{sname}')
 
         return mapping
 
@@ -152,7 +155,16 @@ class AscentCLIPlugin(BaseCLIPlugin):
 
         reader = NativeReader(args.mesh)
         acfg = Inifile.load(args.cfg)
-        acfgsect = args.cfgsect or acfg.sections()[0]
+
+        # Default to the first section with any scenes defined
+        if (acfgsect := args.cfgsect) is None:
+            for s in acfg.sections():
+                if acfg.items(s, prefix='scene-'):
+                    acfgsect = s
+                    break
+            else:
+                raise ValueError('No section with scenes found; use '
+                                 '--cfgsect')
 
         # Current Ascent render and associated config
         renderer, rcfg = None, None

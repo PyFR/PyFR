@@ -2,10 +2,10 @@ import numpy as np
 
 from pyfr.cache import memoize
 from pyfr.polys import get_polybasis
-from pyfr.shapes import BaseShape
+from pyfr.shapes import BaseShape, interp_pts
+from pyfr.subdiv import get_subdiv
 from pyfr.util import subclass_where
-from pyfr.writers.vtk.base import BaseVTKWriter, interpolate_pts
-from pyfr.writers.vtk.shapes import get_vtk_shape
+from pyfr.writers.vtk.base import BaseVTKWriter
 
 
 class VTKVolumeWriter(BaseVTKWriter):
@@ -38,7 +38,7 @@ class VTKVolumeWriter(BaseVTKWriter):
 
         # For high-order output permute the nodes to match the VTK ordering
         if etype != 'pyr' and self.ho_output:
-            svpts = svpts[get_vtk_shape(etype, div).nodemaps[len(svpts)]]
+            svpts = svpts[get_subdiv(etype, div).vtk_nodemaps[len(svpts)]]
 
         return svpts
 
@@ -75,17 +75,17 @@ class VTKVolumeWriter(BaseVTKWriter):
         mesh_vtu_op, soln_vtu_op, lin_vtu_op = self._opmats(etype, self.cfg)
 
         # Calculate node locations of VTU elements
-        vpts = interpolate_pts(mesh_vtu_op, spts)
+        vpts = interp_pts(mesh_vtu_op, spts)
 
         # Pre-process the solution at upts
         soln = self._pre_proc_fields(soln).swapaxes(0, 1)
 
         # Interpolate the solution to the vis points
-        vsoln = interpolate_pts(soln_vtu_op, soln)
+        vsoln = interp_pts(soln_vtu_op, soln)
 
         # Run postproc plugins at svpts (views into vsoln/vpts)
-        samples = vsoln.transpose(1, 0, 2)
-        pointf.update(self.pp_runner.run_samples(self.soln.config, samples))
+        pointf |= self._postproc(vsoln.transpose(1, 0, 2),
+                                 vpts.transpose(2, 0, 1))
 
         # Append dummy z dimension for points in 2D (post-pp)
         if self.ndims == 2:
@@ -106,6 +106,6 @@ class VTKVolumeWriter(BaseVTKWriter):
                 continue
 
             op = soln_vtu_op if pshape == (nupts,) else lin_vtu_op
-            pointf[fname] = interpolate_pts(op, np.moveaxis(data, 0, 1))
+            pointf[fname] = interp_pts(op, np.moveaxis(data, 0, 1))
 
         return vpts, vsoln, curved, cellf, pointf

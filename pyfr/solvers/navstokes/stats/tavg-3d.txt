@@ -1,0 +1,603 @@
+# Navier-Stokes statistics, 3D
+# Budget terms follow Pope (2000), sec. 7.3.5; all viscous
+# contractions are accumulated mu-weighted so that constant
+# and Sutherland viscosity share one set of definitions
+
+# Mean viscosity
+field mu = mu
+# Solver-consistent mean velocity and pressure gradients
+field gux = grad_u_x
+field guy = grad_u_y
+field guz = grad_u_z
+field gvx = grad_v_x
+field gvy = grad_v_y
+field gvz = grad_v_z
+field gwx = grad_w_x
+field gwy = grad_w_y
+field gwz = grad_w_z
+field gpx = grad_p_x
+field gpy = grad_p_y
+field gpz = grad_p_z
+# Gradients of the velocity second moments
+field duux = 2*u*grad_u_x
+field duuy = 2*u*grad_u_y
+field duuz = 2*u*grad_u_z
+field duvx = grad_u_x*v + u*grad_v_x
+field duvy = grad_u_y*v + u*grad_v_y
+field duvz = grad_u_z*v + u*grad_v_z
+field duwx = grad_u_x*w + u*grad_w_x
+field duwy = grad_u_y*w + u*grad_w_y
+field duwz = grad_u_z*w + u*grad_w_z
+field dvvx = 2*v*grad_v_x
+field dvvy = 2*v*grad_v_y
+field dvvz = 2*v*grad_v_z
+field dvwx = grad_v_x*w + v*grad_w_x
+field dvwy = grad_v_y*w + v*grad_w_y
+field dvwz = grad_v_z*w + v*grad_w_z
+field dwwx = 2*w*grad_w_x
+field dwwy = 2*w*grad_w_y
+field dwwz = 2*w*grad_w_z
+# Mu-weighted velocity gradient contractions
+field euu = mu*(grad_u_x*grad_u_x + grad_u_y*grad_u_y + grad_u_z*grad_u_z)
+field euv = mu*(grad_u_x*grad_v_x + grad_u_y*grad_v_y + grad_u_z*grad_v_z)
+field euw = mu*(grad_u_x*grad_w_x + grad_u_y*grad_w_y + grad_u_z*grad_w_z)
+field evv = mu*(grad_v_x*grad_v_x + grad_v_y*grad_v_y + grad_v_z*grad_v_z)
+field evw = mu*(grad_v_x*grad_w_x + grad_v_y*grad_w_y + grad_v_z*grad_w_z)
+field eww = mu*(grad_w_x*grad_w_x + grad_w_y*grad_w_y + grad_w_z*grad_w_z)
+
+# Transposed contraction for the true dissipation
+field eet
+    mu*(grad_u_x*grad_u_x + grad_v_y*grad_v_y + grad_w_z*grad_w_z +
+    2*(grad_u_y*grad_v_x + grad_u_z*grad_w_x + grad_v_z*grad_w_y))
+
+# Pressure-gradient and pressure-dilatation moments
+field pdux = p*grad_u_x
+field dpux = grad_p_x*u + p*grad_u_x
+field pduy = p*grad_u_y
+field dpuy = grad_p_y*u + p*grad_u_y
+field pduz = p*grad_u_z
+field dpuz = grad_p_z*u + p*grad_u_z
+field pdvx = p*grad_v_x
+field dpvx = grad_p_x*v + p*grad_v_x
+field pdvy = p*grad_v_y
+field dpvy = grad_p_y*v + p*grad_v_y
+field pdvz = p*grad_v_z
+field dpvz = grad_p_z*v + p*grad_v_z
+field pdwx = p*grad_w_x
+field dpwx = grad_p_x*w + p*grad_w_x
+field pdwy = p*grad_w_y
+field dpwy = grad_p_y*w + p*grad_w_y
+field pdwz = p*grad_w_z
+field dpwz = grad_p_z*w + p*grad_w_z
+# Divergence of the triple velocity products
+
+field dtuu
+    u*u*(3*grad_u_x + grad_v_y + grad_w_z) + 2*u*(v*grad_u_y +
+    w*grad_u_z)
+
+field dtuv
+    u*v*(2*grad_u_x + 2*grad_v_y + grad_w_z) + u*u*grad_v_x +
+    v*v*grad_u_y + v*w*grad_u_z + u*w*grad_v_z
+
+field dtuw
+    u*w*(2*grad_u_x + grad_v_y + 2*grad_w_z) + u*u*grad_w_x +
+    v*w*grad_u_y + u*v*grad_w_y + w*w*grad_u_z
+
+field dtvv
+    v*v*(grad_u_x + 3*grad_v_y + grad_w_z) + 2*v*(u*grad_v_x +
+    w*grad_v_z)
+
+field dtvw
+    v*w*(grad_u_x + 2*grad_v_y + 2*grad_w_z) + u*w*grad_v_x +
+    u*v*grad_w_x + v*v*grad_w_y + w*w*grad_v_z
+
+field dtww
+    w*w*(grad_u_x + grad_v_y + 3*grad_w_z) + 2*w*(u*grad_w_x +
+    v*grad_w_y)
+
+# Compressibility moments
+
+# Mean dilatation
+field d
+    (grad_u_x + grad_v_y + grad_w_z)
+
+field dd = (grad_u_x + grad_v_y + grad_w_z)*(grad_u_x + grad_v_y + grad_w_z)
+
+# Enstrophy
+field enst
+    (grad_w_y - grad_v_z)*(grad_w_y - grad_v_z) + (grad_u_z -
+    grad_w_x)*(grad_u_z - grad_w_x) + (grad_v_x - grad_u_y)*(grad_v_x -
+    grad_u_y)
+
+field pdil = p*(grad_u_x + grad_v_y + grad_w_z)
+field pr = p*rho
+field rr = rho*rho
+# Centred Reynolds stresses; unclamped for budget use
+derived-hidden rcuu = uu - u*u
+derived-hidden rcuv = uv - u*v
+derived-hidden rcuw = uw - u*w
+derived-hidden rcvv = vv - v*v
+derived-hidden rcvw = vw - v*w
+derived-hidden rcww = ww - w*w
+# Reynolds stress transport budgets
+
+# P_ij = -⟨ui'uk'⟩ ∂Uj/∂xk - ⟨uj'uk'⟩ ∂Ui/∂xk
+derived rs-uu-production
+    -2*(rcuu*gux + rcuv*guy + rcuw*guz)
+
+# C_ij = Uk ∂⟨ui'uj'⟩/∂xk
+derived rs-uu-convection
+    u*(duux - 2*u*gux) + v*(duuy - 2*u*guy) + w*(duuz - 2*u*guz)
+
+# T_ij = -∂⟨ui'uj'uk'⟩/∂xk via runtime flux divergences
+derived rs-uu-turb-transport
+    -(dtuu - (3*(gux*uu + u*duux) - 6*u*u*gux + 2*(guy*uv + u*duvy) +
+    gvy*uu + v*duuy - 2*(2*u*v*guy + u*u*gvy) + 2*(guz*uw + u*duwz) +
+    gwz*uu + w*duuz - 2*(2*u*w*guz + u*u*gwz)))
+
+# PT_ij = -(∂⟨p'uj'⟩/∂xi + ∂⟨p'ui'⟩/∂xj)/ρ
+derived rs-uu-press-transport
+    -2*(dpux - (gpx*u + p*gux))/rho
+
+# R_ij = ⟨p'(∂ui'/∂xj + ∂uj'/∂xi)⟩/ρ
+derived rs-uu-press-strain
+    2*(pdux - p*gux)/rho
+
+# D_ij = ν ∇²⟨ui'uj'⟩
+derived rs-uu-visc-diffusion
+    (mu/rho)*lap_rcuu
+
+# ε_ij = 2ν ⟨∂ui'/∂xk ∂uj'/∂xk⟩
+derived rs-uu-dissipation
+    2*(euu - mu*(gux*gux + guy*guy + guz*guz))/rho
+
+# Closure defect; should vanish when converged
+derived rs-uu-residual
+    rs-uu-production + rs-uu-press-strain + rs-uu-press-transport +
+    rs-uu-turb-transport + rs-uu-visc-diffusion - rs-uu-dissipation -
+    rs-uu-convection
+
+set budget-uu
+    rs-uu-production rs-uu-convection rs-uu-turb-transport
+    rs-uu-press-transport rs-uu-press-strain rs-uu-visc-diffusion
+    rs-uu-dissipation rs-uu-residual
+
+# P_ij = -⟨ui'uk'⟩ ∂Uj/∂xk - ⟨uj'uk'⟩ ∂Ui/∂xk
+derived rs-uv-production
+    -(rcuu*gvx + rcuv*(gux + gvy) + rcvv*guy + rcuw*gvz + rcvw*guz)
+
+# C_ij = Uk ∂⟨ui'uj'⟩/∂xk
+derived rs-uv-convection
+    (u*(duvx - v*gux - u*gvx) + v*(duvy - v*guy - u*gvy) + w*(duvz -
+    v*guz - u*gvz))
+
+# T_ij = -∂⟨ui'uj'uk'⟩/∂xk via runtime flux divergences
+derived rs-uv-turb-transport
+    -(dtuv - (2*(gux*uv + u*duvx) + gvx*uu + v*duux - 2*(2*u*v*gux +
+    u*u*gvx) + guy*vv + u*dvvy + 2*(gvy*uv + v*duvy) - 2*(v*v*guy +
+    2*u*v*gvy) + guz*vw + u*dvwz + gvz*uw + v*duwz + gwz*uv + w*duvz -
+    2*(guz*v*w + u*gvz*w + u*v*gwz)))
+
+# PT_ij = -(∂⟨p'uj'⟩/∂xi + ∂⟨p'ui'⟩/∂xj)/ρ
+derived rs-uv-press-transport
+    -(dpuy - (gpy*u + p*guy) + dpvx - (gpx*v + p*gvx))/rho
+
+# R_ij = ⟨p'(∂ui'/∂xj + ∂uj'/∂xi)⟩/ρ
+derived rs-uv-press-strain
+    (pduy + pdvx - p*(guy + gvx))/rho
+
+# D_ij = ν ∇²⟨ui'uj'⟩
+derived rs-uv-visc-diffusion
+    (mu/rho)*lap_rcuv
+
+# ε_ij = 2ν ⟨∂ui'/∂xk ∂uj'/∂xk⟩
+derived rs-uv-dissipation
+    2*(euv - mu*(gux*gvx + guy*gvy + guz*gvz))/rho
+
+# Closure defect; should vanish when converged
+derived rs-uv-residual
+    rs-uv-production + rs-uv-press-strain + rs-uv-press-transport +
+    rs-uv-turb-transport + rs-uv-visc-diffusion - rs-uv-dissipation -
+    rs-uv-convection
+
+set budget-uv
+    rs-uv-production rs-uv-convection rs-uv-turb-transport
+    rs-uv-press-transport rs-uv-press-strain rs-uv-visc-diffusion
+    rs-uv-dissipation rs-uv-residual
+
+# P_ij = -⟨ui'uk'⟩ ∂Uj/∂xk - ⟨uj'uk'⟩ ∂Ui/∂xk
+derived rs-uw-production
+    -(rcuu*gwx + rcuw*(gux + gwz) + rcuv*gwy + rcvw*guy + rcww*guz)
+
+# C_ij = Uk ∂⟨ui'uj'⟩/∂xk
+derived rs-uw-convection
+    (u*(duwx - w*gux - u*gwx) + v*(duwy - w*guy - u*gwy) + w*(duwz -
+    w*guz - u*gwz))
+
+# T_ij = -∂⟨ui'uj'uk'⟩/∂xk via runtime flux divergences
+derived rs-uw-turb-transport
+    -(dtuw - (2*(gux*uw + u*duwx) + gwx*uu + w*duux - 2*(2*u*w*gux +
+    u*u*gwx) + guy*vw + u*dvwy + gwy*uv + w*duvy + gvy*uw + v*duwy -
+    2*(guy*w*v + u*gwy*v + u*w*gvy) + guz*ww + u*dwwz + 2*(gwz*uw +
+    w*duwz) - 2*(w*w*guz + 2*u*w*gwz)))
+
+# PT_ij = -(∂⟨p'uj'⟩/∂xi + ∂⟨p'ui'⟩/∂xj)/ρ
+derived rs-uw-press-transport
+    -(dpuz - (gpz*u + p*guz) + dpwx - (gpx*w + p*gwx))/rho
+
+# R_ij = ⟨p'(∂ui'/∂xj + ∂uj'/∂xi)⟩/ρ
+derived rs-uw-press-strain
+    (pduz + pdwx - p*(guz + gwx))/rho
+
+# D_ij = ν ∇²⟨ui'uj'⟩
+derived rs-uw-visc-diffusion
+    (mu/rho)*lap_rcuw
+
+# ε_ij = 2ν ⟨∂ui'/∂xk ∂uj'/∂xk⟩
+derived rs-uw-dissipation
+    2*(euw - mu*(gux*gwx + guy*gwy + guz*gwz))/rho
+
+# Closure defect; should vanish when converged
+derived rs-uw-residual
+    rs-uw-production + rs-uw-press-strain + rs-uw-press-transport +
+    rs-uw-turb-transport + rs-uw-visc-diffusion - rs-uw-dissipation -
+    rs-uw-convection
+
+set budget-uw
+    rs-uw-production rs-uw-convection rs-uw-turb-transport
+    rs-uw-press-transport rs-uw-press-strain rs-uw-visc-diffusion
+    rs-uw-dissipation rs-uw-residual
+
+# P_ij = -⟨ui'uk'⟩ ∂Uj/∂xk - ⟨uj'uk'⟩ ∂Ui/∂xk
+derived rs-vv-production
+    -2*(rcuv*gvx + rcvv*gvy + rcvw*gvz)
+
+# C_ij = Uk ∂⟨ui'uj'⟩/∂xk
+derived rs-vv-convection
+    u*(dvvx - 2*v*gvx) + v*(dvvy - 2*v*gvy) + w*(dvvz - 2*v*gvz)
+
+# T_ij = -∂⟨ui'uj'uk'⟩/∂xk via runtime flux divergences
+derived rs-vv-turb-transport
+    -(dtvv - (2*(gvx*uv + v*duvx) + gux*vv + u*dvvx - 2*(2*u*v*gvx +
+    v*v*gux) + 3*(gvy*vv + v*dvvy) - 6*v*v*gvy + 2*(gvz*vw + v*dvwz) +
+    gwz*vv + w*dvvz - 2*(2*v*w*gvz + v*v*gwz)))
+
+# PT_ij = -(∂⟨p'uj'⟩/∂xi + ∂⟨p'ui'⟩/∂xj)/ρ
+derived rs-vv-press-transport
+    -2*(dpvy - (gpy*v + p*gvy))/rho
+
+# R_ij = ⟨p'(∂ui'/∂xj + ∂uj'/∂xi)⟩/ρ
+derived rs-vv-press-strain
+    2*(pdvy - p*gvy)/rho
+
+# D_ij = ν ∇²⟨ui'uj'⟩
+derived rs-vv-visc-diffusion
+    (mu/rho)*lap_rcvv
+
+# ε_ij = 2ν ⟨∂ui'/∂xk ∂uj'/∂xk⟩
+derived rs-vv-dissipation
+    2*(evv - mu*(gvx*gvx + gvy*gvy + gvz*gvz))/rho
+
+# Closure defect; should vanish when converged
+derived rs-vv-residual
+    rs-vv-production + rs-vv-press-strain + rs-vv-press-transport +
+    rs-vv-turb-transport + rs-vv-visc-diffusion - rs-vv-dissipation -
+    rs-vv-convection
+
+set budget-vv
+    rs-vv-production rs-vv-convection rs-vv-turb-transport
+    rs-vv-press-transport rs-vv-press-strain rs-vv-visc-diffusion
+    rs-vv-dissipation rs-vv-residual
+
+# P_ij = -⟨ui'uk'⟩ ∂Uj/∂xk - ⟨uj'uk'⟩ ∂Ui/∂xk
+derived rs-vw-production
+    -(rcuv*gwx + rcuw*gvx + rcvv*gwy + rcvw*(gvy + gwz) + rcww*gvz)
+
+# C_ij = Uk ∂⟨ui'uj'⟩/∂xk
+derived rs-vw-convection
+    (u*(dvwx - w*gvx - v*gwx) + v*(dvwy - w*gvy - v*gwy) + w*(dvwz -
+    w*gvz - v*gwz))
+
+# T_ij = -∂⟨ui'uj'uk'⟩/∂xk via runtime flux divergences
+derived rs-vw-turb-transport
+    -(dtvw - (gvx*uw + v*duwx + gwx*uv + w*duvx + gux*vw + u*dvwx -
+    2*(gvx*w*u + v*gwx*u + v*w*gux) + 2*(gvy*vw + v*dvwy) + gwy*vv +
+    w*dvvy - 2*(2*v*w*gvy + v*v*gwy) + gvz*ww + v*dwwz + 2*(gwz*vw +
+    w*dvwz) - 2*(w*w*gvz + 2*v*w*gwz)))
+
+# PT_ij = -(∂⟨p'uj'⟩/∂xi + ∂⟨p'ui'⟩/∂xj)/ρ
+derived rs-vw-press-transport
+    -(dpvz - (gpz*v + p*gvz) + dpwy - (gpy*w + p*gwy))/rho
+
+# R_ij = ⟨p'(∂ui'/∂xj + ∂uj'/∂xi)⟩/ρ
+derived rs-vw-press-strain
+    (pdvz + pdwy - p*(gvz + gwy))/rho
+
+# D_ij = ν ∇²⟨ui'uj'⟩
+derived rs-vw-visc-diffusion
+    (mu/rho)*lap_rcvw
+
+# ε_ij = 2ν ⟨∂ui'/∂xk ∂uj'/∂xk⟩
+derived rs-vw-dissipation
+    2*(evw - mu*(gvx*gwx + gvy*gwy + gvz*gwz))/rho
+
+# Closure defect; should vanish when converged
+derived rs-vw-residual
+    rs-vw-production + rs-vw-press-strain + rs-vw-press-transport +
+    rs-vw-turb-transport + rs-vw-visc-diffusion - rs-vw-dissipation -
+    rs-vw-convection
+
+set budget-vw
+    rs-vw-production rs-vw-convection rs-vw-turb-transport
+    rs-vw-press-transport rs-vw-press-strain rs-vw-visc-diffusion
+    rs-vw-dissipation rs-vw-residual
+
+# P_ij = -⟨ui'uk'⟩ ∂Uj/∂xk - ⟨uj'uk'⟩ ∂Ui/∂xk
+derived rs-ww-production
+    -2*(rcuw*gwx + rcvw*gwy + rcww*gwz)
+
+# C_ij = Uk ∂⟨ui'uj'⟩/∂xk
+derived rs-ww-convection
+    u*(dwwx - 2*w*gwx) + v*(dwwy - 2*w*gwy) + w*(dwwz - 2*w*gwz)
+
+# T_ij = -∂⟨ui'uj'uk'⟩/∂xk via runtime flux divergences
+derived rs-ww-turb-transport
+    -(dtww - (2*(gwx*uw + w*duwx) + gux*ww + u*dwwx - 2*(2*u*w*gwx +
+    w*w*gux) + 2*(gwy*vw + w*dvwy) + gvy*ww + v*dwwy - 2*(2*v*w*gwy +
+    w*w*gvy) + 3*(gwz*ww + w*dwwz) - 6*w*w*gwz))
+
+# PT_ij = -(∂⟨p'uj'⟩/∂xi + ∂⟨p'ui'⟩/∂xj)/ρ
+derived rs-ww-press-transport
+    -2*(dpwz - (gpz*w + p*gwz))/rho
+
+# R_ij = ⟨p'(∂ui'/∂xj + ∂uj'/∂xi)⟩/ρ
+derived rs-ww-press-strain
+    2*(pdwz - p*gwz)/rho
+
+# D_ij = ν ∇²⟨ui'uj'⟩
+derived rs-ww-visc-diffusion
+    (mu/rho)*lap_rcww
+
+# ε_ij = 2ν ⟨∂ui'/∂xk ∂uj'/∂xk⟩
+derived rs-ww-dissipation
+    2*(eww - mu*(gwx*gwx + gwy*gwy + gwz*gwz))/rho
+
+# Closure defect; should vanish when converged
+derived rs-ww-residual
+    rs-ww-production + rs-ww-press-strain + rs-ww-press-transport +
+    rs-ww-turb-transport + rs-ww-visc-diffusion - rs-ww-dissipation -
+    rs-ww-convection
+
+set budget-ww
+    rs-ww-production rs-ww-convection rs-ww-turb-transport
+    rs-ww-press-transport rs-ww-press-strain rs-ww-visc-diffusion
+    rs-ww-dissipation rs-ww-residual
+
+# TKE budget terms as half-traces of the stress budgets
+
+# P_ij = -⟨ui'uk'⟩ ∂Uj/∂xk - ⟨uj'uk'⟩ ∂Ui/∂xk
+derived tke-production
+    -(rcuu*gux + rcuv*(guy + gvx) + rcuw*(guz + gwx) + rcvv*gvy +
+    rcvw*(gvz + gwy) + rcww*gwz)
+
+# C_ij = Uk ∂⟨ui'uj'⟩/∂xk
+derived tke-convection
+    0.5*(u*(duux - 2*u*gux + dvvx - 2*v*gvx + dwwx - 2*w*gwx) +
+    v*(duuy - 2*u*guy + dvvy - 2*v*gvy + dwwy - 2*w*gwy) + w*(duuz -
+    2*u*guz + dvvz - 2*v*gvz + dwwz - 2*w*gwz))
+
+# T_ij = -∂⟨ui'uj'uk'⟩/∂xk via runtime flux divergences
+derived tke-turb-transport
+    0.5*(-(dtuu - (3*(gux*uu + u*duux) - 6*u*u*gux + 2*(guy*uv +
+    u*duvy) + gvy*uu + v*duuy - 2*(2*u*v*guy + u*u*gvy) + 2*(guz*uw +
+    u*duwz) + gwz*uu + w*duuz - 2*(2*u*w*guz + u*u*gwz))) - (dtvv -
+    (2*(gvx*uv + v*duvx) + gux*vv + u*dvvx - 2*(2*u*v*gvx + v*v*gux) +
+    3*(gvy*vv + v*dvvy) - 6*v*v*gvy + 2*(gvz*vw + v*dvwz) + gwz*vv +
+    w*dvvz - 2*(2*v*w*gvz + v*v*gwz))) - (dtww - (2*(gwx*uw +
+    w*duwx) + gux*ww + u*dwwx - 2*(2*u*w*gwx + w*w*gux) + 2*(gwy*vw +
+    w*dvwy) + gvy*ww + v*dwwy - 2*(2*v*w*gwy + w*w*gvy) + 3*(gwz*ww +
+    w*dwwz) - 6*w*w*gwz)))
+
+# PT_ij = -(∂⟨p'uj'⟩/∂xi + ∂⟨p'ui'⟩/∂xj)/ρ
+derived tke-press-transport
+    -(dpux - (gpx*u + p*gux) + dpvy - (gpy*v + p*gvy) +
+    dpwz - (gpz*w + p*gwz))/rho
+
+# R_ij = ⟨p'(∂ui'/∂xj + ∂uj'/∂xi)⟩/ρ
+derived tke-press-dilatation
+    (pdux + pdvy + pdwz - p*(gux + gvy + gwz))/rho
+
+# D_ij = ν ∇²⟨ui'uj'⟩
+derived tke-visc-diffusion
+    0.5*(mu/rho)*(lap_rcuu + lap_rcvv + lap_rcww)
+
+# ε_ij = 2ν ⟨∂ui'/∂xk ∂uj'/∂xk⟩
+derived eps
+    (euu + evv + eww - mu*(gux*gux + guy*guy + guz*guz + gvx*gvx +
+    gvy*gvy + gvz*gvz + gwx*gwx + gwy*gwy + gwz*gwz))/rho
+
+# Closure defect; should vanish when converged
+derived tke-residual
+    tke-production + tke-press-dilatation + tke-press-transport +
+    tke-turb-transport + tke-visc-diffusion - eps - tke-convection
+
+set budget-k
+    tke-production tke-convection tke-turb-transport tke-press-transport
+    tke-press-dilatation tke-visc-diffusion eps tke-residual
+
+# Turbulence length, time and velocity scales
+
+# Kolmogorov length scale
+derived eta
+    pow(pow(mu/rho, 3)/eps, 0.25)
+
+# Kolmogorov time scale
+derived tau-eta
+    sqrt((mu/rho)/eps)
+
+# Kolmogorov velocity scale
+derived u-eta
+    pow((mu/rho)*eps, 0.25)
+
+# Taylor microscale
+derived taylor
+    sqrt(10*(mu/rho)*tke/eps)
+
+# Taylor-microscale Reynolds number
+derived re-lambda
+    sqrt(2*tke/3)*taylor/(mu/rho)
+
+# Integral length scale estimate
+derived l-int
+    pow(tke, 1.5)/eps
+
+# Grid spacing per solution point over eta
+derived res-eta
+    grid_hmax/(porder + 1)/eta
+
+derived res-eta-min = grid_hmin/(porder + 1)/eta
+derived res-taylor = grid_hmax/(porder + 1)/taylor
+
+set scales
+    eps eta tau-eta u-eta taylor re-lambda l-int res-eta res-eta-min
+    res-taylor
+
+# Dissipation upgraded with the transposed term
+derived eps-true
+    eps + (eet - mu*(gux*gux + gvy*gvy + gwz*gwz + 2*(guy*gvx +
+    guz*gwx + gvz*gwy)))/rho
+
+set scales-exact
+    scales eps-true
+
+# Velocity-gradient tensor invariants
+
+# Second invariant Q = -A_ij A_ji / 2
+field invq
+    -0.5*(grad_u_x*grad_u_x + grad_v_y*grad_v_y + grad_w_z*grad_w_z +
+    2*(grad_u_y*grad_v_x + grad_u_z*grad_w_x + grad_v_z*grad_w_y))
+
+field invqq
+    0.25*(grad_u_x*grad_u_x + grad_v_y*grad_v_y + grad_w_z*grad_w_z +
+    2*(grad_u_y*grad_v_x + grad_u_z*grad_w_x +
+    grad_v_z*grad_w_y))*(grad_u_x*grad_u_x + grad_v_y*grad_v_y +
+    grad_w_z*grad_w_z + 2*(grad_u_y*grad_v_x + grad_u_z*grad_w_x +
+    grad_v_z*grad_w_y))
+
+# Third invariant R = -det(A)
+field invr
+    -(grad_u_x*(grad_v_y*grad_w_z - grad_v_z*grad_w_y) -
+    grad_u_y*(grad_v_x*grad_w_z - grad_v_z*grad_w_x) +
+    grad_u_z*(grad_v_x*grad_w_y - grad_v_y*grad_w_x))
+
+field invrr
+    (grad_u_x*(grad_v_y*grad_w_z - grad_v_z*grad_w_y) -
+    grad_u_y*(grad_v_x*grad_w_z - grad_v_z*grad_w_x) +
+    grad_u_z*(grad_v_x*grad_w_y -
+    grad_v_y*grad_w_x))*(grad_u_x*(grad_v_y*grad_w_z -
+    grad_v_z*grad_w_y) - grad_u_y*(grad_v_x*grad_w_z -
+    grad_v_z*grad_w_x) + grad_u_z*(grad_v_x*grad_w_y -
+    grad_v_y*grad_w_x))
+
+# Q of the mean velocity gradient tensor
+derived q-mean
+    -0.5*(gux*gux + gvy*gvy + gwz*gwz + 2*(guy*gvx + guz*gwx +
+    gvz*gwy))
+
+# R of the mean velocity gradient tensor
+derived r-mean
+    -(gux*(gvy*gwz - gvz*gwy) - guy*(gvx*gwz - gvz*gwx) + guz*(gvx*gwy -
+    gvy*gwx))
+
+derived q-rms = sqrt(max(invqq - invq*invq, 0))
+derived r-rms = sqrt(max(invrr - invr*invr, 0))
+
+set vgt
+    invq invr q-rms r-rms q-mean r-mean
+
+# Wall statistics from mean mu-weighted velocity gradients
+field mgux = mu*grad_u_x
+field mguy = mu*grad_u_y
+field mguz = mu*grad_u_z
+field mgvx = mu*grad_v_x
+field mgvy = mu*grad_v_y
+field mgvz = mu*grad_v_z
+field mgwx = mu*grad_w_x
+field mgwy = mu*grad_w_y
+field mgwz = mu*grad_w_z
+field mqx = (mu/Pr)*grad_cpT_x
+field mqy = (mu/Pr)*grad_cpT_y
+field mqz = (mu/Pr)*grad_cpT_z
+# Mean wall quantities; boundary exports only
+
+# Mean viscous traction component
+derived trac-x
+    2*mgux*norm_x + (mguy + mgvx)*norm_y + (mguz + mgwx)*norm_z
+
+# Mean viscous traction component
+derived trac-y
+    (mgvx + mguy)*norm_x + 2*mgvy*norm_y + (mgvz + mgwy)*norm_z
+
+# Mean viscous traction component
+derived trac-z
+    (mgwx + mguz)*norm_x + (mgwy + mgvz)*norm_y + 2*mgwz*norm_z
+
+# Normal component of the mean traction
+derived trac-n
+    trac-x*norm_x + trac-y*norm_y + trac-z*norm_z
+
+# Magnitude of the mean tangential traction
+derived tau-wall
+    sqrt((trac-x - trac-n*norm_x)*(trac-x - trac-n*norm_x) + (trac-y -
+    trac-n*norm_y)*(trac-y - trac-n*norm_y) + (trac-z -
+    trac-n*norm_z)*(trac-z - trac-n*norm_z))
+
+# Mean skin friction coefficient
+derived cf requires rho-inf u-inf
+    tau-wall/(0.5*rho-inf*u-inf*u-inf)
+
+# Friction velocity from the mean traction
+derived u-tau
+    sqrt(tau-wall/rho)
+
+# y+ of the first interior solution point
+derived yplus
+    boundary_dist*u-tau*rho/mu
+
+# Mean wall heat flux; positive into the wall
+derived q-wall
+    -(mqx*norm_x + mqy*norm_y + mqz*norm_z)
+
+set wall
+    trac-x trac-y trac-z trac-n tau-wall cf u-tau yplus
+
+set wall-heat
+    wall q-wall
+
+# Compressibility diagnostics
+
+# Solenoidal dissipation from fluctuating vorticity
+derived eps-sol
+    (mu/rho)*(enst - ((gwy - gvz)*(gwy - gvz) + (guz - gwx)*(guz -
+    gwx) + (gvx - guy)*(gvx - guy)))
+
+# Dilatational dissipation
+derived eps-dil
+    (4/3)*(mu/rho)*(dd - d*d)
+
+# Pressure-dilatation correlation
+derived press-dilatation
+    (pdil - p*(gux + gvy + gwz))/rho
+
+# Turbulent Mach number
+derived mach-t
+    sqrt(2*tke*rho/(gamma*p))
+
+derived rhorms = sqrt(max(rr - rho*rho, 0))
+
+# Isentropic pressure-density correlation
+derived isen-corr
+    (pr - p*rho)/(prms*rhorms)
+
+set compressibility
+    eps-sol eps-dil press-dilatation mach-t rhorms isen-corr

@@ -1,3 +1,4 @@
+from collections import namedtuple
 from functools import cached_property
 
 import numpy as np
@@ -5,49 +6,53 @@ import numpy as np
 from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where
 
-
-def split_samples(samples, nvars):
-    # Primitives are the first nvars rows; remaining rows form grad blocks
-    pris = list(samples[:nvars])
-    if samples.shape[0] > nvars:
-        return pris, np.split(samples[nvars:], nvars)
-    else:
-        return pris, None
+FaceInfo = namedtuple('FaceInfo', 'etype fidx svpts norm')
 
 
-class VolumePostProcData:
-    def __init__(self, cfg, pris, grad_pris=None):
+class PostProcData:
+    kind = 'volume'
+
+    def __init__(self, cfg, pris, ploc=None, grad_pris=None):
         self.cfg = cfg
-        self.pris = pris
+        self.pris = list(pris)
         self.grad_pris = grad_pris
+        self.ploc = ploc
         self.fields = {}
+
+    @classmethod
+    def from_soln(cls, soln, samples, ploc, *args):
+        # Split stacked samples into fields and per-field gradient blocks
+        nv, ng = len(soln.fields), len(soln.fields)*(1 + len(ploc))
+        grads = np.split(samples[nv:ng], nv) if len(samples) >= ng else None
+
+        return cls(soln.config, samples[:nv], ploc, grads, *args)
 
     @property
     def nvars(self):
         return len(self.pris)
 
     @property
+    def ndims(self):
+        return len(self.ploc)
+
+    @property
     def has_grads(self):
         return self.grad_pris is not None
 
 
-class BoundaryPostProcData(VolumePostProcData):
-    def __init__(self, cfg, pris, spts, etype, fidx, svpts, grad_pris=None):
-        super().__init__(cfg, pris, grad_pris=grad_pris)
-        self._spts = spts
-        self._etype = etype
-        self._fidx = fidx
-        self._svpts = svpts
+class BoundaryPostProcData(PostProcData):
+    kind = 'boundary'
 
-    @cached_property
-    def _elementscls(self):
-        from pyfr.solvers.base import BaseSystem
-        sname = self.cfg.get('solver', 'system')
-        return subclass_where(BaseSystem, name=sname).elementscls
+    def __init__(self, cfg, pris, ploc, grad_pris, elementscls, spts, finfo):
+        super().__init__(cfg, pris, ploc, grad_pris)
+
+        self._elementscls = elementscls
+        self._spts = spts
+        self._finfo = finfo
 
     @cached_property
     def _shape(self):
-        cls = subclass_where(BaseShape, name=self._etype)
+        cls = subclass_where(BaseShape, name=self._finfo.etype)
         return cls(len(self._spts), self.cfg)
 
     @cached_property
@@ -56,9 +61,9 @@ class BoundaryPostProcData(VolumePostProcData):
 
     @cached_property
     def pnorm(self):
-        _, _, norm = self._shape.faces[self._fidx]
-        norm_tiled = np.tile(norm, (len(self._svpts), 1))
-        pn = self._eles.pnorm_at(self._svpts, norm_tiled)
+        svpts = self._finfo.svpts
+        norm_tiled = np.tile(self._finfo.norm, (len(svpts), 1))
+        pn = self._eles.pnorm_at(svpts, norm_tiled)
 
         return pn.transpose(2, 0, 1)
 
@@ -67,25 +72,24 @@ class BoundaryPostProcData(VolumePostProcData):
         return self.pnorm / np.linalg.norm(self.pnorm, axis=0)
 
     @cached_property
-    def min_upt_wall_dist_approx(self):
+    def boundary_dist(self):
+        # Reference-space distance identifies interior solution points
         shape = self._shape
-        _, proj, norm = shape.faces[self._fidx]
-        upts = shape.upts
+        _, proj, norm = shape.faces[self._finfo.fidx]
 
-        norm /= np.linalg.norm(norm)
+        norm = norm / np.linalg.norm(norm)
         face_pt = proj(*([0]*(shape.ndims - 1)))
-        t = (face_pt - upts) @ norm
-        upts_on_face = upts + t[:, None] * norm
+        t = (face_pt - shape.upts) @ norm
 
-        sbasis = shape.sbasis
+        # Physical positions of the interior solution points
+        op = shape.sbasis.nodal_basis_at(shape.upts[t != 0])
+        r = op @ self._spts.reshape(op.shape[1], -1)
+        x_upt = r.reshape(op.shape[0], *self._spts.shape[1:])
 
-        def interp(op):
-            r = op @ self._spts.reshape(op.shape[1], -1)
-            return r.reshape(op.shape[0], *self._spts.shape[1:])
+        # Offset of each interior point from each surface point
+        dx = x_upt[:, None] - np.moveaxis(self.ploc, 0, -1)[None]
 
-        x_upt = interp(sbasis.nodal_basis_at(upts))
-        x_face = interp(sbasis.nodal_basis_at(upts_on_face))
+        # Distance along the local surface normal at each surface point
+        dist = np.abs(np.einsum('ipek,kpe->ipe', dx, self.normals))
 
-        dist = np.linalg.norm(x_upt - x_face, axis=2)
-
-        return dist[t != 0].min(axis=0)
+        return dist.min(axis=0)

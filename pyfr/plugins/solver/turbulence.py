@@ -2,7 +2,6 @@ from dataclasses import dataclass
 import math
 
 import numpy as np
-from numpy.core.records import fromrecords
 from rtree.index import Index, Property
 
 from pyfr.plugins.solver.base import BaseSolverPlugin
@@ -144,7 +143,7 @@ class TurbulencePlugin(BaseSolverPlugin):
     def _test_nvmax(self, strms, neles, nvmax):
         tnext = self.tnext
         strmoff = {ele: 0 for ele in strms}
-        buf = fromrecords(np.zeros((nvmax, neles)), dtype=self.eventdtype)
+        buf = np.zeros((nvmax, neles), self.eventdtype).view(np.recarray)
 
         while tnext < float('inf'):
             trcltmp = self._update_buf(strms, strmoff, buf, tnext)
@@ -193,7 +192,7 @@ class TurbulencePlugin(BaseSolverPlugin):
 
         dtype = [('yinit', self.fdptype), ('zinit', self.fdptype),
                  ('tinit', self.fdptype), ('state', np.uint32)]
-        return fromrecords(tmp, dtype=dtype)
+        return np.rec.fromrecords(tmp, dtype=dtype)
 
     def _get_vortex_data(self, intg):
         ls, avgu = self.ls, self.avgu
@@ -282,7 +281,7 @@ class TurbulencePlugin(BaseSolverPlugin):
         )
 
         # Allocate host buffer and backend matrices for vortex state
-        buf = fromrecords(np.zeros((nvmax, neles)), dtype=self.eventdtype)
+        buf = np.zeros((nvmax, neles), self.eventdtype).view(np.recarray)
 
         strmoff = {ele: 0 for ele in strms}
         vdata = VortexData(

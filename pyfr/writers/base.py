@@ -17,6 +17,7 @@ class BaseWriter:
             raise RuntimeError(f'{ndims}D grids not supported')
 
     def _load_soln(self, solnf):
+        from pyfr.plugins.postproc import get_source
         from pyfr.solvers.base import BaseSystem
 
         self.mesh, self.soln = self.reader.load_subset_mesh_soln(solnf)
@@ -25,8 +26,10 @@ class BaseWriter:
         self.cfg = self.soln.config
         self.stats = self.soln.stats
 
-        # Data file prefix
+        # Data source for the file prefix
         self.dataprefix = self.stats.get('data', 'prefix')
+        self.source = get_source(self.dataprefix, self.cfg, self.stats,
+                                 self.ndims)
 
         # System and elements classes
         self.systemscls = subclass_where(

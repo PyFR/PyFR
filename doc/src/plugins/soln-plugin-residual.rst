@@ -18,6 +18,11 @@ Parameterised with
 
     *boolean*
 
+#. ``file-reset`` --- if to clear any existing output when starting a
+   new simulation; restarts always append:
+
+    *boolean*
+
 #. ``norm`` --- sets the degree and calculates an :math:`L_p` norm,
     default is ``2``:
 

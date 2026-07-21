@@ -1,8 +1,8 @@
 import numpy as np
 
-from pyfr.mpiutil import mpi
+from pyfr.fields import CleanToGrid
+from pyfr.mpiutil import mpi, scal_coll
 from pyfr.util import first
-from pyfr.writers.vtk.clean import CleanToGrid
 
 
 class DirectVTKOutput:
@@ -40,6 +40,8 @@ class CleanToGridVTKOutput(DirectVTKOutput):
         self.point_data = self._compute_fields()
 
     def _compute_fields(self):
+        comm = self.cleaner.comm
+
         # Obtain the field data for each element type
         fdata = {}
         for etype in self.writer._prepared:
@@ -47,7 +49,7 @@ class CleanToGridVTKOutput(DirectVTKOutput):
 
         # Agree on field count across ranks
         nfields = len(first(fdata.values(), ()))
-        nfields = self.cleaner.comm.allreduce(nfields, op=mpi.MAX)
+        nfields = scal_coll(comm.Allreduce, nfields, op=mpi.MAX)
 
         # Iterate through the fields and average them
         out = []
@@ -59,7 +61,7 @@ class CleanToGridVTKOutput(DirectVTKOutput):
                 efields[etype] = arr.astype(dt, copy=False)
                 ncomp = max(ncomp, arr.shape[2])
 
-            ncomp = self.cleaner.comm.allreduce(ncomp, op=mpi.MAX)
+            ncomp = scal_coll(comm.Allreduce, ncomp, op=mpi.MAX)
             avg = self.cleaner.average(efields, ncomp, self.writer.dtype)
             out.append({et: (a, self.writer.dtype) for et, a in avg.items()})
 

@@ -1,9 +1,10 @@
 #!/usr/bin/env python
-from argparse import ArgumentParser, FileType
+from argparse import ArgumentParser
 import csv
 import io
 from pathlib import Path
 import re
+import sys
 import uuid
 
 import h5py
@@ -46,8 +47,7 @@ def main():
 
     # Import command
     ap_import = sp.add_parser('import', help='import --help')
-    ap_import.add_argument('inmesh', type=FileType('r'),
-                           help='input mesh file')
+    ap_import.add_argument('inmesh', help='input mesh file')
     ap_import.add_argument('outmesh', help='output PyFR mesh file')
     types = sorted(cls.name for cls in subclasses(BaseReader))
     ap_import.add_argument('-t', dest='type', choices=types,
@@ -139,7 +139,7 @@ def main():
 
         ap_export_type.add_argument('meshf', help='input mesh file')
         ap_export_type.add_argument('solnf', help='input solution file')
-        ap_export_type.add_argument('outf', help='output file')
+        ap_export_type.add_argument('outf', nargs='?', help='output file')
 
         if etype == 'boundary':
             ap_export_type.add_argument('eargs', nargs='+', metavar='boundary',
@@ -148,8 +148,8 @@ def main():
             ap_export_type.add_argument('eargs', nargs='+', metavar='stl',
                                         help='STL region to output')
 
-        ap_export_type.add_argument('-b', '--batchfile', type=FileType('r'),
-                                    default='-', help='batch export file')
+        ap_export_type.add_argument('-b', '--batchfile', default='-',
+                                    help='batch export file')
 
         ftypes = [c.name for c in subclasses(BaseWriter) if c.type == etype]
         ap_export_type.add_argument(
@@ -161,6 +161,10 @@ def main():
             '-f', '--field', dest='fields', action='append', metavar='FIELD',
             help='what fields should be output; may be repeated, by default '
             'all fields are output'
+        )
+        ap_export_type.add_argument(
+            '-l', '--list-fields', action='store_true',
+            help='list the fields the file provides and exit'
         )
         ap_export_type.add_argument(
             '-p', '--precision', choices=['single', 'double'],
@@ -193,7 +197,7 @@ def main():
     # Add region
     ap_region_add = ap_region.add_parser('add', help='region add --help')
     ap_region_add.add_argument('mesh', help='input mesh file')
-    ap_region_add.add_argument('stl', type=FileType('rb'), help='STL file')
+    ap_region_add.add_argument('stl', help='STL file')
     ap_region_add.add_argument('name', help='region name')
     ap_region_add.set_defaults(process=process_region_add)
 
@@ -238,15 +242,14 @@ def main():
     # Run command
     ap_run = sp.add_parser('run', help='run --help')
     ap_run.add_argument('mesh', help='mesh file')
-    ap_run.add_argument('cfg', type=FileType('r'), help='config file')
+    ap_run.add_argument('cfg', help='config file')
     ap_run.set_defaults(process=process_run)
 
     # Restart command
     ap_restart = sp.add_parser('restart', help='restart --help')
     ap_restart.add_argument('mesh', help='mesh file')
     ap_restart.add_argument('soln', help='solution file')
-    ap_restart.add_argument('cfg', nargs='?', type=FileType('r'),
-                            help='new config file')
+    ap_restart.add_argument('cfg', nargs='?', help='new config file')
     ap_restart.set_defaults(process=process_restart)
 
     # Options common to run and restart
@@ -275,7 +278,7 @@ def process_import(args):
     if args.type:
         reader = get_reader_by_name(args.type, args.inmesh, args.progress)
     else:
-        extn = Path(args.inmesh.name).suffix
+        extn = Path(args.inmesh).suffix
         reader = get_reader_by_extn(extn, args.inmesh, args.progress)
 
     # Write out the mesh
@@ -481,10 +484,30 @@ def process_export(args):
         k, v = e.split(':', 1)
         kwargs[k.replace('-', '_')] = int(v) if re.fullmatch(r'\d+', v) else v
 
+    # Report the available fields in lieu of exporting
+    if args.list_fields:
+        if args.solnf == '-':
+            raise ValueError('Listing fields requires an explicit solution '
+                             'file')
+
+        writer = get_writer_by_name(args.ftype or 'vtk', args.etype,
+                                    args.meshf, *kargs, **kwargs)
+
+        if rank == root:
+            for f, n in writer.list_fields(args.solnf).items():
+                print(f, n, sep='\t')
+
+        return
+    elif args.outf is None:
+        raise ValueError('An output file is required when exporting')
+
     # Obtain files to export from a batch file
     if args.solnf == '-' and args.outf == '-':
         if rank == root:
-            batch = args.batchfile.read()
+            if args.batchfile == '-':
+                batch = sys.stdin.read()
+            else:
+                batch = Path(args.batchfile).read_text()
 
             dialect = csv.Sniffer().sniff(batch)
             batch = csv.reader(io.StringIO(batch), dialect=dialect)

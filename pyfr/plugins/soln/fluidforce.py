@@ -2,8 +2,7 @@ import numpy as np
 
 from pyfr.cache import memoize
 from pyfr.mpiutil import get_comm_rank_root, mpi
-from pyfr.plugins.common import DatasetAppender, init_csv, open_hdf5_a
-from pyfr.plugins.mixins import BackendMixin, PublishMixin
+from pyfr.plugins.mixins import BackendMixin, PublishMixin, SeriesWriterMixin
 from pyfr.plugins.soln.base import BaseSolnPlugin
 from pyfr.quadrules.surface import SurfaceIntegrator
 
@@ -19,7 +18,8 @@ class FluidForceIntegrator(SurfaceIntegrator):
                           for k, loc in self.locs.items()}
 
 
-class FluidForcePlugin(PublishMixin, BackendMixin, BaseSolnPlugin):
+class FluidForcePlugin(PublishMixin, SeriesWriterMixin, BackendMixin,
+                       BaseSolnPlugin):
     name = 'fluidforce'
     systems = 'euler|navier-stokes'
     dimensions = '2|3'
@@ -47,6 +47,33 @@ class FluidForcePlugin(PublishMixin, BackendMixin, BaseSolnPlugin):
             if len(morigin) != self.ndims:
                 raise ValueError(f'morigin must have {self.ndims} components')
 
+        # Force coefficients (optional; require reference conditions)
+        self._cnames, self._cdirs, self._qref = [], [], None
+        if self.cfg.hasopt(cfgsect, 'area-ref'):
+            # Reference conditions: the plugin section overrides [constants]
+            rhoinf = self._ref_cond('rho-inf')
+            uinf = self._ref_cond('u-inf')
+
+            # Reference dynamic pressure times the reference area
+            aref = self.cfg.getfloat(cfgsect, 'area-ref')
+            self._qref = 0.5*rhoinf*uinf**2*aref
+            self._cnames, self._cdirs = self._force_dirs()
+
+        # Moment coefficients additionally need a reference length
+        self._mcnames, self._mcdirs, self._mqref = [], [], None
+        want_moms = (self._qref is not None and self._mcomp and
+                     self.cfg.hasopt(cfgsect, 'len-ref'))
+        if want_moms:
+            self._mqref = self._qref*self.cfg.getfloat(cfgsect, 'len-ref')
+
+            # 2D moment: scalar (z); 3D: roll/pitch/yaw = drag/side/lift
+            if self.ndims == 2:
+                self._mcnames, self._mcdirs = ['cm'], [np.array([1.0])]
+            else:
+                drag, lift, side = self._cdirs
+                self._mcnames = ['cmr', 'cmp', 'cmy']
+                self._mcdirs = [drag, side, lift]
+
         # See which ranks have the boundary
         bcranks = comm.gather(suffix in intg.system.mesh.bcon, root=root)
 
@@ -55,13 +82,7 @@ class FluidForcePlugin(PublishMixin, BackendMixin, BaseSolnPlugin):
             if not any(bcranks):
                 raise RuntimeError(f'Boundary {suffix} does not exist')
 
-            match self.cfg.get(cfgsect, 'file-format', 'csv'):
-                case 'csv':
-                    self._init_csv()
-                case 'hdf5':
-                    self._init_hdf5()
-                case _:
-                    raise ValueError('Invalid file format')
+            self._init_series(intg, self._fields)
 
         # Set interpolation matrices and quadrature weights
         self.ff_int = FluidForceIntegrator(self.cfg, cfgsect, intg.system,
@@ -77,46 +98,59 @@ class FluidForcePlugin(PublishMixin, BackendMixin, BaseSolnPlugin):
         # Initialise GPU kernel infrastructure
         self._init_kernels(intg)
 
-    @property
-    def _header(self):
-        header = ['t', 'px', 'py', 'pz'][:self.ndims + 1]
-        if self._mcomp:
-            header += ['mpx', 'mpy', 'mpz'][3 - self._mcomp:]
-        if self._viscous:
-            header += ['vx', 'vy', 'vz'][:self.ndims]
-            if self._mcomp:
-                header += ['mvx', 'mvy', 'mvz'][3 - self._mcomp:]
-
-        return ','.join(header)
-
-    def _init_csv(self):
-        self.csv = init_csv(self.cfg, self.cfgsect, self._header, nflush=1)
-        self._write = self._write_csv
-
-    def _write_csv(self, t, forces):
-        self.csv(t, *forces.ravel())
-
-    def _init_hdf5(self):
-        outf = open_hdf5_a(self.cfg.get(self.cfgsect, 'file'))
-        nvars = 1 + (2 if self._viscous else 1)*(self.ndims + self._mcomp)
-
-        dset = self.cfg.get(self.cfgsect, 'file-dataset')
-        if dset in outf:
-            ff = outf[dset]
-
-            if ff.shape[1] != nvars:
-                raise ValueError('Invalid dataset')
+    def _ref_cond(self, name):
+        if self.cfg.hasopt(self.cfgsect, name):
+            return self.cfg.getfloat(self.cfgsect, name)
+        elif name in self._constants:
+            return self._constants[name]
         else:
-            ff = outf.create_dataset(dset, (0, nvars), float,
-                                     chunks=(128, nvars),
-                                     maxshape=(None, nvars))
-            ff.dims[1].label = self._header
+            raise ValueError(f'Force coefficients require {name} in '
+                             '[constants] or the plugin section')
 
-        self._forces = DatasetAppender(ff)
-        self._write = self._write_hdf5
+    def _force_dirs(self):
+        cfg, cfgsect, ndims = self.cfg, self.cfgsect, self.ndims
 
-    def _write_hdf5(self, t, forces):
-        self._forces(np.concatenate(([t], forces.ravel())))
+        def unit(name):
+            d = np.array(cfg.getliteral(cfgsect, name), dtype=float)
+            if len(d) != ndims:
+                raise ValueError(f'{name} must have {ndims} components')
+            return d / np.linalg.norm(d)
+
+        drag = unit('drag-dir')
+
+        # Lift defaults to drag rotated by +90 degrees in 2D
+        if ndims == 2 and not cfg.hasopt(cfgsect, 'lift-dir'):
+            lift = np.array([-drag[1], drag[0]])
+        else:
+            lift = unit('lift-dir')
+
+        # Drag and lift must be orthogonal
+        if abs(drag @ lift) > 1e-6:
+            raise ValueError('Force coefficient directions must be '
+                             'orthogonal')
+
+        if ndims == 2:
+            names, dirs = ['cd', 'cl'], [drag, lift]
+        else:
+            # Side = lift x drag, so (drag, side, lift) is right-handed
+            side = np.cross(lift, drag)
+            side /= np.linalg.norm(side)
+
+            names, dirs = ['cd', 'cl', 'cs'], [drag, lift, side]
+
+        return names, dirs
+
+    @property
+    def _fields(self):
+        fields = ['px', 'py', 'pz'][:self.ndims]
+        if self._mcomp:
+            fields += ['mpx', 'mpy', 'mpz'][3 - self._mcomp:]
+        if self._viscous:
+            fields += ['vx', 'vy', 'vz'][:self.ndims]
+            if self._mcomp:
+                fields += ['mvx', 'mvy', 'mvz'][3 - self._mcomp:]
+
+        return fields + self._cnames + self._mcnames
 
     def _init_kernels(self, intg):
         backend = self.backend
@@ -212,15 +246,28 @@ class FluidForcePlugin(PublishMixin, BackendMixin, BaseSolnPlugin):
         else:
             comm.Reduce(mpi.IN_PLACE, fm, op=mpi.SUM, root=root)
 
-            self._write(intg.tcurr, fm)
-
-            # Publish force components
+            # Force components (pressure, then viscous) for publishing
             pn = ['px', 'py', 'pz'][:self.ndims]
             pvals = dict(zip(pn, fm[0]))
             if self._viscous:
                 vn = ['vx', 'vy', 'vz'][:self.ndims]
                 pvals.update(zip(vn, fm[-1]))
 
+            # Coefficients from the total (pressure + viscous) force/moment
+            if self._qref is not None:
+                ftot = fm[:, :self.ndims].sum(axis=0)
+                coeffs = [ftot @ d / self._qref for d in self._cdirs]
+
+                if self._mcnames:
+                    mtot = fm[:, self.ndims:].sum(axis=0)
+                    coeffs += [mtot @ d / self._mqref for d in self._mcdirs]
+
+                pvals.update(zip(self._cnames + self._mcnames, coeffs))
+                samps = np.append(fm.ravel(), coeffs)
+            else:
+                samps = fm
+
+            self._write(intg.tcurr, samps)
             self._publish(intg, **pvals)
 
     def trigger_write(self, intg):

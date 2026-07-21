@@ -9,11 +9,8 @@ typedef ${'fpdtype_t' if use_kahan else 'double'} acctype_t;
               gradu='in ${"view " if use_views else ""}fpdtype_t[${str(ndims)}][${str(nvars)}]'
               acc='inout acctype_t[${str(nexprs)}]'
               acc_comp='inout fpdtype_t[${str(nexprs)}]'
-              vacc='inout acctype_t[${str(nexprs)}]'
               prev='inout fpdtype_t[${str(nexprs)}]'
-              wdt='scalar fpdtype_t'
-              wacc='scalar fpdtype_t'
-              wvar='scalar fpdtype_t'>
+              wdt='scalar fpdtype_t'>
     fpdtype_t pri[${nvars}];
     ${pyfr.expand('con_to_pri', 'u', 'pri')};
 % if has_grads:
@@ -33,13 +30,6 @@ typedef ${'fpdtype_t' if use_kahan else 'double'} acctype_t;
         </%pyfr:fp_precise>
 % else:
         acctype_t nacc = acc[${i}] + wdt*ppc;
-% endif
-% if has_var:
-        acctype_t nvacc = vacc[${i}]
-            + wdt*(prev[${i}]*prev[${i}] + curr*curr - 0.5*ppc*ppc);
-        if (wvar > 0)
-            nvacc += (wdt/wvar)*(nacc - wacc*ppc)*(nacc - wacc*ppc);
-        vacc[${i}] = nvacc;
 % endif
         acc[${i}] = nacc;
         prev[${i}] = curr;

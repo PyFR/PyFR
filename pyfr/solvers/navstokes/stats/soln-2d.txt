@@ -1,0 +1,43 @@
+# Navier-Stokes instantaneous derived quantities, 2D
+
+# Dynamic viscosity
+derived mu
+    mu
+
+# Kinematic viscosity
+derived nu
+    mu/rho
+
+# Wall quantities from the traction; boundary exports only
+
+# Viscous traction t_i = μ (∂ui/∂xj + ∂uj/∂xi) nj
+derived-hidden trac_x
+    mu*(2*grad_u_x*norm_x + (grad_u_y + grad_v_x)*norm_y)
+
+# Viscous traction t_i = μ (∂ui/∂xj + ∂uj/∂xi) nj
+derived-hidden trac_y
+    mu*((grad_v_x + grad_u_y)*norm_x + 2*grad_v_y*norm_y)
+
+derived-hidden trac_n = trac_x*norm_x + trac_y*norm_y
+derived-hidden tt_x = trac_x - trac_n*norm_x
+derived-hidden tt_y = trac_y - trac_n*norm_y
+
+# Magnitude of the tangential viscous traction
+derived tau-wall
+    sqrt(tt_x*tt_x + tt_y*tt_y)
+
+# Skin friction coefficient
+derived cf requires rho-inf u-inf
+    tau-wall/(0.5*rho-inf*u-inf*u-inf)
+
+# Friction velocity
+derived u-tau
+    sqrt(tau-wall/rho)
+
+# y+ of the first interior solution point
+derived yplus
+    boundary_dist*u-tau*rho/mu
+
+# Wall heat flux; positive into the wall
+derived q-wall
+    -((mu/Pr)*(grad_cpT_x*norm_x + grad_cpT_y*norm_y))

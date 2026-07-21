@@ -9,7 +9,8 @@ from pyfr.plugins.triggers.sources import (AllTriggerSource, AnyTriggerSource,
                                            SignalTriggerSource,
                                            TimeTriggerSource,
                                            WallclockTriggerSource)
-from pyfr.plugins.triggers.steady import SteadyTriggerSource
+from pyfr.plugins.triggers.steady import (MeanCITriggerSource,
+                                          SteadyTriggerSource)
 from pyfr.util import subclass_where
 
 

@@ -6,18 +6,18 @@ import re
 import numpy as np
 
 from pyfr.ctypesutil import LibWrapper
+from pyfr.exprs import npeval
+from pyfr.fields import CleanToGrid
 from pyfr.inifile import process_expr
 from pyfr.mpiutil import get_comm_rank_root, mpi
-from pyfr.nputil import npeval
 from pyfr.plugins.common import region_data
-from pyfr.plugins.postproc.adapters import (BoundaryPostProcData,
-                                            VolumePostProcData)
-from pyfr.plugins.postproc.runner import PostProcRunner
+from pyfr.plugins.postproc.adapters import (BoundaryPostProcData, FaceInfo,
+                                            PostProcData)
+from pyfr.plugins.postproc import get_source
 from pyfr.plugins.soln.base import BaseSolnPlugin
 from pyfr.shapes import BaseShape, proj_pts
+from pyfr.subdiv import get_subdiv
 from pyfr.util import file_path_gen, first, paren_depths, subclass_where
-from pyfr.writers.vtk.clean import CleanToGrid
-from pyfr.writers.vtk.shapes import get_vtk_shape
 
 
 def con_psolns_pgrads(elementscls, scfg, csolns, cgrads):
@@ -272,7 +272,7 @@ class _VolumeAscentOutput:
 
         self.soln_ops[etype] = soln_op
 
-        snodes = get_vtk_shape(etype, renderer.divisor).subnodes
+        snodes = get_subdiv(etype, renderer.divisor).subnodes
         conn = self._connectivity(etype, snodes, neles, nsvpts)
 
         renderer._write_domain(dom, self.sname, domid, etype, neles,
@@ -292,9 +292,12 @@ class _VolumeAscentOutput:
         else:
             return csolns, None
 
-    def run_postproc(self, runner, etype, psolns, pgrads):
-        adapter = VolumePostProcData(self.renderer.scfg, psolns, pgrads)
-        return runner.run(adapter, public_only=True)
+    def run_postproc(self, plugins, etype, psolns, pgrads):
+        data = PostProcData(self.renderer.scfg, psolns, grad_pris=pgrads)
+        for pp in plugins:
+            pp.run(data)
+
+        return data.fields
 
     def _emit(self, mesh_n, dom, fname, arr):
         # Scalars publish at values; vectors split into values/x, /y, /z
@@ -396,7 +399,7 @@ class _BoundaryAscentOutput(_VolumeAscentOutput):
         xd = np.concatenate(xparts, axis=1)
         nsvpts, neles, _ = xd.shape
 
-        snodes = get_vtk_shape(itype, renderer.divisor).subnodes
+        snodes = get_subdiv(itype, renderer.divisor).subnodes
         conn = self._connectivity(itype, snodes, neles, nsvpts)
 
         renderer._write_domain(dom, self.sname, domid, itype, neles,
@@ -415,26 +418,35 @@ class _BoundaryAscentOutput(_VolumeAscentOutput):
         cgrads = np.concatenate(cgs, axis=3) if cgs else None
         return csolns, cgrads
 
-    def run_postproc(self, runner, itype, psolns, pgrads):
-        scfg = self.renderer.scfg
-        spts = self.renderer.mesh.spts
+    def run_postproc(self, plugins, itype, psolns, pgrads):
+        r = self.renderer
+        spts, elementscls = r.mesh.spts, r.adapter.elementscls
 
         # Slice per-patch views, run postprocs, merge by field across patches
         merged = defaultdict(list)
         offset = 0
-        for eidxs, etype, _, _, fidx, svpts in self.patches[itype]:
+        for eidxs, etype, mop, _, fidx, svpts in self.patches[itype]:
             sl = slice(offset, offset + len(eidxs))
             ppris = [p[..., sl] for p in psolns]
             if pgrads is None:
                 ppgrads = None
             else:
-                ppgrads = [None if g is None else g[..., sl] for g in pgrads]
+                ppgrads = [g[..., sl] for g in pgrads]
             offset = sl.stop
 
+            # Physical locations of the face visualisation points
             psp = spts[etype][:, eidxs]
-            adapter = BoundaryPostProcData(scfg, ppris, psp, etype, fidx,
-                                           svpts, grad_pris=ppgrads)
-            for fname, arr in runner.run(adapter, public_only=True).items():
+            vp = mop @ psp.reshape(len(psp), -1)
+            ploc = vp.reshape(-1, *psp.shape[1:]).transpose(2, 0, 1)
+
+            norm = subclass_where(BaseShape, name=etype).faces[fidx][2]
+            finfo = FaceInfo(etype, fidx, svpts, norm)
+            data = BoundaryPostProcData(r.scfg, ppris, ploc, ppgrads,
+                                        elementscls, psp, finfo)
+            for pp in plugins:
+                pp.run(data)
+
+            for fname, arr in data.fields.items():
                 merged[fname].append(arr)
 
         return {fname: np.concatenate(parts, axis=1)
@@ -569,27 +581,27 @@ class AscentRenderer:
 
         self._write_field_meta(mesh_n, dom, sname)
 
-        subdiv = get_vtk_shape(etype, self.divisor)
-        snodes = subdiv.subnodes
+        sdiv = get_subdiv(etype, self.divisor)
+        snodes = sdiv.subnodes
 
         mesh_n[f'{elem}/connectivity'] = conn
 
         # Subdivide; handle elements split into multiple subcell types
-        if len(scells := set(subdiv.subcells)) > 1:
+        if len(scells := set(sdiv.subcells)) > 1:
             mesh_n[f'{elem}/shape'] = 'mixed'
 
             for sc in scells:
                 an = self.bp_emap[sc]
-                mesh_n[f'{elem}/shape_map/{an}'] = subdiv.vtk_types[sc]
+                mesh_n[f'{elem}/shape_map/{an}'] = sdiv.vtk_types[sc]
 
-            scell_t = subdiv.subcelltypes
+            scell_t = sdiv.vtk_subcelltypes
             mesh_n[f'{elem}/shapes'] = np.tile(scell_t, neles)
 
-            scell_s = subdiv.subcells
-            scell_s = [subdiv.vtk_nodes[sc] for sc in scell_s]
+            scell_s = sdiv.subcells
+            scell_s = [sdiv.cell_nodes[sc] for sc in scell_s]
             mesh_n[f'{elem}/sizes'] = np.tile(scell_s, neles)
 
-            scell_o = np.tile(subdiv.subcelloffs, (neles, 1))
+            scell_o = np.tile(sdiv.subcelloffs, (neles, 1))
             scell_o += (np.arange(neles)*len(snodes))[:, None]
             scell_o = np.concatenate(([0], scell_o.flat[:-1]))
             mesh_n[f'{elem}/offsets'] = scell_o
@@ -648,7 +660,7 @@ class AscentRenderer:
             self._exprs.append((field, comps))
 
     def _init_postproc(self):
-        # Parse postproc-{name} = <sources>; one runner per source
+        # Parse postproc-{name} = <sources>; one plugin list per source
         groups = defaultdict(list)
         for k in self.acfg.items(self.cfgsect, prefix='postproc-'):
             name = k.removeprefix('postproc-')
@@ -659,26 +671,28 @@ class AscentRenderer:
                                       f'{sname!r}')
                 groups[sname].append(name)
 
-        self._postproc_runners = {}
+        self._postproc_plugins = {}
+        dsrc = get_source('soln', self.scfg, None, self.mesh.ndims)
         for sname, names in groups.items():
-            runner = PostProcRunner(names, self.mesh.ndims, self.scfg,
-                                    export_type=self.sources[sname].kind)
-            self._postproc_runners[sname] = runner
+            plugins = dsrc.quantities(names, self.sources[sname].kind)
+            self._postproc_plugins[sname] = plugins
 
-            for fname in runner.fields(public_only=True):
-                self._register_user_field(sname, fname)
+            for pp in plugins:
+                for fname in pp.fields:
+                    self._register_user_field(sname, fname)
 
     def _init_gradients(self):
-        # Determine what gradients, if any, are required
+        privars = self.elementscls.privars(self.mesh.ndims, self.scfg)
+        pp_plugins = self._postproc_plugins.values()
+
+        # First, see what gradient terms are used by expressions
         g_pnames = set()
         for _, comps in self._exprs:
             for c in comps:
                 g_pnames.update(re.findall(r'\bgrad_(.+?)_[xyz]\b', c))
 
-        privars = self.elementscls.privars(self.mesh.ndims, self.scfg)
-
-        # Postproc plugins index pgrads positionally; request them all
-        if any(r.needs_grads for r in self._postproc_runners.values()):
+        # Then, see if any post-processing plugins require gradients
+        if any(pp.needs_grads for ppl in pp_plugins for pp in ppl):
             g_pnames.update(privars)
 
         if g_pnames and not self.adapter.has_grads:
@@ -808,8 +822,8 @@ class AscentRenderer:
                 items.append((self._field_name(sname, field), arr))
 
             # Postproc plugins for this source/key
-            if runner := self._postproc_runners.get(sname):
-                pp_fields = source.run_postproc(runner, key, psolns, pgrads)
+            if plugins := self._postproc_plugins.get(sname):
+                pp_fields = source.run_postproc(plugins, key, psolns, pgrads)
                 for field, arr in pp_fields.items():
                     items.append((self._field_name(sname, field),
                                   np.atleast_3d(arr)))

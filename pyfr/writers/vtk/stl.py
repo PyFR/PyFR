@@ -3,8 +3,8 @@ import numpy as np
 from pyfr.mpiutil import get_comm_rank_root
 from pyfr.points import PointLocator, PointSampler
 from pyfr.polys import TriPolyBasis
-from pyfr.shapes import TriShape
-from pyfr.writers.vtk.base import BaseVTKWriter, interpolate_pts
+from pyfr.shapes import interp_pts, TriShape
+from pyfr.writers.vtk.base import BaseVTKWriter
 
 
 def _vertex_normals_mwa(fnorms, verts, vids):
@@ -97,6 +97,7 @@ def _spherigon_smooth(flat_pts, bary, tri_verts, tri_norms):
 
 class VTKSTLWriter(BaseVTKWriter):
     type = 'stl'
+    adapter_kind = 'volume'
     output_curved = False
     dimensions = '3'
 
@@ -145,7 +146,8 @@ class VTKSTLWriter(BaseVTKWriter):
                               if m.kind == 'point'}
 
         # Aux fields sampled through the pipeline (those in the file)
-        file_aux = set(soln.dtypes[self._extra_etype]['aux'].names)
+        dt = soln.dtypes[self._extra_etype]
+        file_aux = set(dt['aux'].names if 'aux' in dt.names else ())
         aux_info = [(n, m.ncomps) for n, m in self._extra_fields.items()
                     if n in file_aux]
 
@@ -181,7 +183,10 @@ class VTKSTLWriter(BaseVTKWriter):
             svars = self._pre_proc_fields(samps[:nsoln].astype(self.dtype))
 
             # Run postproc plugins at welded sample points
-            pp_fields = self.pp_runner.run_samples(self.soln.config, svars)
+            if self.pp_pipe.plugins:
+                ppfields = self.pp_pipe(self.soln, svars, spts.T)
+            else:
+                ppfields = {}
 
             # Rebuild tri vertices from (possibly transformed) welded verts
             pts = spts[pinv].reshape(pts.shape)
@@ -199,7 +204,7 @@ class VTKSTLWriter(BaseVTKWriter):
                 off += n
 
             # Unpack postproc fields onto STL triangles
-            for name, data in pp_fields.items():
+            for name, data in ppfields.items():
                 a = data[pinv]
                 if a.ndim == 1:
                     pointf[name] = a.reshape(*pts.shape[:2])
@@ -220,7 +225,7 @@ class VTKSTLWriter(BaseVTKWriter):
         op = basis.nodal_basis_at(TriShape.std_ele(order))
 
         # Flat linear subdivision
-        pts = interpolate_pts(op, stl[:, 1:].swapaxes(0, 1))
+        pts = interp_pts(op, stl[:, 1:].swapaxes(0, 1))
 
         if subdiv == 'spherigon' and order > 1:
             fnorms = stl[:, 0].astype(float)

@@ -1,11 +1,16 @@
 import numpy as np
 
+from pyfr.exprs import resolve_aux
 from pyfr.solvers.base.elements import ExportableField
 from pyfr.solvers.baseadvec import BaseAdvectionElements
 
 
 class BaseFluidElements:
     eos_kernel_module = 'pyfr.solvers.euler.kernels.eos'
+
+    @staticmethod
+    def stats_tables(cfg):
+        return ['pyfr.solvers.euler']
 
     @classmethod
     def eos_tplargs(cls, ndims, cfg):
@@ -14,6 +19,35 @@ class BaseFluidElements:
             'nvars': len(cls.convars(ndims, cfg)),
             'c': cfg.items_as('constants', float),
         }
+
+    @staticmethod
+    def auxvars(ndims, cfg):
+        c = cfg.items_as('constants', float)
+        g = c['gamma']
+
+        vm2 = 'u*u + v*v' if ndims == 2 else 'u*u + v*v + w*w'
+        aux = {
+            'cpT': f'{g}*p/({g - 1}*rho)',
+            'mach': f'sqrt(({vm2})*rho/({g}*p))',
+            'p0': f'p*pow(1.0 + {0.5*(g - 1)}*mach*mach, {g / (g - 1)})',
+            'cpT0': f'cpT*(1.0 + {0.5*(g - 1)}*mach*mach)'
+        }
+
+        # Gradients of cp*T via the equation of state
+        k = g / (g - 1)
+        for x in 'xyz'[:ndims]:
+            aux[f'grad_cpT_{x}'] = (f'{k}*(grad_p_{x}*rho - '
+                                    f'p*grad_rho_{x})/(rho*rho)')
+
+        # Temperatures are normalised by the wall state cp*Tw
+        if 'cpTw' in c:
+            aux['T'] = f'cpT/{c['cpTw']}'
+            aux['T0'] = f'cpT0/{c['cpTw']}'
+
+            for x in 'xyz'[:ndims]:
+                aux[f'grad_T_{x}'] = f'grad_cpT_{x}/{c['cpTw']}'
+
+        return resolve_aux(aux)
 
     def set_backend(self, *args, **kwargs):
         super().set_backend(*args, **kwargs)

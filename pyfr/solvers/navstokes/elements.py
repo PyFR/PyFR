@@ -1,5 +1,6 @@
 import numpy as np
 
+from pyfr.exprs import resolve_aux
 from pyfr.solvers.baseadvecdiff import BaseAdvectionDiffusionElements
 from pyfr.solvers.euler.elements import BaseFluidElements
 
@@ -7,6 +8,25 @@ from pyfr.solvers.euler.elements import BaseFluidElements
 class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
     # Use the density field for shock sensing
     shockvar = 'rho'
+
+    @classmethod
+    def stats_tables(cls, cfg):
+        return super().stats_tables(cfg) + ['pyfr.solvers.navstokes']
+
+    @classmethod
+    def auxvars(cls, ndims, cfg):
+        aux = super().auxvars(ndims, cfg)
+        c = cfg.items_as('constants', float)
+
+        if cfg.get('solver', 'viscosity-correction', 'none') == 'sutherland':
+            m, tr, ts = c['mu'], c['cpTref'], c['cpTs']
+            aux['mu'] = f'{m*(tr + ts)}*pow(cpT/{tr}, 1.5)/(cpT + {ts})'
+        else:
+            aux['mu'] = str(c['mu'])
+
+        aux['nu'] = 'mu/rho'
+
+        return resolve_aux(aux)
 
     @staticmethod
     def grad_con_to_pri(cons, grad_cons, cfg):

@@ -21,7 +21,8 @@ class DtStatsPlugin(BaseSolnPlugin):
         if rank == root:
             # Step file
             header = 'n,t,dt,action,wtime,error'
-            self.step_csv = init_csv(self.cfg, cfgsect, header)
+            self.step_csv = init_csv(self.cfg, cfgsect, header,
+                                     isrestart=intg.isrestart)
 
             # Stage file; optional, for implicit integrators only
             if (intg.formulation == 'implicit' and
@@ -29,8 +30,10 @@ class DtStatsPlugin(BaseSolnPlugin):
                 header = ('n,stage,nonlin_iters,nmatvec,precond_apps,'
                           'init_resid,final_resid,inner_tol,'
                           'precond_gdt_ratio,precond_built')
-                self.stage_csv = init_csv(self.cfg, cfgsect, header,
-                                          filekey='stage-file')
+                self.stage_csv = init_csv(
+                    self.cfg, cfgsect, header, filekey='stage-file',
+                    isrestart=intg.isrestart
+                )
 
     def __call__(self, intg):
         # Only root rank writes output

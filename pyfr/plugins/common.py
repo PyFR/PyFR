@@ -9,7 +9,7 @@ import numpy as np
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.readers.native import Connectivity
 from pyfr.regions import parse_region_expr
-from pyfr.writers.csv import CSVStream
+from pyfr.util import CSVStream, subclass_where
 
 
 def cli_external(meth):
@@ -20,15 +20,25 @@ def cli_external(meth):
     return classmethod(newmeth)
 
 
+def get_elementscls(cfg):
+    from pyfr.solvers.base import BaseSystem
+
+    systemcls = subclass_where(BaseSystem, name=cfg.get('solver', 'system'))
+    return systemcls.elementscls
+
+
 def init_csv(cfg, cfgsect, header, *, filekey='file', headerkey='header',
-             nflush=10):
+             nflush=10, isrestart=True):
     # Determine the file path
     fname = cfg.get(cfgsect, filekey)
 
     header = header if cfg.getbool(cfgsect, headerkey, True) else None
     nflush = cfg.getint(cfgsect, 'flushsteps', nflush)
 
-    return CSVStream(fname, header=header, nflush=nflush)
+    # Fresh runs may clear out any existing data
+    reset = cfg.getbool(cfgsect, 'file-reset', False) and not isrestart
+
+    return CSVStream(fname, header=header, nflush=nflush, reset=reset)
 
 
 def open_hdf5_a(path):
@@ -114,6 +124,54 @@ def surface_data(cfg, cfgsect, mesh):
 
     return Connectivity(np.concatenate(cidx_a), np.concatenate(eidx_a),
                         cidxmap)
+
+
+def init_hdf5_series(intg, cfg, cfgsect, fields, pts=None):
+    outf = open_hdf5_a(cfg.get(cfgsect, 'file'))
+    dname = cfg.get(cfgsect, 'file-dataset')
+    label = ','.join(fields)
+    nvars = len(fields)
+    npts = 1 if pts is None else len(pts)
+
+    # Fresh runs may clear out any existing series data
+    if (cfg.getbool(cfgsect, 'file-reset', False) and not intg.isrestart and
+        dname in outf):
+        del outf[dname]
+
+    # Each record is a time and the associated samples
+    dtype = np.dtype([('t', float), ('samples', float, (npts, nvars))])
+
+    # Cap chunks at 128 records or ~1 MiB, whichever is smaller
+    chunk = max(1, min(128, 1024**2 // dtype.itemsize))
+
+    if dname in outf:
+        d = outf[dname]
+
+        if d.dtype != dtype or d.attrs['fields'] != label:
+            raise ValueError(f'Dataset {dname} exists with different '
+                             'fields; use file-reset or a new dataset')
+
+        # Series data is tied to the mesh through its UUID
+        if d.attrs['mesh-uuid'] != intg.mesh_uuid:
+            raise ValueError('Mesh does not match the existing series')
+
+        # Ensure any point sets are compatible
+        if pts is not None and not np.allclose(d.attrs['pts'], pts):
+            raise ValueError('Inconsistent sample points')
+    else:
+        d = outf.create_dataset(dname, (0,), dtype, chunks=(chunk,),
+                                maxshape=(None,))
+
+        d.attrs['fields'] = label
+        d.attrs['mesh-uuid'] = intg.mesh_uuid
+        if pts is not None:
+            d.attrs['pts'] = pts
+
+    # Maintain the configuration chain for offline post-processing
+    for k, v in intg.cfgmeta.items():
+        d.attrs[k] = v
+
+    return DatasetAppender(d)
 
 
 class DatasetAppender:

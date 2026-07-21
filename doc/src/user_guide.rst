@@ -130,7 +130,11 @@ pyfr export
       Additionally, by default, all of the fields in the solution file
       will be exported. If only a specific field is desired this can be
       specified with the ``-f`` flag; for example ``-f density -f
-      velocity`` will only export   the *density* and *velocity* fields.
+      velocity`` will only export the *density* and *velocity* fields.
+      The fields a file provides, including any derived statistics and
+      postprocessing quantities, can be enumerated by passing
+      ``--list-fields`` in place of an output file.  Fields which are
+      not requested are, where possible, neither computed nor loaded.
 
    pyfr export boundary
       Exports one of more boundaries.  Example:

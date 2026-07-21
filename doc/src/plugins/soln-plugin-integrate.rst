@@ -15,7 +15,21 @@ Integrate quantities over the compuational domain. Parameterised with:
 
     *string*
 
-#. ``file-header`` --- if to output a header row or not:
+#. ``file-format`` --- output file type (defaults to CSV):
+
+    ``csv`` | ``hdf5``
+
+#. ``file-header`` --- for CSV output if to write a header row or not:
+
+    *boolean*
+
+#. ``file-dataset`` --- for HDF5 output where in the HDF5 to write the
+   data:
+
+    *string*
+
+#. ``file-reset`` --- if to clear any existing output when starting a
+   new simulation; restarts always append:
 
     *boolean*
 

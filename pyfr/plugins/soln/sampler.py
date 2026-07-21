@@ -1,16 +1,14 @@
-import h5py
 import numpy as np
 
 from pyfr.cache import memoize
 from pyfr.mpiutil import get_comm_rank_root
-from pyfr.plugins.common import DatasetAppender, init_csv, open_hdf5_a
-from pyfr.plugins.mixins import BackendMixin
+from pyfr.plugins.mixins import BackendMixin, SeriesWriterMixin
 from pyfr.plugins.soln.base import BaseSolnPlugin
 from pyfr.points import PointSampler
 from pyfr.util import first
 
 
-class SamplerPlugin(BackendMixin, BaseSolnPlugin):
+class SamplerPlugin(SeriesWriterMixin, BackendMixin, BaseSolnPlugin):
     name = 'sampler'
     systems = '.*'
     dimensions = '2|3'
@@ -55,13 +53,7 @@ class SamplerPlugin(BackendMixin, BaseSolnPlugin):
 
         # Have the root rank open the output file
         if rank == root:
-            match self.cfg.get(cfgsect, 'file-format', 'csv'):
-                case 'csv':
-                    self._init_csv(intg)
-                case 'hdf5':
-                    self._init_hdf5(intg)
-                case _:
-                    raise ValueError('Invalid file format')
+            self._init_series(intg, self._fields(intg), self.psampler.pts)
 
     def _init_kernels(self, intg):
         backend = self.backend
@@ -122,63 +114,17 @@ class SamplerPlugin(BackendMixin, BaseSolnPlugin):
 
         return kerns
 
-    def _init_csv(self, intg):
-        self.csv = init_csv(self.cfg, self.cfgsect, self._header(intg),
-                            nflush=len(self.psampler.pts))
-        self._write = self._write_csv
-
-    def _write_csv(self, t, samps):
-        for ploc, samp in zip(self.psampler.pts, samps):
-            self.csv(t, *ploc, *samp)
-
-    def _init_hdf5(self, intg):
-        outf = open_hdf5_a(self.cfg.get(self.cfgsect, 'file'))
-
-        pts = self.psampler.pts
-        npts, nsvars = len(pts), self.nsvars
-        chunk = 128
-
-        dset = self.cfg.get(self.cfgsect, 'file-dataset')
-        if dset in outf:
-            d = outf[dset]
-            t = d.dims[0][0]
-            p = d.dims[1][0]
-
-            # Ensure the point sets are compatible
-            if p.shape != pts.shape or not np.allclose(p[:], pts):
-                raise ValueError('Inconsistent sample points')
-        else:
-            d = outf.create_dataset(dset, (0, npts, nsvars), float,
-                                    chunks=(chunk, min(4, npts), nsvars),
-                                    maxshape=(None, npts, nsvars))
-            t = outf.create_dataset(f'{dset}_t', (0,), float, chunks=(chunk,),
-                                    maxshape=(None,))
-            p = outf.create_dataset(f'{dset}_p', data=pts)
-
-            t.make_scale('t')
-            p.make_scale('pts')
-            d.dims[0].attach_scale(t)
-            d.dims[1].attach_scale(p)
-
-        self._t = DatasetAppender(t)
-        self._samps = DatasetAppender(d)
-        self._write = self._write_hdf5
-
-    def _write_hdf5(self, t, samps):
-        self._t(t)
-        self._samps(samps)
-
-    def _header(self, intg):
+    def _fields(self, intg):
         eles = first(intg.system.ele_map.values())
         dims = 'xyz'[:self.ndims]
 
         vmap = eles.privars if self.fmt == 'primitive' else eles.convars
 
-        colnames = ['t', *dims, *vmap]
+        fields = list(vmap)
         if self._sample_grads:
-            colnames.extend(f'grad_{v}_{d}' for v in vmap for d in dims)
+            fields.extend(f'grad_{v}_{d}' for v in vmap for d in dims)
 
-        return ','.join(colnames)
+        return fields
 
     def __call__(self, intg):
         # Compute gradients on device if needed

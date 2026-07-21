@@ -52,8 +52,10 @@ class Solution:
     config: object
     stats: object
     fields: list
+    layout: list = None
     data: dict = field(default_factory=dict)
     grad_data: dict = field(default_factory=dict)
+    resid_data: dict = field(default_factory=dict)
     aux: dict = field(default_factory=dict)
     dtypes: dict = field(default_factory=dict)
     prevcfgs: dict = field(default_factory=dict)
@@ -87,6 +89,13 @@ class Connectivity:
             result[mask] = data[etype][eidxs]
         return result
 
+    def subset(self, eidx):
+        # Restrict to elements with a valid renumbering in eidx
+        new = self.map_eles(eidx, dtype=int)
+        mask = new >= 0
+
+        return Connectivity(self.cidxs[mask], new[mask], self.cidxmap)
+
 
 class NativeReader:
     def __init__(self, fname, pname=None, *, construct_con=True):
@@ -99,8 +108,8 @@ class NativeReader:
         self._read_eles()
         self._read_nodes()
 
-        if construct_con:
-            self._construct_con()
+        # Construct connectivity
+        self._construct_con(full=construct_con)
 
         self._construct_shared_nodes()
 
@@ -162,7 +171,7 @@ class NativeReader:
     def _soln_fields(self, dtype):
         fields = []
         for g in dtype.names:
-            if g in ('grad', 'aux'):
+            if g in ('grad', 'resid', 'aux'):
                 continue
 
             prefix = '' if g == 'soln' else f'{g}-'
@@ -170,22 +179,25 @@ class NativeReader:
         return fields
 
     def _unpack_esoln(self, soln, etype, esoln, dtype):
-        dgroups = [g for g in dtype.names if g not in ('grad', 'aux')]
+        dgroups = [g for g in dtype.names if g not in ('grad', 'resid', 'aux')]
         ne, nd = len(esoln), self.mesh.ndims
 
-        # Unpack all data groups into a single array
-        parts = []
-        for g in dgroups:
+        def unpack(g):
             arr = s2u(esoln[g]).reshape(ne, len(dtype[g].names), -1)
-            parts.append(arr.transpose(2, 1, 0))
+            return arr.transpose(2, 1, 0)
 
-        soln.data[etype] = np.concatenate(parts, axis=1)
+        # Unpack all data groups into a single array
+        soln.data[etype] = np.concatenate([unpack(g) for g in dgroups], axis=1)
 
         # Gradient data
         if 'grad' in dtype.names:
             gv = len(dtype['grad'].names)
             g = s2u(esoln['grad']).reshape(ne, gv, nd, -1)
             soln.grad_data[etype] = g.transpose(2, 3, 1, 0)
+
+        # Residual data has the same layout as the solution
+        if 'resid' in dtype.names:
+            soln.resid_data[etype] = unpack('resid')
 
         # Auxiliary fields
         if 'aux' in dtype.names:
@@ -231,6 +243,7 @@ class NativeReader:
                 # Build field list from the first dataset encountered
                 if soln.fields is None:
                     soln.fields = self._soln_fields(f[ek].dtype)
+                    soln.layout = soln.fields
 
                 esoln = escatter(f[ek])
                 if escatter.cnt:
@@ -259,10 +272,23 @@ class NativeReader:
                 spts_nodes[etype] = self.mesh.spts_nodes[etype]
                 spts_curved[etype] = self.mesh.spts_curved[etype]
 
+        # Per-etype renumbering tables; -1 marks discarded elements
+        emap = {}
+        for etype, ei in self.mesh.eidxs.items():
+            if etype in subset:
+                emap[etype] = np.full(len(ei), -1)
+                emap[etype][subset[etype]] = np.arange(len(subset[etype]))
+            else:
+                emap[etype] = np.arange(len(ei))
+
+        # Restrict the boundary connectivity; empty boundaries are dropped
+        bcon = {bc: sc for bc, c in self.mesh.bcon.items()
+                if len(sc := c.subset(emap))}
+
         return replace(self.mesh, subset=True, parent=self.mesh,
                        eidxs=eidxs, spts=spts, spts_nodes=spts_nodes,
                        spts_curved=spts_curved, con=None, con_p=None,
-                       bcon=None)
+                       bcon=bcon)
 
     def _read_metadata(self):
         mesh = self.mesh
@@ -448,10 +474,22 @@ class NativeReader:
 
         return map(np.concatenate, zip(*parts))
 
-    def _construct_con(self):
+    def _construct_con(self, full=True):
         cidxmap, cetmap = self._parse_codec()
         g2l = self._build_g2l()
         lcidx, leidx, lgidx, rcidx, rgidx = self._flatten_faces(g2l)
+
+        con = lambda c, e: Connectivity(c, e, cidxmap)
+
+        # Start by constructing the boundary connectivity
+        for bccidx in np.unique(rcidx[rgidx == -1]):
+            name = self.mesh.codec[bccidx][3:]
+            bmask = rcidx == bccidx
+            self.mesh.bcon[name] = con(lcidx[bmask], leidx[bmask])
+
+        # Unless full connectivity is requested, we're done
+        if not full:
+            return
 
         # Global-to-local lookup for rhs element-neighbour faces
         reidx = np.full(len(lcidx), -1)
@@ -479,15 +517,8 @@ class NativeReader:
                                       (rcidx[is_local], reidx[is_local]))
         iidxs = np.flatnonzero(is_local)[lkey < rkey]
 
-        con = lambda c, e: Connectivity(c, e, cidxmap)
         self.mesh.con = (con(lcidx[iidxs], leidx[iidxs]),
                          con(rcidx[iidxs], reidx[iidxs]))
-
-        # Boundary connectivity
-        for bccidx in np.unique(rcidx[is_boundary]):
-            name = self.mesh.codec[bccidx][3:]
-            bmask = rcidx == bccidx
-            self.mesh.bcon[name] = con(lcidx[bmask], leidx[bmask])
 
         # MPI connectivity
         if np.any(is_mpi):

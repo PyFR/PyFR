@@ -4,7 +4,7 @@ import time
 import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root
-from pyfr.nputil import npeval
+from pyfr.exprs import npeval
 from pyfr.inifile import process_expr
 from pyfr.plugins.triggers.base import BaseTriggerSource, _cmp_ops
 
@@ -137,20 +137,27 @@ class ExpressionTriggerSource(BaseTriggerSource):
             raise ValueError('Invalid condition syntax')
 
         raw = m[1].strip()
-        self._has_pub = bool(re.search(r'[a-zA-Z]\.[a-zA-Z]', raw))
+        # Tokens of the form name.field reference published values
+        pat = r'[A-Za-z_][\w-]*(?:\.[A-Za-z_][\w-]*)+'
+        self._pub_refs = set(re.findall(pat, raw))
         self._expr = process_expr(raw, c)
         self._cmp = _cmp_ops[m[2]]
         tstr = m[3].strip()
         self._threshold = float(c.get(tstr, tstr))
 
     def evaluate(self, intg):
-        # Substitute published values (name.field) into the expression
-        if pub := self.manager.latest_published():
-            p = '|'.join(re.escape(k) for k in pub)
+        pub = self.manager.latest_published()
+
+        # Hold off until every referenced value has been published
+        if self._pub_refs and not self._pub_refs.issubset(pub):
+            return False
+
+        # Substitute published values (name.field), longest names first
+        if self._pub_refs:
+            keys = sorted(pub, key=len, reverse=True)
+            p = '|'.join(re.escape(k) for k in keys)
             expr = re.sub(rf'(?<![.\w])({p})(?![.\w])',
                           lambda m: str(pub[m[1]]), self._expr)
-        elif self._has_pub:
-            return False
         else:
             expr = self._expr
 

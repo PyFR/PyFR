@@ -4,23 +4,16 @@ from pathlib import Path
 import numpy as np
 
 from pyfr.cache import clear_memoize, memoize
+from pyfr.fields import FieldRecovery, con_block_to_pri
 from pyfr.mpiutil import get_comm_rank_root, mpi
-from pyfr.plugins.postproc.runner import PostProcRunner
-from pyfr.shapes import BaseShape
+from pyfr.shapes import BaseShape, interp_pts
+from pyfr.subdiv import get_subdiv
 from pyfr.util import first, subclass_where
 from pyfr.writers import BaseWriter
 from pyfr.writers.vtk.output import CleanToGridVTKOutput, DirectVTKOutput
-from pyfr.writers.vtk.shapes import get_vtk_shape
 
 
 FieldMeta = namedtuple('FieldMeta', 'kind ncomps dtype')
-
-
-def interpolate_pts(op, pts):
-    ipts = op.astype(pts.dtype) @ pts.reshape(op.shape[1], -1)
-    ipts = ipts.reshape(op.shape[0], *pts.shape[1:])
-
-    return ipts
 
 
 class BaseVTKWriter(BaseWriter):
@@ -30,6 +23,9 @@ class BaseVTKWriter(BaseWriter):
 
     # Type of export (volume/boundary/STL)
     type = None
+
+    # Adapter kind if it differs from the export type
+    adapter_kind = None
 
     # If to output curvature data
     output_curved = False
@@ -63,55 +59,57 @@ class BaseVTKWriter(BaseWriter):
             self._get_npts_ncells_nnodes = self._get_npts_ncells_nnodes_lin
 
     def _build_extra_fields(self):
-        # Only allow post processing of solution files
-        if self._pp_plugin_names and self.dataprefix != 'soln':
-            raise ValueError('Postproc plugins are only supported for '
-                             'solution files')
-
         self._extra_fields = {}
+        self._classify_aux_fields()
+        self._register_pp_fields()
 
+    def _classify_aux_fields(self):
         # Classify aux fields by shape
         pshapes = self._extra_point_shapes(self._extra_etype)
         for dt in self.soln.dtypes.values():
-            if 'aux' not in dt.names:
-                continue
-
-            for name in dt['aux'].names:
-                adtype = dt['aux'][name].base
-                shape = dt['aux'][name].shape
+            for name in dt['aux'].names if 'aux' in dt.names else ():
+                shape, base = dt['aux'][name].shape, dt['aux'][name].base
 
                 if shape in pshapes:
-                    meta = FieldMeta('point', 1, adtype)
+                    meta = FieldMeta('point', 1, base)
                 elif shape[:-1] in pshapes:
-                    meta = FieldMeta('point', shape[-1], adtype)
+                    meta = FieldMeta('point', shape[-1], base)
                 else:
-                    meta = FieldMeta('cell', int(np.prod(shape) or 1), adtype)
+                    meta = FieldMeta('cell', int(np.prod(shape) or 1), base)
 
                 self._extra_fields[name] = meta
 
-        # Resolve postproc plugins and register fields
+    def _register_pp_fields(self):
+        # Combine requested plugins with any defaults from the file itself
+        names = list(self._pp_plugin_names)
+        if self.stats.hasopt('data', 'postproc'):
+            names.extend(self.stats.get('data', 'postproc').split())
+
+        # Names the writer already supplies and so never derives on demand;
+        # gradients and residuals are synthesised by the writer itself
+        provided = self._vtk_vars.keys() | self._extra_fields.keys()
+        provided |= {f'{p} {v}' for p in ('grad', 'resid')
+                     for v in self._vtk_vars}
+
+        # Resolve the pipeline (deriving any unprovided fields) and register it
         cfg = self._pp_cfg or self.cfg
-        self.pp_runner = PostProcRunner(self._pp_plugin_names, self.ndims, cfg,
-                                        self.type)
-        for fname, varnames in self.pp_runner.fields().items():
+        want = set(self.fields) if self.fields else None
+        self.pp_pipe = self.source.pipeline(names, self.type, cfg, want,
+                                            self.adapter_kind, provided)
+
+        for fname, varnames in self.pp_pipe.fields.items():
             meta = FieldMeta('point', len(varnames), np.dtype(self.dtype))
             self._extra_fields[fname] = meta
 
+    def _postproc(self, soln_t, ploc, *extra):
+        if self.pp_pipe.plugins:
+            return self.pp_pipe(self.soln, soln_t, ploc, *extra)
+        else:
+            return {}
+
     def _pre_proc_fields_soln(self, soln):
-        ecls = self.elementscls
-        nvars = len(ecls.privars(self.ndims, self.cfg))
-
-        # Convert the solution to primitive variables
-        fields = ecls.con_to_pri(soln[:nvars], self.cfg)
-
-        # Convert any solution gradients to primitive variables
-        if self._gradients:
-            diff_cons = soln[nvars:].reshape(nvars, -1, *soln.shape[1:])
-            diff_pri = ecls.diff_con_to_pri(soln[:nvars], diff_cons, self.cfg)
-
-            fields += [f for gf in diff_pri for f in gf]
-
-        return np.array(fields)
+        return con_block_to_pri(self.elementscls, self.cfg, self.ndims,
+                                soln, grads=self._gradients, resid=self._resid)
 
     def _pre_proc_fields_scal(self, soln):
         return soln
@@ -140,9 +138,9 @@ class BaseVTKWriter(BaseWriter):
         nsvpts = self._nsvpts(etype)
 
         # Get the number of subdivided nodes
-        subdv = get_vtk_shape(etype, div)
-        ncells = len(subdv.subcells)*neles
-        nnodes = len(subdv.subnodes)*neles
+        sdiv = get_subdiv(etype, div)
+        ncells = len(sdiv.subcells)*neles
+        nnodes = len(sdiv.subnodes)*neles
 
         return self._output.npts(etype, neles, nsvpts), ncells, nnodes
 
@@ -233,45 +231,116 @@ class BaseVTKWriter(BaseWriter):
             self._vtk_vars = self.elementscls.visvars(self.ndims, self.cfg)
             self.tcurr = self.stats.getfloat('solver-time-integrator', 'tcurr')
 
-            # See if our solution contains gradient data
+            # See if our solution contains gradient or residual data
             self._gradients = bool(self.soln.grad_data)
-            if self._gradients:
-                # Stack gradient data into solution data
-                for et in list(self.soln.data):
-                    g = self.soln.grad_data[et].transpose(1, 2, 0, 3)
-                    g = g.reshape(g.shape[0], -1, g.shape[3])
-                    self.soln.data[et] = np.concatenate(
-                        [self.soln.data[et], g], axis=1
-                    )
-
-                # Update list of solution fields
-                self._soln_fields.extend(f'{f}-{d}'
-                                         for f in list(self._soln_fields)
-                                         for d in range(self.ndims))
-
-                # Update the mapping of VTK variables to solution fields
-                for var, vfields in list(self._vtk_vars.items()):
-                    self._vtk_vars[f'grad {var}'] = nfields = []
-                    for f in vfields:
-                        nfields.extend(f'{f}-{d}' for d in range(self.ndims))
+            self._resid = bool(self.soln.resid_data)
         # Otherwise we're dealing with simple scalar data (e.g., tavg)
         else:
             self._pre_proc_fields = self._pre_proc_fields_scal
             self._post_proc_fields = self._post_proc_fields_scal
-            self._soln_fields = self.soln.fields
+            self._soln_fields = list(self.soln.fields)
             self._vtk_vars = {k: [k] for k in self._soln_fields}
             self.tcurr = None
+            self._gradients = self._resid = False
 
         # Classify aux + register pp output fields
         self._build_extra_fields()
 
-        # Handle field subsetting
-        if self.fields:
-            self._vtk_vars = {f: v for f, v in self._vtk_vars.items()
-                              if f in self.fields}
+        # Restrict the extra fields and plugins to any requested subset
+        if want := set(self.fields or []):
+            self._subset_fields(want)
 
-            if len(self._vtk_vars) != len(self.fields):
-                raise RuntimeError('Invalid field specification')
+        # Synthesise corrected gradients for files without stored ones
+        if self.dataprefix == 'soln' and not self._gradients:
+            if (any(f.startswith('grad ') for f in want) or
+                self.pp_pipe.needs_grads):
+                self._synth_grads()
+
+        # Stack any gradient and residual blocks needed for the output
+        if self._gradients or self._resid:
+            self._stack_blocks(want)
+
+        # Give the data source a chance to augment the solution
+        self.source.prepare(self.mesh, self.soln, self.pp_pipe.plugins)
+
+        # Prune the output variables themselves
+        if want:
+            self._vtk_vars = {f: v for f, v in self._vtk_vars.items()
+                              if f in want}
+
+    def _subset_fields(self, want):
+        # Validate the request against everything the file can provide
+        known = self._vtk_vars.keys() | self._extra_fields.keys()
+        if self._gradients or self.dataprefix == 'soln':
+            known |= {f'grad {v}' for v in self._vtk_vars}
+        if self._resid:
+            known |= {f'resid {v}' for v in self._vtk_vars}
+
+        if missing := want - known:
+            raise RuntimeError('Invalid field specification: '
+                               f'{", ".join(sorted(missing))}')
+
+        self._extra_fields = {f: m for f, m in self._extra_fields.items()
+                              if f in want}
+
+    def _synth_grads(self):
+        rec = FieldRecovery(self.mesh, self.elementscls, self.cfg)
+        bcrows = ('con', list(range(len(self._soln_fields))))
+
+        for et, g in rec.grad_corrected(self.soln.data, bcrows).items():
+            self.soln.grad_data[et] = g.transpose(2, 0, 1, 3)
+
+        self._gradients = True
+
+    def _stack_blocks(self, want):
+        pnames = list(self._soln_fields)
+
+        # Stack a data block and derive its field and VTK names
+        def stack_block(data, prefix, nmap):
+            for et in list(self.soln.data):
+                self.soln.data[et] = np.concatenate(
+                    [self.soln.data[et], data(et)], axis=1
+                )
+
+            self._soln_fields.extend(nmap(pnames))
+            for var, vfields in list(self._vtk_vars.items()):
+                if not var.startswith(('grad ', 'resid ')):
+                    self._vtk_vars[f'{prefix} {var}'] = nmap(vfields)
+
+        def wanted(p):
+            return not want or any(f.startswith(f'{p} ') for f in want)
+
+        if self._gradients:
+            # Postproc plugins consume the gradient block positionally
+            if wanted('grad') or self.pp_pipe.needs_grads:
+                def gdata(et):
+                    g = self.soln.grad_data[et].transpose(1, 2, 0, 3)
+                    return g.reshape(g.shape[0], -1, g.shape[3])
+
+                stack_block(gdata, 'grad',
+                            lambda fs: [f'{f}-{d}' for f in fs
+                                        for d in range(self.ndims)])
+            else:
+                self._gradients = False
+
+            self.soln.grad_data = {}
+
+        if self._resid:
+            if wanted('resid'):
+                stack_block(lambda et: self.soln.resid_data[et], 'resid',
+                            lambda fs: [f'resid-{f}' for f in fs])
+            else:
+                self._resid = False
+
+            self.soln.resid_data = {}
+
+    def list_fields(self, solnf):
+        self._load_soln(solnf)
+
+        fields = {f: len(v) for f, v in self._vtk_vars.items()}
+        fields |= {f: m.ncomps for f, m in self._extra_fields.items()}
+
+        return fields
 
     def process(self, solnf, outfname):
         # Clear per-solution memoize caches
@@ -541,16 +610,15 @@ class BaseVTKWriter(BaseWriter):
         self._write_darray(out, write, self.dtype)
 
         # Perform the sub division
+        sdiv = get_subdiv(etype, self.etypes_div[etype])
         if etype != 'pyr' and self.ho_output:
             nodes = np.arange(nsvpts)
             subcellsoff = nsvpts
-            types = get_vtk_shape(etype, self.etypes_div[etype]).vtk_ho_type
+            types = sdiv.vtk_ho_type
         else:
-            subdiv = get_vtk_shape(etype, self.etypes_div[etype])
-
-            nodes = subdiv.subnodes
-            subcellsoff = subdiv.subcelloffs
-            types = subdiv.subcelltypes
+            nodes = sdiv.subnodes
+            subcellsoff = sdiv.subcelloffs
+            types = sdiv.vtk_subcelltypes
 
         # Prepare VTU cell arrays
         vtu_con = self._output.connectivity(etype, nodes, neles, nsvpts)

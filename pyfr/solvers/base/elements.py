@@ -4,9 +4,10 @@ from functools import cached_property, wraps
 import numpy as np
 
 from pyfr.cache import memoize
-from pyfr.nputil import batched_fuzzysort, npeval
+from pyfr.exprs import npeval
+from pyfr.nputil import batched_fuzzysort
 from pyfr.quadrules import get_quadrule
-from pyfr.shapes import proj_l2
+from pyfr.shapes import interp_pts, proj_l2
 
 
 @dataclass
@@ -34,6 +35,14 @@ def inters_map(meth):
 
 
 class BaseElements:
+    @staticmethod
+    def stats_tables(cfg):
+        return []
+
+    @staticmethod
+    def auxvars(ndims, cfg):
+        return {}
+
     def __init__(self, basiscls, eles, cfg):
         self._be = None
 
@@ -132,26 +141,15 @@ class BaseElements:
         # Recreate the existing solution basis
         solnb = self.basis.__class__(None, solncfg)
 
-        # Form the interpolation operator
+        # Interpolate its solution onto our solution points
         interp = solnb.ubasis.nodal_basis_at(self.basis.upts)
-
-        # Sizes
-        nupts, neles, nvars = self.nupts, self.neles, self.nvars
-
-        # Apply and reshape
-        scal_upts = interp @ solnmat.reshape(solnb.nupts, -1)
-        return scal_upts.reshape(nupts, nvars, neles)
+        return interp_pts(interp, solnmat)
 
     @cached_property
     def plocfpts(self):
-        # Construct the physical location operator matrix
+        # Interpolate the physical mesh locations to the flux points
         plocop = self.basis.sbasis.nodal_basis_at(self.basis.fpts)
-
-        # Apply the operator to the mesh elements and reshape
-        plocfpts = plocop @ self.eles.reshape(self.nspts, -1)
-        plocfpts = plocfpts.reshape(self.nfpts, self.neles, self.ndims)
-
-        return plocfpts
+        return interp_pts(plocop, self.eles)
 
     @cached_property
     def _scal_upts_cpy(self):
@@ -339,10 +337,7 @@ class BaseElements:
         pt = getattr(self.basis, name) if isinstance(name, str) else name
         op = self.basis.sbasis.nodal_basis_at(pt)
 
-        ploc = op @ self.eles.reshape(self.nspts, -1)
-        ploc = ploc.reshape(len(pt), -1, self.ndims).swapaxes(1, 2)
-
-        return ploc
+        return interp_pts(op, self.eles).swapaxes(1, 2)
 
     @sliceat
     @memoize

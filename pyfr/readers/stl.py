@@ -2,6 +2,10 @@ import numpy as np
 
 
 def read_stl(f):
+    if isinstance(f, str):
+        with open(f, 'rb') as fh:
+            return read_stl(fh)
+
     # ASCII
     if f.read(len(b'solid')) == b'solid':
         tris = []

@@ -1,5 +1,6 @@
 import numpy as np
 
+from pyfr.exprs import npeval
 from pyfr.solvers.baseadvecdiff import (BaseAdvectionDiffusionBCInters,
                                         BaseAdvectionDiffusionIntInters,
                                         BaseAdvectionDiffusionMPIInters)
@@ -117,15 +118,47 @@ class NavierStokesNoSlpIsotWallBCInters(NavierStokesBaseBCInters):
         self.c |= self._exp_opts('uvw'[:self.ndims], lhs,
                                  default={'u': 0, 'v': 0, 'w': 0})
 
+    @classmethod
+    def common_consts(cls, cfg, cfgsect, ndims):
+        # Mirrors bc_ldg_state in no-slp-isot-wall.mako
+        consts = cfg.items_as('constants', float)
+
+        c = {'gamma': consts['gamma'], 'cpTw': cfg.getfloat(cfgsect, 'cpTw')}
+        for v in 'uvw'[:ndims]:
+            c[v] = npeval(cfg.getexpr(cfgsect, v, '0'), consts)
+
+        return c
+
+    @staticmethod
+    def common_pri_state(pl, nl, c):
+        rho = pl[0]
+        uw = [np.full_like(rho, c[v]) for v in 'uvw'[:len(pl) - 2]]
+        p = (c['gamma'] - 1)/c['gamma']*c['cpTw']*rho
+
+        return [rho, *uw, p]
+
 
 class NavierStokesNoSlpAdiaWallBCInters(NavierStokesBaseBCInters):
     type = 'no-slp-adia-wall'
     cflux_state = 'ghost-imperm'
 
+    @staticmethod
+    def common_pri_state(pl, nl, c):
+        # No-slip wall: zero velocity, as bc_ldg_state in the mako
+        return [pl[0], *(np.zeros_like(v) for v in pl[1:-1]), pl[-1]]
+
 
 class NavierStokesSlpAdiaWallBCInters(NavierStokesBaseBCInters):
     type = 'slp-adia-wall'
     cflux_state = None
+
+    @staticmethod
+    def common_pri_state(pl, nl, c):
+        # Slip wall: remove the normal velocity, as bc_ldg_state in the mako
+        vel = np.asarray(pl[1:-1])
+        un = np.linalg.vecdot(vel, nl, axis=0)
+
+        return [pl[0], *(vel - un*nl), pl[-1]]
 
 
 class NavierStokesCharRiemInvBCInters(NavierStokesBaseBCInters):

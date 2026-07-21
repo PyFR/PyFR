@@ -25,6 +25,13 @@ Parameterised with
 
     *bool*
 
+#. ``write-resid`` --- if to write out the residual du/dt as
+   evaluated by the solver; costs at most one additional right hand
+   side evaluation per write.  On export and sampling the residual is
+   converted to primitive variable rates:
+
+    *bool*
+
 #. ``async-timeout`` --- how long asynchronous file writes are allowed
    to take before becoming blocking:
 

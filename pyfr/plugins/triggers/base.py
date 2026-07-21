@@ -1,5 +1,6 @@
 import re
 import time
+from collections import defaultdict
 
 import numpy as np
 
@@ -14,11 +15,42 @@ _cmp_ops = {
     '>=': lambda a, b: a >= b,
 }
 
+class _Series:
+    dtype = np.dtype([('t', 'f8'), ('x', 'f8')])
+
+    def __init__(self, cap=256):
+        self._buf = np.empty(cap, dtype=self.dtype)
+        self.n = 0
+
+    def push(self, t, x):
+        # Grow the backing store when full, giving amortised O(1) pushes
+        if self.n == len(self._buf):
+            self._buf = np.resize(self._buf, 2*self.n)
+
+        self._buf[self.n] = (t, x)
+        self.n += 1
+
+    @property
+    def t(self):
+        return self._buf['t'][:self.n]
+
+    @property
+    def x(self):
+        return self._buf['x'][:self.n]
+
+    def dump(self):
+        return self._buf[:self.n].copy()
+
+    def load(self, arr):
+        self._buf = np.asarray(arr, dtype=self.dtype).copy()
+        self.n = len(self._buf)
+
 
 class BaseTriggerSource:
     name = None
     collective = False
     has_checkpoint = False
+    has_history = False
 
     def __init__(self, cfg, cfgsect, manager, intg):
         self.cfg = cfg
@@ -61,12 +93,33 @@ class BaseTriggerSource:
         raise NotImplementedError
 
 
+class HistoryTriggerSource(BaseTriggerSource):
+    has_history = True
+
+    # Minimum samples before a statistical estimate is attempted
+    _min_samples = 16
+
+    def __init__(self, cfg, cfgsect, manager, intg):
+        super().__init__(cfg, cfgsect, manager, intg)
+
+        self._source = cfg.get(cfgsect, 'source')
+        self._series = manager.subscribe(self._source)
+
+    def dump_history(self):
+        return self._series.dump()
+
+    def load_history(self, arr):
+        self._series.load(arr)
+
+
 class TriggerManager:
     def __init__(self):
         self._triggers = {}
         self._states = {}
         self._prev_raw = {}
-        self._published = {}
+        self._latest = {}
+        self._subs = defaultdict(list)
+        self._publishers = {}
         self.wtime_start = time.monotonic()
 
     def parse_config(self, intg):
@@ -150,30 +203,33 @@ class TriggerManager:
         self._states[name] = True
         self._prev_raw[name] = True
 
+    def register_publisher(self, name, cfgsect):
+        if name in self._publishers:
+            raise ValueError(f'Publish namespace {name!r} used by both '
+                             f'{self._publishers[name]} and {cfgsect}')
+
+        self._publishers[name] = cfgsect
+
+    def subscribe(self, source):
+        series = _Series()
+        self._subs[source].append(series)
+        return series
+
     def publish(self, name, t, values):
-        buf = self._published.setdefault(name, [])
-        buf.append((t, dict(values)))
-
-    def get_published(self, source):
-        name, _, field = source.rpartition('.')
-        if not name:
-            raise ValueError(f'Invalid source: {source}')
-
-        buf = self._published.get(name, [])
-        return [(t, v[field]) for t, v in buf if field in v]
+        for field, val in values.items():
+            key = f'{name}.{field}'
+            self._latest[key] = val
+            for series in self._subs[key]:
+                series.push(t, val)
 
     def latest_published(self):
-        result = {}
-        for pname, buf in self._published.items():
-            if buf:
-                _, vals = buf[-1]
-                for field, val in vals.items():
-                    result[f'{pname}.{field}'] = val
-
-        return result
+        return self._latest
 
     def _register_serialiser(self, intg):
         _, rank, root = get_comm_rank_root()
+
+        def reg(prefix, fn):
+            intg.serialiser.register(prefix, fn if rank == root else None)
 
         def datafn():
             names, states = zip(*self._states.items())
@@ -183,15 +239,14 @@ class TriggerManager:
             dt = [('name', f'S{nmax}'), ('state', '?'), ('prev_raw', '?')]
             return np.array(list(zip(names, states, prev_raw)), dtype=dt)
 
-        intg.serialiser.register('triggers', datafn if rank == root else None)
+        reg('triggers', datafn)
 
-        # Per-source checkpoint state (e.g. duration triggers)
+        # Per-source scalar state (e.g. duration) and consumed history
         for name, src in self._triggers.items():
             if src.has_checkpoint:
-                intg.serialiser.register(
-                    f'trigger-src/{name}',
-                    src.checkpoint if rank == root else None
-                )
+                reg(f'trigger-src/{name}', src.checkpoint)
+            if src.has_history:
+                reg(f'trigger-pub/{name}', src.dump_history)
 
     def restore(self, state):
         if state is None:
@@ -208,3 +263,6 @@ class TriggerManager:
             if src.has_checkpoint:
                 if (sd := state.get(f'trigger-src/{name}')) is not None:
                     src.restore_checkpoint(sd)
+            if src.has_history:
+                if (sd := state.get(f'trigger-pub/{name}')) is not None:
+                    src.load_history(sd)

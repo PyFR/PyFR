@@ -10,6 +10,13 @@ from pyfr.quadrules import get_quadrule
 from pyfr.util import subclass_where
 
 
+def interp_pts(op, pts):
+    ipts = op.astype(pts.dtype) @ pts.reshape(op.shape[1], -1)
+    ipts = ipts.reshape(op.shape[0], *pts.shape[1:])
+
+    return ipts
+
+
 def proj_pts(projector, pts):
     pts = np.atleast_2d(pts.T)
     return np.vstack(np.broadcast_arrays(*projector(*pts))).T

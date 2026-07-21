@@ -1,0 +1,18 @@
+# Euler instantaneous derived quantities, 3D
+
+# Pressure coefficient
+derived cp requires rho-inf u-inf p-inf
+    (p - p-inf)/(0.5*rho-inf*u-inf*u-inf)
+
+# Local Mach number
+derived mach
+    mach
+
+# Isentropic Mach number from the total pressure
+derived isen-mach requires p-total
+    sqrt((2/(gamma - 1))*(pow(p-total/p, (gamma - 1)/gamma) - 1))
+
+# Vorticity from the instantaneous velocity gradients
+derived vorticity-x = grad_w_y - grad_v_z
+derived vorticity-y = grad_u_z - grad_w_x
+derived vorticity-z = grad_v_x - grad_u_y

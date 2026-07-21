@@ -1,3 +1,4 @@
+import math
 import re
 
 import numpy as np
@@ -17,6 +18,8 @@ def compile_expr(expr, privars, ndims):
             subs[f'grad_{v}_{d}'] = f'grad_pri[{i}][{j}]'
     for d, c in enumerate('xyz'[:ndims]):
         subs[c] = f'ploc[{d}]'
+
+    subs |= dict(abs='fabs', pi=str(math.pi))
 
     p = '|'.join(re.escape(k) for k in subs)
     return re.sub(rf'\b({p})\b', lambda m: subs[m[1]], expr)

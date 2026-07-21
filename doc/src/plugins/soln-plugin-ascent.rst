@@ -223,7 +223,9 @@ are available
 - ``pyfr ascent render`` --- render an image from a pre-existing mesh
   and one or more solution files. It must be run with the same number
   of ranks as partitions in the mesh. By default it will use settings
-  from the first section of the settings file that it is passed.
+  from the first section of the settings file which defines a scene;
+  as such a simulation configuration file with a
+  ``[soln-plugin-ascent]`` section can be passed directly.
   Alternatively, a specific section name can be provided. In both
   cases all other sections are ignored.  Multiple solution files can
   be passed; the renderer is rebuilt when the embedded solver
@@ -234,16 +236,7 @@ are available
   mapping from tavg field names to canonical primitive variables
   (``rho``, ``u``, ``v``, ``w``, ``p``, and the corresponding
   ``grad_{var}_{x,y,z}`` entries when present) is inferred from the
-  ``[soln-plugin-tavg]`` section embedded in the snapshot.  If the
-  inferred mapping is wrong (for example because ``avg-`` expressions
-  were renamed), it can be overridden by adding a ``[postproc-input]``
-  section to the settings file::
-
-      [postproc-input]
-      u = avg-u
-      v = avg-v
-      w = avg-w
-      p = avg-p
+  tavg configuration embedded in the snapshot.
 
   Example:
 

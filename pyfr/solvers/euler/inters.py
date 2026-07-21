@@ -3,8 +3,7 @@ from pyfr.quadrules.surface import SurfaceIntegrator
 from pyfr.solvers.baseadvec import (BaseAdvectionIntInters,
                                     BaseAdvectionMPIInters,
                                     BaseAdvectionBCInters)
-from pyfr.util import first
-from pyfr.writers.csv import CSVStream
+from pyfr.util import CSVStream, first
 
 import numpy as np
 
@@ -103,6 +102,14 @@ class EulerCharRiemInvBCInters(EulerBaseBCInters):
 
 class EulerSlpAdiaWallBCInters(EulerBaseBCInters):
     type = 'slp-adia-wall'
+
+    @staticmethod
+    def common_pri_state(pl, nl, c):
+        # Slip wall: remove the normal velocity component
+        vel = np.asarray(pl[1:-1])
+        un = np.linalg.vecdot(vel, nl, axis=0)
+
+        return [pl[0], *(vel - un*nl), pl[-1]]
 
 
 class ControlledBCMixin:

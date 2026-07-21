@@ -3,9 +3,8 @@ from collections import namedtuple
 import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
-from pyfr.nputil import npeval
-from pyfr.plugins.common import init_csv
-from pyfr.plugins.mixins import SurfaceRegionMixin
+from pyfr.exprs import npeval
+from pyfr.plugins.mixins import SeriesWriterMixin, SurfaceRegionMixin
 from pyfr.plugins.soln.base import BaseSolnPlugin
 from pyfr.quadrules.surface import SurfaceIntegrator
 from pyfr.util import first
@@ -68,7 +67,7 @@ class FWHIntegrator(SurfaceIntegrator):
         return r_tilde_vec, r_star_inv, r_star_tilde_vec
 
 
-class FWHPlugin(SurfaceRegionMixin, BaseSolnPlugin):
+class FWHPlugin(SeriesWriterMixin, SurfaceRegionMixin, BaseSolnPlugin):
     name = 'fwh'
     systems = 'euler|navier-stokes'
     dimensions = '2|3'
@@ -88,8 +87,7 @@ class FWHPlugin(SurfaceRegionMixin, BaseSolnPlugin):
 
         # Initialise data file
         if rank == root:
-            header = ','.join(['t', 'x', 'y', 'z'][:self.ndims + 1] + ['p'])
-            self.csv = init_csv(self.cfg, cfgsect, header, nflush=self.nobvs)
+            self._init_series(intg, ['p'], obsv_pts)
 
         # Far field conditions
         privars = first(intg.system.ele_map.values()).privars
@@ -207,5 +205,4 @@ class FWHPlugin(SurfaceRegionMixin, BaseSolnPlugin):
             else:
                 comm.Reduce(mpi.IN_PLACE, o_vals, op=mpi.SUM, root=root)
 
-                for x, p in zip(self.fwh_int.obsv_pts, o_vals):
-                    self.csv(intg.tcurr, *x, p)
+                self._write(intg.tcurr, o_vals)

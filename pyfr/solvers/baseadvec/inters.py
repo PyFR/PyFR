@@ -1,7 +1,7 @@
 import itertools as it
 import math
 
-from pyfr.nputil import npeval
+from pyfr.exprs import npeval
 from pyfr.solvers.base import BaseInters
 
 
@@ -51,6 +51,10 @@ class BaseAdvectionMPIInters(BaseInters):
 
 class BaseAdvectionBCInters(BaseInters):
     type = None
+
+    @classmethod
+    def common_consts(cls, cfg, cfgsect, ndims):
+        return {}
 
     def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
         super().__init__(be, lhs, elemap, cfg)

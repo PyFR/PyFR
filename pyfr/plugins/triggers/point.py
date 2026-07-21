@@ -1,7 +1,7 @@
 import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root
-from pyfr.nputil import npeval
+from pyfr.exprs import npeval
 from pyfr.plugins.triggers.base import BaseTriggerSource
 from pyfr.points import PointSampler
 from pyfr.util import first

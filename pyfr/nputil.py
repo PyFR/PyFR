@@ -1,10 +1,8 @@
 import contextlib
 import ctypes as ct
 import functools as ft
-import itertools as it
 from math import erf, prod
 from pathlib import Path
-import re
 import sys
 
 import numpy as np
@@ -109,35 +107,6 @@ def morton_encode(ipts, imax, dtype=np.uint64):
                 code |= (p & mask) << shift
 
     return codes
-
-
-_npeval_syms = {
-    '__builtins__': {},
-    'exp': np.exp, 'log': np.log,
-    'sin': np.sin, 'asin': np.arcsin,
-    'cos': np.cos, 'acos': np.arccos,
-    'tan': np.tan, 'atan': np.arctan, 'atan2': np.arctan2,
-    'abs': np.abs, 'pow': np.power, 'sqrt': np.sqrt,
-    'tanh': np.tanh, 'pi': np.pi,
-    'max': np.maximum, 'min': np.minimum
-}
-
-
-def npeval(expr, locals):
-    # Disallow direct exponentiation
-    if '^' in expr or '**' in expr:
-        raise ValueError('Direct exponentiation is not supported; use pow')
-
-    # Ensure the expression does not contain invalid characters
-    if not re.match(r'[A-Za-z0-9_ \t\n\r.,+\-*/%()]+$', expr):
-        raise ValueError('Invalid characters in expression')
-
-    # Disallow access to object attributes
-    objs = '|'.join(it.chain(_npeval_syms, locals))
-    if re.search(rf'({objs}|\))\s*\.', expr):
-        raise ValueError('Invalid expression')
-
-    return eval(expr, _npeval_syms, locals)
 
 
 def search_unsorted(a, v):

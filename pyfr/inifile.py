@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 import re
 
+from pyfr.exprs import subst_expr_vars
+
 
 def _ensure_float(m):
     m = m[0]
@@ -16,8 +18,7 @@ def process_expr(expr, subs={}):
         raise ValueError('Invalid characters in expression')
 
     if subs:
-        expr = re.sub(r'\b({0})\b'.format('|'.join(subs)),
-                      lambda m: str(subs[m[1]]), expr)
+        expr = subst_expr_vars(expr, subs)
 
     expr = re.sub(r'\b((\d+\.?\d*)|(\.\d+))([eE][+-]?\d+)?(?![^[]*\])',
                   _ensure_float, expr)
