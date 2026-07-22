@@ -67,11 +67,7 @@ class HIPGiMMiKKernels(HIPKernelProvider):
                     src, meta = kgen.send(kdata)
                     kern = self._build_kernel(kname, src, 'iPiPi')
 
-                    grid_y = meta.get('grid_y', 1)
-                    ncolsv = (
-                        meta.get('width', 1) *
-                        meta.get('ncols', meta['block'][0])
-                    )
+                    grid_y, ncolsv = meta['grid_y'], meta['ncolsv']
                     grid = (-(-n // ncolsv), grid_y, 1)
                     params = kern.make_params(grid, meta['block'])
                     params.set_args(n, b, ldb, out, ldc)
