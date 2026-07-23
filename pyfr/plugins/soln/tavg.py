@@ -3,6 +3,7 @@ import re
 import numpy as np
 
 from pyfr.cache import memoize
+from pyfr.fields import FieldRegistry
 from pyfr.inifile import Inifile
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.nputil import npeval
@@ -128,23 +129,45 @@ class TavgPlugin(PostactionMixin, RegionMixin, BackendMixin, TavgMixin,
         self.anames, self.aexprs = [], []
         self.fnames, self.fexprs = [], []
 
+        # Functional expression handling
+        self.fun_avg_mode = cfg.get(cfgsect, 'fun-avg-mode', 'eval')
+        if self.fun_avg_mode not in {'eval', 'defer'}:
+            raise ValueError('Invalid fun-avg mode')
+
         # Iterate over accumulation expressions first
+        self._araw = []
         for k in cfg.items(cfgsect, prefix='avg-'):
             self.anames.append(k.removeprefix('avg-'))
             self.aexprs.append(cfg.getexpr(cfgsect, k, subs=c))
 
+            # Record the raw expression for the output metadata
+            self._araw.append(cfg.get(cfgsect, k))
+
+        # Expand any registry fields in the expressions
+        reg = FieldRegistry(cfg, self.ndims)
+        fnames = set()
+        for i, e in enumerate(self.aexprs):
+            self.aexprs[i], fn = reg.expand(e)
+            fnames.update(fn)
+
+        self._fluid = reg.fluid
+        self._fluid_names = ', '.join(sorted(fnames))
+
         # Followed by any functional expressions
         for k in cfg.items(cfgsect, prefix='fun-avg-'):
+            if k == 'fun-avg-mode':
+                continue
+
             self.fnames.append(k.removeprefix('fun-avg-'))
             self.fexprs.append(cfg.getexpr(cfgsect, k, subs=c))
 
         # Build grouped field structure for the nested dtype
         self.field_groups = fg = {'avg': self.anames}
-        if self.fnames:
+        if self.fnames and self.fun_avg_mode == 'eval':
             fg['fun-avg'] = self.fnames
         if self.std_mode == 'all':
             fg['avg-std'] = self.anames
-            if self.fnames:
+            if self.fnames and self.fun_avg_mode == 'eval':
                 fg['fun-avg-std'] = self.fnames
 
         return sum(len(v) for v in fg.values())
@@ -171,6 +194,7 @@ class TavgPlugin(PostactionMixin, RegionMixin, BackendMixin, TavgMixin,
             'c': self.cfg.items_as('constants', float),
             'has_grads': self._has_grads, 'has_var': has_var,
             'use_kahan': use_kahan, 'eos_mod': self._eos_mod,
+            'fluid': self._fluid, 'fluid_names': self._fluid_names,
         }
 
         # Build per-element-type data structures
@@ -267,6 +291,12 @@ class TavgPlugin(PostactionMixin, RegionMixin, BackendMixin, TavgMixin,
         stats.set('tavg', 'cfg-section', self.cfgsect)
         stats.set('tavg', 'range', f'[({self.tstart_acc}, {intg.tcurr})]')
 
+        # Record the defining expression of every field
+        for n, e in zip(self.anames, self._araw):
+            stats.set('tavg-exprs', f'avg-{n}', e)
+        for n, e in zip(self.fnames, self.fexprs):
+            stats.set('tavg-exprs', f'fun-avg-{n}', e)
+
         intg.collect_stats(stats)
 
         # Reduce our standard deviations across ranks
@@ -279,7 +309,8 @@ class TavgPlugin(PostactionMixin, RegionMixin, BackendMixin, TavgMixin,
             comm.Reduce(mpi.IN_PLACE, std_max, op=mpi.MAX, root=root)
             comm.Reduce(mpi.IN_PLACE, std_sum, op=mpi.SUM, root=root)
 
-            names = [*self.anames, *(f'fun-{n}' for n in self.fnames)]
+            fnames = self.fnames if self.fun_avg_mode == 'eval' else []
+            names = [*self.anames, *(f'fun-{n}' for n in fnames)]
             for n, m, s in zip(names, std_max, std_sum):
                 stats.set('tavg', f'max-std-{n}', m)
                 stats.set('tavg', f'avg-std-{n}', s / self.tpts)
@@ -290,7 +321,8 @@ class TavgPlugin(PostactionMixin, RegionMixin, BackendMixin, TavgMixin,
                 'mesh-uuid': intg.mesh_uuid}
 
     def _prepare_data(self, intg):
-        nacc, nfun = len(self.anames), len(self.fnames)
+        nacc = len(self.anames)
+        nfun = len(self.fnames) if self.fun_avg_mode == 'eval' else 0
 
         wts = 2*(intg.tcurr - self.tstart_acc)
 
@@ -310,7 +342,7 @@ class TavgPlugin(PostactionMixin, RegionMixin, BackendMixin, TavgMixin,
                 std_sum[:nacc] += dx.sum(axis=(1, 2))
 
         # Handle any functional expressions
-        if not self.fexprs:
+        if not self.fexprs or self.fun_avg_mode == 'defer':
             funavg = fundev = None
         elif dev is not None:
             funavg, fundev = self._eval_fun_avg_var(dev, avg)

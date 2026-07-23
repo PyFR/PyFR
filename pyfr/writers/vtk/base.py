@@ -4,8 +4,10 @@ from pathlib import Path
 import numpy as np
 
 from pyfr.cache import clear_memoize, memoize
+from pyfr.fields import FieldRegistry
+from pyfr.fluids import get_fluid
 from pyfr.mpiutil import get_comm_rank_root, mpi
-from pyfr.plugins.postproc.runner import PostProcRunner
+from pyfr.nputil import npeval
 from pyfr.shapes import BaseShape
 from pyfr.util import first, subclass_where
 from pyfr.writers import BaseWriter
@@ -35,14 +37,13 @@ class BaseVTKWriter(BaseWriter):
     output_curved = False
 
     def __init__(self, meshf, pname=None, *, prec='single', order=None,
-                 divisor=None, fields=[], pp_plugins=[], pp_cfg=None,
+                 divisor=None, fields=[], field_cfg=None,
                  discontinuous=False):
         super().__init__(meshf, pname)
 
         self.dtype = np.dtype(prec).type
-        self.fields = fields
-        self._pp_plugin_names = pp_plugins
-        self._pp_cfg = pp_cfg
+        self.fields = fields or []
+        self._field_cfg = field_cfg
 
         # Determine the output filter
         if discontinuous:
@@ -63,11 +64,6 @@ class BaseVTKWriter(BaseWriter):
             self._get_npts_ncells_nnodes = self._get_npts_ncells_nnodes_lin
 
     def _build_extra_fields(self):
-        # Only allow post processing of solution files
-        if self._pp_plugin_names and self.dataprefix != 'soln':
-            raise ValueError('Postproc plugins are only supported for '
-                             'solution files')
-
         self._extra_fields = {}
 
         # Classify aux fields by shape
@@ -89,25 +85,53 @@ class BaseVTKWriter(BaseWriter):
 
                 self._extra_fields[name] = meta
 
-        # Resolve postproc plugins and register fields
-        cfg = self._pp_cfg or self.cfg
-        self.pp_runner = PostProcRunner(self._pp_plugin_names, self.ndims, cfg,
-                                        self.type)
-        for fname, varnames in self.pp_runner.fields().items():
-            meta = FieldMeta('point', len(varnames), np.dtype(self.dtype))
-            self._extra_fields[fname] = meta
+        # Register registry-backed fields
+        if self._registry:
+            if (self._registry.needs_grads(self._reg_fields)
+                and not self._gradients):
+                raise RuntimeError('Requested fields need gradients which '
+                                   'are not present in the solution file')
+
+            for fname, nc in self._registry.fields(self._reg_fields).items():
+                self._extra_fields[fname] = FieldMeta('point', nc,
+                                                      np.dtype(self.dtype))
+
+    def _finalise_tavg(self):
+        if 'tavg-exprs' not in self.stats.sections():
+            return
+
+        # Functional averages recorded but not present in the file
+        deferred = {k: e
+                    for k, e in self.stats.items('tavg-exprs',
+                                                 prefix='fun-avg-').items()
+                    if k not in self._soln_fields}
+        if not deferred:
+            return
+
+        # Map average names to their rows in the solution data
+        aidx = {k.removeprefix('avg-'): i
+                for i, k in enumerate(self._soln_fields)
+                if k.startswith('avg-') and not k.startswith('avg-std-')}
+
+        for etype, d in self.soln.data.items():
+            subs = {n: d[:, i] for n, i in aidx.items()}
+            new = [npeval(e, subs) for e in deferred.values()]
+            new = np.stack(new, axis=1).astype(d.dtype)
+            self.soln.data[etype] = np.concatenate([d, new], axis=1)
+
+        self._soln_fields.extend(deferred)
 
     def _pre_proc_fields_soln(self, soln):
-        ecls = self.elementscls
-        nvars = len(ecls.privars(self.ndims, self.cfg))
+        fluid = self._fluid
+        nvars = len(fluid.privars)
 
         # Convert the solution to primitive variables
-        fields = ecls.con_to_pri(soln[:nvars], self.cfg)
+        fields = fluid.con_to_pri(soln[:nvars])
 
         # Convert any solution gradients to primitive variables
         if self._gradients:
             diff_cons = soln[nvars:].reshape(nvars, -1, *soln.shape[1:])
-            diff_pri = ecls.diff_con_to_pri(soln[:nvars], diff_cons, self.cfg)
+            diff_pri = fluid.diff_pri(soln[:nvars], diff_cons)
 
             fields += [f for gf in diff_pri for f in gf]
 
@@ -227,10 +251,11 @@ class BaseVTKWriter(BaseWriter):
 
         # Solutions need a separate processing pipeline to other data
         if self.dataprefix == 'soln':
+            self._fluid = get_fluid(self.cfg, self.ndims)
             self._pre_proc_fields = self._pre_proc_fields_soln
             self._post_proc_fields = self._post_proc_fields_soln
-            self._soln_fields = self.elementscls.privars(self.ndims, self.cfg)
-            self._vtk_vars = self.elementscls.visvars(self.ndims, self.cfg)
+            self._soln_fields = list(self._fluid.privars)
+            self._vtk_vars = dict(self._fluid.visvars)
             self.tcurr = self.stats.getfloat('solver-time-integrator', 'tcurr')
 
             # See if our solution contains gradient data
@@ -248,30 +273,38 @@ class BaseVTKWriter(BaseWriter):
                 self._soln_fields.extend(f'{f}-{d}'
                                          for f in list(self._soln_fields)
                                          for d in range(self.ndims))
-
-                # Update the mapping of VTK variables to solution fields
-                for var, vfields in list(self._vtk_vars.items()):
-                    self._vtk_vars[f'grad {var}'] = nfields = []
-                    for f in vfields:
-                        nfields.extend(f'{f}-{d}' for d in range(self.ndims))
         # Otherwise we're dealing with simple scalar data (e.g., tavg)
         else:
             self._pre_proc_fields = self._pre_proc_fields_scal
             self._post_proc_fields = self._post_proc_fields_scal
-            self._soln_fields = self.soln.fields
+            self._soln_fields = list(self.soln.fields)
+
+            # Reconstruct any deferred functional averages
+            if self.dataprefix == 'tavg':
+                self._finalise_tavg()
+
             self._vtk_vars = {k: [k] for k in self._soln_fields}
             self.tcurr = None
 
-        # Classify aux + register pp output fields
+        # Split requested fields into VTK variables and registry fields
+        self._reg_fields = [f for f in self.fields
+                            if f not in self._vtk_vars]
+        if self._reg_fields:
+            if self.dataprefix != 'soln':
+                raise RuntimeError('Invalid field specification')
+
+            self._registry = FieldRegistry(self._field_cfg or self.cfg,
+                                           self.ndims)
+        else:
+            self._registry = None
+
+        # Classify aux + register pp/registry output fields
         self._build_extra_fields()
 
         # Handle field subsetting
         if self.fields:
             self._vtk_vars = {f: v for f, v in self._vtk_vars.items()
                               if f in self.fields}
-
-            if len(self._vtk_vars) != len(self.fields):
-                raise RuntimeError('Invalid field specification')
 
     def process(self, solnf, outfname):
         # Clear per-solution memoize caches

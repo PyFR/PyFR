@@ -1,9 +1,7 @@
 <%inherit file='base'/>
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
-<%include file='pyfr.solvers.euler.kernels.entropy'/>
 
 <%pyfr:macro name='get_minima' params='u, m0, dmin, pmin, emin'>
-    fpdtype_t d, p, e;
     fpdtype_t ui[${nvars}];
 
     dmin = ${fpdtype_max}; pmin = ${fpdtype_max}; emin = ${fpdtype_max};
@@ -14,8 +12,10 @@
         ui[${j}] = u[i][${j}];
     % endfor
 
-        ${pyfr.expand('compute_entropy', 'ui', 'd', 'p', 'e')};
-        dmin = fmin(dmin, d); pmin = fmin(pmin, p); emin = fmin(emin, e);
+        ${fluid.decl('ui', 'rho, p, s', suffix='_gm')}
+        dmin = fmin(dmin, rho_gm);
+        pmin = fmin(pmin, p_gm);
+        emin = fmin(emin, s_gm);
     }
 
     % if not fpts_in_upts:
@@ -26,8 +26,10 @@
         uf[${vidx}] = ${pyfr.dot('m0[fidx][{k}]', f'u[{{k}}][{vidx}]', k=nupts)};
         % endfor
 
-        ${pyfr.expand('compute_entropy', 'uf', 'd', 'p', 'e')};
-        dmin = fmin(dmin, d); pmin = fmin(pmin, p); emin = fmin(emin, e);
+        ${fluid.decl('uf', 'rho, p, s', suffix='_gf')}
+        dmin = fmin(dmin, rho_gf);
+        pmin = fmin(pmin, p_gf);
+        emin = fmin(emin, s_gf);
     }
     % endif
 </%pyfr:macro>
@@ -81,7 +83,8 @@
         % endfor
     }
 
-    ${pyfr.expand('compute_entropy', 'ui', 'd', 'p', 'e' )};
+    ${fluid.decl('ui', 'rho, p, s', suffix='_fs')}
+    d = rho_fs; p = p_fs; e = s_fs;
 </%pyfr:macro>
 
 <%pyfr:kernel name='entropyfilter' ndim='1'
@@ -190,15 +193,14 @@
     // Apply linearised limiting
     if (dmin < ${d_min} || pmin < ${p_min} || emin < entmin - ${e_tol})
     {
-        fpdtype_t davg, pavg, eavg;
-        ${pyfr.expand('compute_entropy', 'uavg', 'davg', 'pavg', 'eavg')};
+        ${fluid.decl('uavg', 'rho, p, s', suffix='_av')}
 
         // Apply density, pressure, and entropy limiting sequentially
         fpdtype_t alpha;
-        % for (fvar, bound) in [('d', d_min), ('p', p_min), ('e', f'entmin - {e_tol}')]:
+        % for (fvar, avg, bound) in [('d', 'rho_av', d_min), ('p', 'p_av', p_min), ('e', 's_av', f'entmin - {e_tol}')]:
         if (${fvar}min < ${bound})
         {
-            alpha = (${fvar}min - (${bound}))/(${fvar}min - ${fvar}avg);
+            alpha = (${fvar}min - (${bound}))/(${fvar}min - ${avg});
             alpha = fmin(fmax(alpha, 0.0), 1.0);
             f = fmin(f, 1.0 - alpha);
 

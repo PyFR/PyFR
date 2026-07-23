@@ -1,6 +1,7 @@
 import numpy as np
 
 from pyfr.cache import memoize
+from pyfr.fluids import get_fluid
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.plugins.common import DatasetAppender, init_csv, open_hdf5_a
 from pyfr.plugins.mixins import BackendMixin, PublishMixin
@@ -31,9 +32,6 @@ class FluidForcePlugin(PublishMixin, BackendMixin, BaseSolnPlugin):
 
         # Check if we need to compute viscous force
         self._viscous = 'navier-stokes' in intg.system.name
-
-        # Viscous correction
-        self._viscorr = self.cfg.get('solver', 'viscosity-correction', 'none')
 
         # Constant variables
         self._constants = self.cfg.items_as('constants', float)
@@ -164,8 +162,8 @@ class FluidForcePlugin(PublishMixin, BackendMixin, BaseSolnPlugin):
             tplargs = {
                 'ndims': self.ndims, 'nvars': self.nvars, 'nupts': nupts,
                 'nfpts': nfpts, 'nout': self._nout, 'viscous': self._viscous,
-                'visc_corr': self._viscorr, 'mcomp': self._mcomp,
-                'c': self._constants
+                'mcomp': self._mcomp, 'c': self._constants,
+                'fluid': get_fluid(self.cfg, self.ndims)
             }
 
             # Solution view into scal_upts[uidx]

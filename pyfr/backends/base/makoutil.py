@@ -41,6 +41,15 @@ def fpcast(context, expr, src, dst):
         return f'({dst})({expr})'
 
 
+def eos_check(context, name, fluid, *eos):
+    if fluid.name not in eos:
+        raise ValueError(f'{name!r} is implemented for eos: '
+                         f'{", ".join(eos)}; configured eos is '
+                         f'{fluid.name!r}')
+
+    return ''
+
+
 def dot(context, a_, b_=None, /, **kwargs):
     ix, nd = util.first(kwargs.items())
     ab = '({})*({})'.format(a_, b_ or a_)

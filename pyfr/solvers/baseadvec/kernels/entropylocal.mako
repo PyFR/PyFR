@@ -1,13 +1,12 @@
 <%inherit file='base'/>
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
-<%include file='pyfr.solvers.euler.kernels.entropy'/>
 
 <%pyfr:kernel name='entropylocal' ndim='1'
               u='in fpdtype_t[${str(nupts)}][${str(nvars)}]'
               entmin_int='out fpdtype_t[${str(nfaces)}]'
               m0='in broadcast fpdtype_t[${str(nfpts)}][${str(nupts)}]'>
     // Compute minimum entropy across element
-    fpdtype_t ui[${nvars}], d, p, e;
+    fpdtype_t ui[${nvars}];
 
     fpdtype_t entmin = ${fpdtype_max};
     for (int i = 0; i < ${nupts}; i++)
@@ -16,9 +15,8 @@
         ui[${j}] = u[i][${j}];
     % endfor
 
-        ${pyfr.expand('compute_entropy', 'ui', 'd', 'p', 'e')};
-
-        entmin = fmin(entmin, e);
+        ${fluid.decl('ui', 's', suffix='_el')}
+        entmin = fmin(entmin, s_el);
     }
 
     % if not fpts_in_upts:
@@ -28,8 +26,9 @@
         % for vidx in range(nvars):
         uf[${vidx}] = ${pyfr.dot('m0[fidx][{k}]', f'u[{{k}}][{vidx}]', k=nupts)};
         % endfor
-        ${pyfr.expand('compute_entropy', 'uf', 'd', 'p', 'e')};
-        entmin = fmin(entmin, e);
+
+        ${fluid.decl('uf', 's', suffix='_ef')}
+        entmin = fmin(entmin, s_ef);
     }
     % endif
 

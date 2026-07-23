@@ -1,7 +1,6 @@
 <%inherit file='base'/>
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 <%include file='pyfr.solvers.baseadvec.kernels.smats'/>
-<%include file='pyfr.solvers.euler.kernels.eos'/>
 
 <% smats = 'smats_l' if 'linear' in ktype else 'smats' %>
 <% rcpdjac_v = 'rcpdjac_l' if 'linear' in ktype else 'rcpdjac' %>
@@ -19,23 +18,16 @@
     fpdtype_t ${rcpdjac_v} = 1/djac;
 % endif
 
-    fpdtype_t rho = u[0], invrho = 1/rho;
-    fpdtype_t v[${ndims}];
-% for i in range(ndims):
-    v[${i}] = invrho*u[${i + 1}];
-% endfor
-
-    fpdtype_t p, csnd;
-    ${pyfr.expand('compute_pressure', 'u', 'p')};
-    ${pyfr.expand('compute_sound_speed', 'rho', 'p', 'csnd')};
+    // Compute the primitive state
+    ${fluid.decl('u', 'v, p, a')}
 
     fpdtype_t lam = 0;
 % for i in range(ndims):
     lam += fabs(${' + '.join(f'({smats}[{i}][{j}]*{rcpdjac_v})*v[{j}]'
                              for j in range(ndims))})
-         + csnd*sqrt(${' + '.join(f'({smats}[{i}][{j}]*{rcpdjac_v})'
-                                  f'*({smats}[{i}][{j}]*{rcpdjac_v})'
-                                  for j in range(ndims))});
+         + a*sqrt(${' + '.join(f'({smats}[{i}][{j}]*{rcpdjac_v})'
+                               f'*({smats}[{i}][{j}]*{rcpdjac_v})'
+                               for j in range(ndims))});
 % endfor
 
     wspd = lam;

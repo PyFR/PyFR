@@ -1,23 +1,24 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
+${pyfr.eos_check('hllc', fluid, 'cpg')}\
 <%include file='pyfr.solvers.euler.kernels.flux'/>
 
 <%pyfr:macro name='rsolve' params='ul, ur, n, nf'>
-    // Compute the left and right fluxes + velocities and pressures
+    // Compute the left and right primitive state
+    ${fluid.decl('ul', 'v, p, a', suffix='l')}
+    ${fluid.decl('ur', 'v, p, a', suffix='r')}
+
+    // Compute the left and right fluxes
     fpdtype_t fl[${ndims}][${nvars}], fr[${ndims}][${nvars}];
-    fpdtype_t vl[${ndims}], vr[${ndims}];
-    fpdtype_t pl, pr, nf_fl, nf_fr, nf_fsl, nf_fsr;
+    fpdtype_t nf_fl, nf_fr, nf_fsl, nf_fsr;
     fpdtype_t va[${ndims}];
     fpdtype_t usl[${nvars}], usr[${nvars}];
 
-    ${pyfr.expand('inviscid_flux', 'ul', 'fl', 'pl', 'vl')};
-    ${pyfr.expand('inviscid_flux', 'ur', 'fr', 'pr', 'vr')};
+    ${pyfr.expand('inviscid_flux', 'ul', 'pl', 'vl', 'fl')};
+    ${pyfr.expand('inviscid_flux', 'ur', 'pr', 'vr', 'fr')};
 
     // Get the normal left and right velocities
     fpdtype_t nvl = ${pyfr.dot('n[{i}]', 'vl[{i}]', i=ndims)};
     fpdtype_t nvr = ${pyfr.dot('n[{i}]', 'vr[{i}]', i=ndims)};
-
-    fpdtype_t al = sqrt(${c['gamma']}*pl/ul[0]);
-    fpdtype_t ar = sqrt(${c['gamma']}*pr/ur[0]);
 
     // Compute the Roe-averaged velocity
     fpdtype_t nv = (sqrt(ul[0])*nvl + sqrt(ur[0])*nvr)

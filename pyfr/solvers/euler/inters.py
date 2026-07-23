@@ -1,3 +1,4 @@
+from pyfr.fluids import get_fluid
 from pyfr.mpiutil import mpi, scal_coll
 from pyfr.quadrules.surface import SurfaceIntegrator
 from pyfr.solvers.baseadvec import (BaseAdvectionIntInters,
@@ -14,6 +15,8 @@ class TplargsMixin:
         super().__init__(*args, **kwargs)
 
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
+        self.fluid = get_fluid(self.cfg, self.ndims)
+
         if self.cfg.get('solver', 'shock-capturing', 'none') == 'entropy-filter':
             self.p_min = self.cfg.getfloat('solver-entropy-filter', 'p-min',
                                            1e-6)
@@ -22,7 +25,8 @@ class TplargsMixin:
                                            5*self._be.fpdtype_eps)
 
         self._tplargs = dict(ndims=self.ndims, nvars=self.nvars,
-                             rsolver=rsolver, c=self.c, p_min=self.p_min)
+                             rsolver=rsolver, c=self.c, p_min=self.p_min,
+                             fluid=self.fluid)
 
 
 class EulerIntInters(TplargsMixin, BaseAdvectionIntInters):
@@ -50,8 +54,15 @@ class EulerMPIInters(TplargsMixin, BaseAdvectionMPIInters):
 
 
 class EulerBaseBCInters(TplargsMixin, BaseAdvectionBCInters):
+    # Fluids this boundary condition supports as currently implemented
+    eos_compat = ('cpg',)
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        if self.fluid.name not in self.eos_compat:
+            raise ValueError(f'Boundary condition {self.type!r} does not '
+                             f'support eos {self.fluid.name!r}')
 
         self._be.pointwise.register('pyfr.solvers.euler.kernels.bccflux')
 

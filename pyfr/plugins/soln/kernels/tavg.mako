@@ -20,6 +20,9 @@ typedef ${'fpdtype_t' if use_kahan else 'double'} acctype_t;
     fpdtype_t grad_pri[${nvars}][${ndims}];
     ${pyfr.expand('grad_con_to_pri', 'u', 'gradu', 'grad_pri')};
 % endif
+% if fluid_names:
+    ${fluid.decl('u', fluid_names, suffix='_qf')}
+% endif
 % for i, expr in enumerate(exprs):
     {
         fpdtype_t curr = ${expr};

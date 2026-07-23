@@ -1,4 +1,5 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
+${pyfr.eos_check('exact', fluid, 'cpg')}\
 <%include file='pyfr.solvers.euler.kernels.flux'/>
 
 <% gamma = c['gamma'] %>

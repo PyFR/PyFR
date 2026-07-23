@@ -171,12 +171,8 @@ def main():
             '--eopt', dest='eopts', action='append', default=[],
             metavar='key:value', help='exporter-specific option'
         )
-        ap_export_type.add_argument(
-            '--postproc', dest='pp_plugins', action='append', default=[],
-            metavar='PLUGIN', help='postprocessing plugin; may be repeated'
-        )
-        ap_export_type.add_argument('--cfg', dest='pp_cfg',
-                                    help='config file for postproc plugins')
+        ap_export_type.add_argument('--cfg', dest='field_cfg',
+                                    help='config file for field evaluation')
         ap_export_type.add_argument('-P', '--pname',
                                     help='partitioning to use')
         if etype in ('boundary', 'spanwise', 'volume'):
@@ -467,10 +463,9 @@ def process_export(args):
 
     # Common arguments
     kargs = [args.eargs] if 'eargs' in args else []
-    pp_cfg = Inifile.load(args.pp_cfg) if args.pp_cfg else None
+    field_cfg = Inifile.load(args.field_cfg) if args.field_cfg else None
     kwargs = {'fields': args.fields, 'prec': args.precision,
-              'pname': args.pname, 'pp_plugins': args.pp_plugins,
-              'pp_cfg': pp_cfg}
+              'pname': args.pname, 'field_cfg': field_cfg}
 
     # Discntinuous output
     if 'discontinuous' in args:

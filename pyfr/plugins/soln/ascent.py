@@ -6,13 +6,12 @@ import re
 import numpy as np
 
 from pyfr.ctypesutil import LibWrapper
+from pyfr.fields import FieldRegistry
+from pyfr.fluids import get_fluid
 from pyfr.inifile import process_expr
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.nputil import npeval
 from pyfr.plugins.common import region_data
-from pyfr.plugins.postproc.adapters import (BoundaryPostProcData,
-                                            VolumePostProcData)
-from pyfr.plugins.postproc.runner import PostProcRunner
 from pyfr.plugins.soln.base import BaseSolnPlugin
 from pyfr.shapes import BaseShape, proj_pts
 from pyfr.util import file_path_gen, first, paren_depths, subclass_where
@@ -20,13 +19,13 @@ from pyfr.writers.vtk.clean import CleanToGrid
 from pyfr.writers.vtk.shapes import get_vtk_shape
 
 
-def con_psolns_pgrads(elementscls, scfg, csolns, cgrads):
-    psolns = elementscls.con_to_pri(csolns, scfg)
+def con_psolns_pgrads(fluid, csolns, cgrads):
+    psolns = fluid.con_to_pri(csolns)
 
     if cgrads is None:
         return psolns, None
     else:
-        return psolns, elementscls.grad_con_to_pri(csolns, cgrads, scfg)
+        return psolns, fluid.diff_pri(csolns, cgrads)
 
 
 def face_shape_ops(etype, fidx, divisor, nspts, scfg):
@@ -178,7 +177,7 @@ class _IntegratorAdapter:
         self.acfg = acfg
         self.cfgsect = cfgsect
         self.dtype = intg.system.backend.fpdtype
-        self.elementscls = intg.system.elementscls
+        self.fluid = get_fluid(self.scfg, intg.system.ndims)
 
     @property
     def tcurr(self):
@@ -197,7 +196,7 @@ class _IntegratorAdapter:
         return dict(zip(self.intg.system.ele_types, self.intg.grad_soln))
 
     def psolns_pgrads(self, csolns, cgrads):
-        return con_psolns_pgrads(self.elementscls, self.scfg, csolns, cgrads)
+        return con_psolns_pgrads(self.fluid, csolns, cgrads)
 
     def soln_op_vpts(self, etype, divisor):
         eles = self.intg.system.ele_map[etype]
@@ -291,10 +290,6 @@ class _VolumeAscentOutput:
             return csolns, soln_op @ cg
         else:
             return csolns, None
-
-    def run_postproc(self, runner, etype, psolns, pgrads):
-        adapter = VolumePostProcData(self.renderer.scfg, psolns, pgrads)
-        return runner.run(adapter, public_only=True)
 
     def _emit(self, mesh_n, dom, fname, arr):
         # Scalars publish at values; vectors split into values/x, /y, /z
@@ -415,30 +410,6 @@ class _BoundaryAscentOutput(_VolumeAscentOutput):
         cgrads = np.concatenate(cgs, axis=3) if cgs else None
         return csolns, cgrads
 
-    def run_postproc(self, runner, itype, psolns, pgrads):
-        scfg = self.renderer.scfg
-        spts = self.renderer.mesh.spts
-
-        # Slice per-patch views, run postprocs, merge by field across patches
-        merged = defaultdict(list)
-        offset = 0
-        for eidxs, etype, _, _, fidx, svpts in self.patches[itype]:
-            sl = slice(offset, offset + len(eidxs))
-            ppris = [p[..., sl] for p in psolns]
-            if pgrads is None:
-                ppgrads = None
-            else:
-                ppgrads = [None if g is None else g[..., sl] for g in pgrads]
-            offset = sl.stop
-
-            psp = spts[etype][:, eidxs]
-            adapter = BoundaryPostProcData(scfg, ppris, psp, etype, fidx,
-                                           svpts, grad_pris=ppgrads)
-            for fname, arr in runner.run(adapter, public_only=True).items():
-                merged[fname].append(arr)
-
-        return {fname: np.concatenate(parts, axis=1)
-                for fname, parts in merged.items()}
 
 
 class AscentRenderer:
@@ -455,7 +426,7 @@ class AscentRenderer:
         self.cfgsect = cfgsect = adapter.cfgsect
 
         self.scfg = adapter.scfg
-        self.elementscls = adapter.elementscls
+        self.fluid = adapter.fluid
         self.dtype = adapter.dtype
 
         # Set order for subdivision
@@ -500,7 +471,6 @@ class AscentRenderer:
         self._fields_write = set()
         self._fields_read = set()
         self._init_fields()
-        self._init_postproc()
         self._init_scenes()
         self._init_pipelines()
 
@@ -636,6 +606,9 @@ class AscentRenderer:
     def _init_fields(self):
         cons = self.scfg.items_as('constants', float)
 
+        self._registry = FieldRegistry(self.scfg, self.mesh.ndims)
+        fnames = set()
+
         for k in self.acfg.items(self.cfgsect, prefix='field-'):
             field = k.removeprefix('field-')
 
@@ -645,28 +618,15 @@ class AscentRenderer:
 
             raw = self.acfg.get(self.cfgsect, k)
             comps = [process_expr(c, cons) for c in split_components(raw)]
+
+            # Expand any registry fields in the components
+            for i, c in enumerate(comps):
+                comps[i], fn = self._registry.expand(c)
+                fnames.update(fn)
+
             self._exprs.append((field, comps))
 
-    def _init_postproc(self):
-        # Parse postproc-{name} = <sources>; one runner per source
-        groups = defaultdict(list)
-        for k in self.acfg.items(self.cfgsect, prefix='postproc-'):
-            name = k.removeprefix('postproc-')
-            for s in self.acfg.get(self.cfgsect, k).split(','):
-                sname = s.strip()
-                if sname not in self.sources:
-                    raise AscentError(f'Postproc {name!r}: unknown source '
-                                      f'{sname!r}')
-                groups[sname].append(name)
-
-        self._postproc_runners = {}
-        for sname, names in groups.items():
-            runner = PostProcRunner(names, self.mesh.ndims, self.scfg,
-                                    export_type=self.sources[sname].kind)
-            self._postproc_runners[sname] = runner
-
-            for fname in runner.fields(public_only=True):
-                self._register_user_field(sname, fname)
+        self._fluid_names = sorted(fnames)
 
     def _init_gradients(self):
         # Determine what gradients, if any, are required
@@ -675,11 +635,7 @@ class AscentRenderer:
             for c in comps:
                 g_pnames.update(re.findall(r'\bgrad_(.+?)_[xyz]\b', c))
 
-        privars = self.elementscls.privars(self.mesh.ndims, self.scfg)
-
-        # Postproc plugins index pgrads positionally; request them all
-        if any(r.needs_grads for r in self._postproc_runners.values()):
-            g_pnames.update(privars)
+        privars = self.fluid.privars
 
         if g_pnames and not self.adapter.has_grads:
             raise AscentError('Gradients required but not available')
@@ -762,10 +718,8 @@ class AscentRenderer:
                 self.scenes[f's_{sn}/plots/{pname}/{_bp_key(kc)}'] = vc
 
     def _evaluate_exprs(self, adapter):
-        elementscls = self.elementscls
-
         # Get the primitive variable names
-        pnames = elementscls.privars(self.mesh.ndims, self.scfg)
+        pnames = self.fluid.privars
 
         tcurr = adapter.tcurr
         cycle = adapter.cycle
@@ -800,19 +754,17 @@ class AscentRenderer:
                     for dim, grad in zip('xyz', pgrads[pidx]):
                         subs[f'grad_{pname}_{dim}'] = grad
 
+            # Fluid quantities required by the expressions
+            if self._fluid_names:
+                q = self._registry.eval_quantities(self._fluid_names, psolns)
+                subs |= {f'{n}_qf': v for n, v in q.items()}
+
             items = []
 
             # Field expressions
             for field, comps in self._exprs:
                 arr = np.stack([npeval(c, subs) for c in comps], axis=-1)
                 items.append((self._field_name(sname, field), arr))
-
-            # Postproc plugins for this source/key
-            if runner := self._postproc_runners.get(sname):
-                pp_fields = source.run_postproc(runner, key, psolns, pgrads)
-                for field, arr in pp_fields.items():
-                    items.append((self._field_name(sname, field),
-                                  np.atleast_3d(arr)))
 
             out[sname][key] = items
 

@@ -83,9 +83,13 @@ class VTKVolumeWriter(BaseVTKWriter):
         # Interpolate the solution to the vis points
         vsoln = interpolate_pts(soln_vtu_op, soln)
 
-        # Run postproc plugins at svpts (views into vsoln/vpts)
         samples = vsoln.transpose(1, 0, 2)
-        pointf.update(self.pp_runner.run_samples(self.soln.config, samples))
+
+        # Evaluate any registry-backed fields
+        if self._reg_fields:
+            for fname, arr in self._registry.evaluate(self._reg_fields,
+                                                      samples).items():
+                pointf[fname] = arr.astype(self.dtype)
 
         # Append dummy z dimension for points in 2D (post-pp)
         if self.ndims == 2:

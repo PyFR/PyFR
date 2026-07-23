@@ -2,7 +2,6 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
 <%include file='pyfr.solvers.euler.kernels.bcs.${bctype}'/>
-<%include file='pyfr.solvers.euler.kernels.entropy'/>
 
 <%pyfr:kernel name='bccent' ndim='1'
               ul='in view fpdtype_t[${str(nvars)}]'
@@ -15,10 +14,7 @@
     fpdtype_t ur[${nvars}];
     ${pyfr.expand('bc_rsolve_state', 'ul', 'norm_nl', 'ur')};
 
-    // Compute entropy for boundary state
-    fpdtype_t p, d, entmin_rhs;
-    ${pyfr.expand('compute_entropy', 'ur', 'd', 'p', 'entmin_rhs')};
-
-    // Compute face minima (reduce with atomics)
-    entmin_lhs = entmin_rhs;
+    // Compute entropy for the boundary state (reduce with atomics)
+    ${fluid.decl('ur', 's', suffix='_ce')}
+    entmin_lhs = s_ce;
 </%pyfr:kernel>

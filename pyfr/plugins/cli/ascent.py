@@ -2,6 +2,7 @@ from functools import cached_property
 
 import numpy as np
 
+from pyfr.fluids import get_fluid
 from pyfr.inifile import Inifile
 from pyfr.mpiutil import init_mpi
 from pyfr.plugins.base import BaseCLIPlugin
@@ -15,8 +16,6 @@ from pyfr.util import subclass_where
 
 class _CLIAdapter:
     def __init__(self, mesh, soln, acfg, cfgsect):
-        from pyfr.solvers.base import BaseSystem
-
         self.mesh = mesh
         self._soln = soln
         self.scfg = soln.config
@@ -24,8 +23,7 @@ class _CLIAdapter:
         self.cfgsect = cfgsect
         self.dtype = np.float32
 
-        sname = self.scfg.get('solver', 'system')
-        self.elementscls = subclass_where(BaseSystem, name=sname).elementscls
+        self.fluid = get_fluid(self.scfg, mesh.ndims)
 
     @property
     def tcurr(self):
@@ -43,9 +41,18 @@ class _CLIAdapter:
     @cached_property
     def _tavg_indices(self):
         # Primitive (or grad_X_Y) name -> index in soln.fields for tavg
-        section = self._soln.stats.get('tavg', 'cfg-section')
+        stats = self._soln.stats
+
+        # Prefer the per-field expressions recorded in the stats; fall
+        # back to the echoed config section for older files
+        if 'tavg-exprs' in stats.sections():
+            items = stats.items('tavg-exprs', prefix='avg-')
+        else:
+            section = stats.get('tavg', 'cfg-section')
+            items = self._soln.config.items(section, prefix='avg-')
+
         mapping = {}
-        for k, raw in self._soln.config.items(section, prefix='avg-').items():
+        for k, raw in items.items():
             if k in self._soln.fields:
                 mapping[raw.strip()] = self._soln.fields.index(k)
 
@@ -82,12 +89,11 @@ class _CLIAdapter:
         if self.is_tavg:
             return self._tavg_psolns_pgrads(csolns)
         else:
-            ecls, scfg = self.elementscls, self.scfg
-            return con_psolns_pgrads(ecls, scfg, csolns, cgrads)
+            return con_psolns_pgrads(self.fluid, csolns, cgrads)
 
     def _tavg_psolns_pgrads(self, csolns):
         ndims = self.mesh.ndims
-        privars = self.elementscls.privars(ndims, self.scfg)
+        privars = self.fluid.privars
         idx = self._tavg_indices
 
         if missing := [pn for pn in privars if pn not in idx]:
@@ -104,7 +110,7 @@ class _CLIAdapter:
             else:
                 pgrads.append(None)
 
-        # Collapse to None so downstream postproc skips grads entirely
+        # Collapse to None so downstream consumers skip grads entirely
         if not any(g is not None for g in pgrads):
             pgrads = None
 

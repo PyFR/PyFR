@@ -3,6 +3,7 @@ from collections import defaultdict
 import numpy as np
 
 from pyfr.cache import memoize
+from pyfr.fields.geometry import BoundaryGeometry
 from pyfr.nputil import search_unsorted
 from pyfr.polys import get_polybasis
 from pyfr.shapes import BaseShape, proj_pts
@@ -165,11 +166,18 @@ class VTKBoundaryWriter(BaseVTKWriter):
                 )
 
             samples = face_vsoln.transpose(1, 0, 2)
-            bdy = (spts, etype, fidx, svpts)
-            got = self.pp_runner.run_samples(self.soln.config, samples,
-                                             boundary=bdy)
-            for fname, arr in got.items():
-                pointf[fname].append(arr)
+
+            # Evaluate any registry-backed fields
+            if self._reg_fields:
+                geom = None
+                if self._registry.needs_geom(self._reg_fields):
+                    bg = BoundaryGeometry(self.soln.config, spts, etype,
+                                          fidx, svpts)
+                    geom = bg.symbols(self.ndims)
+
+                for fname, arr in self._registry.evaluate(
+                        self._reg_fields, samples, geom=geom).items():
+                    pointf[fname].append(arr.astype(self.dtype))
 
         # Concatenate extra fields
         cellf = {k: np.hstack(v) for k, v in cellf.items()}

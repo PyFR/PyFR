@@ -1,5 +1,6 @@
 import numpy as np
 
+from pyfr.fluids import get_fluid
 from pyfr.solvers.base.elements import ExportableField
 from pyfr.solvers.baseadvec import BaseAdvectionElements
 
@@ -43,7 +44,8 @@ class BaseFluidElements:
             'nvars': self.nvars,
             'nverts': len(self.basis.linspts),
             'c': self.cfg.items_as('constants', float),
-            'jac_exprs': self.basis.jac_exprs
+            'jac_exprs': self.basis.jac_exprs,
+            'fluid': get_fluid(self.cfg, self.ndims)
         }
 
         wkerns = []
@@ -71,80 +73,26 @@ class BaseFluidElements:
 
     @staticmethod
     def privars(ndims, cfg):
-        if ndims == 2:
-            return ['rho', 'u', 'v', 'p']
-        elif ndims == 3:
-            return ['rho', 'u', 'v', 'w', 'p']
+        return get_fluid(cfg, ndims).privars
 
     @staticmethod
     def convars(ndims, cfg):
-        if ndims == 2:
-            return ['rho', 'rhou', 'rhov', 'E']
-        elif ndims == 3:
-            return ['rho', 'rhou', 'rhov', 'rhow', 'E']
+        return get_fluid(cfg, ndims).convars
 
     dualcoeffs = convars
 
     @staticmethod
     def visvars(ndims, cfg):
-        if ndims == 2:
-            return {
-                'density': ['rho'],
-                'velocity': ['u', 'v'],
-                'pressure': ['p']
-            }
-        elif ndims == 3:
-            return {
-                'density': ['rho'],
-                'velocity': ['u', 'v', 'w'],
-                'pressure': ['p']
-            }
+        return get_fluid(cfg, ndims).visvars
 
     @staticmethod
     def pri_to_con(pris, cfg):
-        rho, p = pris[0], pris[-1]
-
-        # Multiply velocity components by rho
-        rhovs = [rho*c for c in pris[1:-1]]
-
-        # Compute the energy
-        gamma = cfg.getfloat('constants', 'gamma')
-        E = p/(gamma - 1) + 0.5*rho*sum(c*c for c in pris[1:-1])
-
-        return [rho, *rhovs, E]
+        return get_fluid(cfg, len(pris) - 2).pri_to_con(pris)
 
     @staticmethod
     def con_to_pri(cons, cfg):
-        rho, E = cons[0], cons[-1]
+        return get_fluid(cfg, len(cons) - 2).con_to_pri(cons)
 
-        # Divide momentum components by rho
-        vs = [rhov/rho for rhov in cons[1:-1]]
-
-        # Compute the pressure
-        gamma = cfg.getfloat('constants', 'gamma')
-        p = (gamma - 1)*(E - 0.5*rho*sum(v**2 for v in vs))
-
-        return [rho, *vs, p]
-
-    @staticmethod
-    def diff_con_to_pri(cons, diff_cons, cfg):
-        rho, *rhouvw = cons[:-1]
-        diff_rho, *diff_rhouvw, diff_E = diff_cons
-
-        # Divide momentum components by ρ
-        uvw = [rhov / rho for rhov in rhouvw]
-
-        # Velocity gradients: ∂u⃗ = 1/ρ·[∂(ρu⃗) - u⃗·∂ρ]
-        diff_uvw = [(diff_rhov - v*diff_rho) / rho
-                    for diff_rhov, v in zip(diff_rhouvw, uvw)]
-
-        # Pressure gradient: ∂p = (γ - 1)·[∂E - 1/2*(u⃗·∂(ρu⃗) + ρu⃗·∂u⃗)]
-        gamma = cfg.getfloat('constants', 'gamma')
-        diff_p = diff_E - 0.5*(sum(u*dru for u, dru in zip(uvw, diff_rhouvw)) +
-                               sum(ru*du for ru, du in zip(rhouvw, diff_uvw)))
-        diff_p *= gamma - 1
-
-        return [diff_rho, *diff_uvw, diff_p]
 
 class EulerElements(BaseFluidElements, BaseAdvectionElements):
     def set_backend(self, *args, **kwargs):
@@ -163,7 +111,8 @@ class EulerElements(BaseFluidElements, BaseAdvectionElements):
             'nvars': self.nvars,
             'nverts': len(self.basis.linspts),
             'c': self.cfg.items_as('constants', float),
-            'jac_exprs': self.basis.jac_exprs
+            'jac_exprs': self.basis.jac_exprs,
+            'fluid': get_fluid(self.cfg, self.ndims)
         }
 
         # Helpers

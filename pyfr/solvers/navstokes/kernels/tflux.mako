@@ -31,10 +31,12 @@
     ${pyfr.expand('transform_grad', gradu, smats, rcpdjac)};
 % endif
 
+    // Compute the primitive state
+    ${fluid.decl('u', 'v, p')}
+
     // Compute the flux (F = Fi + Fv)
     fpdtype_t ftemp[${ndims}][${nvars}];
-    fpdtype_t p, v[${ndims}];
-    ${pyfr.expand('inviscid_flux', 'u', 'ftemp', 'p', 'v')};
+    ${pyfr.expand('inviscid_flux', 'u', 'p', 'v', 'ftemp')};
     ${pyfr.expand('viscous_flux_add', 'u', gradu, 'ftemp')};
 % if shock_capturing == 'artificial-viscosity':
     fpdtype_t artvisc;

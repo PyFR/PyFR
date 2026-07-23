@@ -7,14 +7,13 @@ import re
 import h5py
 import numpy as np
 
+from pyfr.fluids import get_fluid
 from pyfr.inifile import Inifile
 from pyfr.mpiutil import get_comm_rank_root, init_mpi
 from pyfr.plugins.base import BaseCLIPlugin
 from pyfr.plugins.common import cli_external
-from pyfr.plugins.postproc.runner import PostProcRunner
 from pyfr.points import PointLocator, PointSampler
 from pyfr.readers.native import NativeReader
-from pyfr.util import subclass_where
 
 
 def _read_pts(ptsf, ndims=None, skip=0):
@@ -33,22 +32,21 @@ def _read_pts(ptsf, ndims=None, skip=0):
     return pts
 
 
-def _process_con_to_pri(elementscls, ndims, cfg, *, has_grads=False):
-    nvars = len(elementscls.convars(ndims, cfg))
-    con_to_pri = elementscls.con_to_pri
-    diff_con_to_pri = elementscls.diff_con_to_pri
+def _process_con_to_pri(ndims, cfg, *, has_grads=False):
+    fluid = get_fluid(cfg, ndims)
+    nvars = len(fluid.convars)
 
     def process(samps):
         if samps.size:
             samps = samps.T
 
             # Convert the samples to primitive variables
-            psamps = con_to_pri(samps[:nvars], cfg)
+            psamps = fluid.con_to_pri(samps[:nvars])
 
             # Also convert any gradient data
             if has_grads:
                 diff_con = samps[nvars:].reshape(nvars, ndims, -1)
-                diff_pri = diff_con_to_pri(samps[:nvars], diff_con, cfg)
+                diff_pri = fluid.diff_pri(samps[:nvars], diff_con)
 
                 psamps += [f for gf in diff_pri for f in gf]
 
@@ -113,12 +111,6 @@ class SamplerCLIPlugin(BaseCLIPlugin):
             '-f', '--format',  choices=['conservative', 'primitive'],
              default='conservative', help='output format'
         )
-        ap_sample.add_argument(
-            '--postproc', dest='pp_plugins', action='append', default=[],
-            metavar='PLUGIN', help='postprocessing plugin; may be repeated'
-        )
-        ap_sample.add_argument('--cfg', dest='pp_cfg',
-                               help='config file for postproc plugins')
         ap_sample.add_argument('-s', '--sep', default='\t', help='separator')
         ap_sample.set_defaults(process=cls.sample_cmd)
 
@@ -256,41 +248,26 @@ class SamplerCLIPlugin(BaseCLIPlugin):
 
             sdata.append(d)
 
-        # Postproc plugins require primitive format
-        if args.pp_plugins and args.format != 'primitive':
-            raise ValueError('Postproc plugins require --format=primitive')
-
         # Handle conversion from conservative to primitive variables
         if args.format == 'primitive':
-            from pyfr.solvers.base import BaseSystem
-
             if soln.stats.get('data', 'prefix') != 'soln':
                 raise ValueError('Primitive output only supported for '
                                  'solution files')
 
-            # Obtain the system associated with the solution
-            systemcls = subclass_where(
-                BaseSystem, name=soln.config.get('solver', 'system')
-            )
-            elementscls = systemcls.elementscls
-            vmap = elementscls.privars(mesh.ndims, soln.config)
+            vmap = get_fluid(soln.config, mesh.ndims).privars
 
             fields = list(vmap)
             if has_grads:
                 fields.extend(f'grad_{v}_{d}' for v in vmap for d in dims)
 
-            process = _process_con_to_pri(elementscls, mesh.ndims,
-                                          soln.config, has_grads=has_grads)
+            process = _process_con_to_pri(mesh.ndims, soln.config,
+                                          has_grads=has_grads)
         else:
             process = None
             if has_grads:
                 fields = list(fields)
                 fields.extend(f'grad_{v}_{d}'
                               for v in soln.fields for d in dims)
-
-        # Resolve postproc plugins + dependencies in topological order
-        pp_cfg = Inifile.load(args.pp_cfg) if args.pp_cfg else soln.config
-        runner = PostProcRunner(args.pp_plugins, mesh.ndims, pp_cfg, 'volume')
 
         # Construct and configure the point sampler
         sampler = PointSampler(mesh, pts, locs)
@@ -299,21 +276,8 @@ class SamplerCLIPlugin(BaseCLIPlugin):
         # Sample the solution
         samps = sampler.sample(sdata, process=process)
 
-        # Have the root rank post-process and write the samples
+        # Have the root rank write the samples
         if rank == root:
-            # Run any requested post-processing plugins
-            if runner:
-                pp_field_map = runner.fields(public_only=True)
-                public = runner.run_samples(soln.config, samps.T,
-                                            public_only=True)
-
-                extra_cols = []
-                for name, arr in public.items():
-                    fields.extend(pp_field_map[name])
-                    extra_cols.append(np.atleast_2d(arr.T).T)
-
-                samps = np.concatenate([samps, *extra_cols], axis=1)
-
             # Write out the header
             print(*dims, *fields, sep=args.sep)
 

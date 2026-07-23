@@ -2,6 +2,7 @@ from collections import namedtuple
 
 import numpy as np
 
+from pyfr.fluids import get_fluid
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.nputil import npeval
 from pyfr.plugins.common import init_csv
@@ -77,7 +78,7 @@ class FWHPlugin(SurfaceRegionMixin, BaseSolnPlugin):
         super().__init__(intg, cfgsect, suffix)
         comm, rank, root = get_comm_rank_root()
 
-        self.elementscls = intg.system.elementscls
+        self.fluid = get_fluid(self.cfg, intg.system.ndims)
 
         self.dt = self.cfg.getfloat(cfgsect, 'dt')
         obsv_pts = np.array(self.cfg.getliteral(self.cfgsect, 'observer-pts'))
@@ -145,7 +146,7 @@ class FWHPlugin(SurfaceRegionMixin, BaseSolnPlugin):
             s = param.m0 @ soln.transpose(1, 0, 2)
             s_t = param.m0 @ soln_t.transpose(1, 0, 2)
 
-            pris = self.elementscls.con_to_pri(s, self.cfg)
+            pris = self.fluid.con_to_pri(s)
             pris = np.reshape(pris, (self.nvars, -1))
 
             if str(self.bctype).startswith('no-slp'):
@@ -160,7 +161,7 @@ class FWHPlugin(SurfaceRegionMixin, BaseSolnPlugin):
             drift = -d_inf*self.uinf
 
             # Time derivatives
-            pris_t = self.elementscls.diff_con_to_pri(s, s_t, self.cfg)
+            pris_t = self.fluid.diff_pri(s, s_t)
             pris_t = np.reshape(pris_t, (self.nvars, -1))
 
             u_t = pris_t[self._vidx]
