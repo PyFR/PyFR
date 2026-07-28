@@ -213,7 +213,7 @@ dependent, boundary condition labelled *name* in the .pyfrm file with
 
         - ``pt`` --- total pressure
 
-           *float*
+           *float* | *string*
 
         - ``cpTt`` --- product of specific heat capacity at constant
           pressure and total temperature

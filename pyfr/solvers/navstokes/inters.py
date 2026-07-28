@@ -207,14 +207,14 @@ class NavierStokesSubInflowFtpttangBCInters(NavierStokesBaseBCInters):
     type = 'sub-in-ftpttang'
     cflux_state = 'ghost'
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
+        super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
 
         gamma = self.cfg.getfloat('constants', 'gamma')
 
         # Pass boundary constants to the backend
         self.c['cpTt'], = self._eval_opts(['cpTt'])
-        self.c['pt'], = self._eval_opts(['pt'])
+        self.c |= self._exp_opts(['pt'], lhs)
         self.c['Rdcp'] = (gamma - 1.0)/gamma
 
         # Calculate u, v velocity components from the inflow angle
