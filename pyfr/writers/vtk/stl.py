@@ -4,6 +4,7 @@ from pyfr.mpiutil import get_comm_rank_root
 from pyfr.points import PointLocator, PointSampler
 from pyfr.polys import TriPolyBasis
 from pyfr.shapes import interp_pts, TriShape
+from pyfr.util import first
 from pyfr.writers.vtk.base import BaseVTKWriter
 
 
@@ -146,7 +147,7 @@ class VTKSTLWriter(BaseVTKWriter):
                               if m.kind == 'point'}
 
         # Aux fields sampled through the pipeline (those in the file)
-        dt = soln.dtypes[self._extra_etype]
+        dt = first(soln.dtypes.values())
         file_aux = set(dt['aux'].names if 'aux' in dt.names else ())
         aux_info = [(n, m.ncomps) for n, m in self._extra_fields.items()
                     if n in file_aux]

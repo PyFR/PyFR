@@ -8,7 +8,7 @@ from pyfr.fields import FieldRecovery, con_block_to_pri
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.shapes import BaseShape, interp_pts
 from pyfr.subdiv import get_subdiv
-from pyfr.util import first, subclass_where
+from pyfr.util import subclass_where
 from pyfr.writers import BaseWriter
 from pyfr.writers.vtk.output import CleanToGridVTKOutput, DirectVTKOutput
 
@@ -65,8 +65,8 @@ class BaseVTKWriter(BaseWriter):
 
     def _classify_aux_fields(self):
         # Classify aux fields by shape
-        pshapes = self._extra_point_shapes(self._extra_etype)
-        for dt in self.soln.dtypes.values():
+        for etype, dt in self.soln.dtypes.items():
+            pshapes = self._extra_point_shapes(etype)
             for name in dt['aux'].names if 'aux' in dt.names else ():
                 shape, base = dt['aux'][name].shape, dt['aux'][name].base
 
@@ -214,9 +214,6 @@ class BaseVTKWriter(BaseWriter):
 
     def _load_soln(self, *args, **kwargs):
         super()._load_soln(*args, **kwargs)
-
-        # Pick an arbitrary element type for aux field classification
-        self._extra_etype = first(self.soln.dtypes)
 
         # Determine the per-etype divisor
         divisor = self.divisor or self.cfg.getint('solver', 'order')
