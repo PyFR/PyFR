@@ -41,6 +41,10 @@ class GmshReader(BaseReader):
         7: ('pyr', 5), 14: ('pyr', 14), 118: ('pyr', 30), 119: ('pyr', 55)
     }
 
+    # Spatial dimension of each PyFR element type
+    _petype_ndim = {'line': 1, 'tri': 2, 'quad': 2,
+                    'tet': 3, 'hex': 3, 'pri': 3, 'pyr': 3}
+
     # First-order node numbers associated with each element face
     _petype_fnmap = {
         'tri': {'line': [[0, 1], [1, 2], [2, 0]]},
@@ -268,9 +272,9 @@ class GmshReader(BaseReader):
         self._bfacespents = {}
         self._pfacespents = defaultdict(list)
 
-        # Seen physical names and IDs
+        # Seen physical names and (dim, ID) pairs
         seen_names = set()
-        seen_ids = set()
+        seen = set()
 
         # Collect all physical names with their dimensions
         pnames = []
@@ -285,16 +289,16 @@ class GmshReader(BaseReader):
             if name in seen_names:
                 raise ValueError(f'Duplicate physical name: {name}')
 
-            # Ensure physical entitiy IDs are unique
-            if pent in seen_ids:
+            # Physical entity IDs are only unique per-dimension
+            if (dim, pent) in seen:
                 raise ValueError(f'Duplicate physical entity ID: {pent}')
 
             pnames.append((dim, pent, name))
             seen_names.add(name)
-            seen_ids.add(pent)
+            seen.add((dim, pent))
 
         # Classify by dimension
-        voldim = max(dim for dim, _, _ in pnames)
+        self._voldim = max(dim for dim, _, _ in pnames)
 
         for dim, pent, name in pnames:
             # Periodic boundary faces
@@ -303,13 +307,13 @@ class GmshReader(BaseReader):
                 if not p:
                     raise ValueError('Invalid periodic boundary condition')
 
-                self._pfacespents[p[1]].append(pent)
+                self._pfacespents[p[1]].append((dim, pent))
             # Volume elements
-            elif dim == voldim:
+            elif dim == self._voldim:
                 self._volpents[name] = pent
             # Other boundary faces
             else:
-                self._bfacespents[name] = pent
+                self._bfacespents[name] = (dim, pent)
 
         if not self._volpents:
             raise ValueError('No volume elements in mesh')
@@ -397,8 +401,9 @@ class GmshReader(BaseReader):
             if etype not in self._etype_map:
                 raise ValueError(f'Unsupported element type {etype}')
 
-            # Physical entity type (used for BCs)
-            elenodes[etype, (etags[0],)].append(enodes)
+            # Physical entity type (used for BCs); keyed by its dimension
+            edim = self._petype_ndim[self._etype_map[etype][0]]
+            elenodes[etype, (edim, (etags[0],))].append(enodes)
 
         self._elenodes = {k: np.array(v) for k, v in elenodes.items()}
 
@@ -417,14 +422,14 @@ class GmshReader(BaseReader):
             # Determine the number of nodes associated with each element
             nnodes = self._etype_map[etype][1]
 
-            # Lookup the physical entity type(s)
+            # Lookup the physical entity type(s); keyed by their dimension
             epents = self._tagpents[edim, etag]
 
             # Allocate space for, and read in, these elements
             enodes = np.loadtxt(mshit, dtype=np.int64, max_rows=ecount,
                                 usecols=range(1, nnodes + 1), ndmin=2)
 
-            elenodes[etype, epents].append(enodes)
+            elenodes[etype, (edim, epents)].append(enodes)
 
         if ne != sum(len(vv) for v in elenodes.values() for vv in v):
             raise ValueError('Invalid element count')
@@ -439,17 +444,18 @@ class GmshReader(BaseReader):
         pbits = {p: 1 << i
                  for i, (_, p) in enumerate(sorted(self._volpents.items()))}
         volpent = min(self._volpents.values())
+        voldim = self._voldim
 
         elenodes = {}
         tagruns, vnodes = defaultdict(list), defaultdict(list)
 
-        for (etype, pents), nodes in sorted(self._elenodes.items()):
+        for (etype, (edim, pents)), nodes in sorted(self._elenodes.items()):
             # Compute the combined bitmask for volume pents
-            mask = sum(pbits[p] for p in pents if p in pbits)
+            mask = sum(pbits[p] for p in pents if edim == voldim and p in pbits)
 
             # Pass through non-volume entries unchanged
             if not mask:
-                elenodes[etype, pents[0]] = nodes
+                elenodes[etype, (edim, pents[0])] = nodes
                 continue
 
             petype = self._etype_map[etype][0]
