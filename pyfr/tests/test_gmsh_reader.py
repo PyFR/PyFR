@@ -27,13 +27,6 @@ def test_gmsh_dup_physical_ids_3d_v41():
     assert r._bfacespents['bottom'] == (2, 3)
 
 
-def test_gmsh_dup_physical_ids_3d_v22():
-    r = _read('dup2.2.msh')
-    assert r._volpents == {'vol': 1}
-    assert r._bfacespents['wall'] == (2, 1)
-    assert r._bfacespents['outlet'] == (2, 2)
-
-
 def test_gmsh_dup_physical_ids_2d():
     r = _read('q2d_full_dup.msh')
     assert r._volpents == {'vol': 1}

@@ -392,18 +392,24 @@ class GmshReader(BaseReader):
     def _read_eles_impl_v2(self, mshit):
         elenodes = defaultdict(list)
 
+        # Resolve each gmsh element type to its dimension once, rather than
+        # looking it up (via _etype_map then _petype_ndim) for every element
+        edim_by_etype = {
+            etype: self._petype_ndim[petype]
+            for etype, (petype, *_) in self._etype_map.items()
+        }
+
         for l in msh_section(mshit, 'Elements'):
             # Extract the raw element data
             elei = [int(i) for i in l.split()]
             enum, etype, entags = elei[:3]
             etags, enodes = elei[3:3 + entags], elei[3 + entags:]
 
-            if etype not in self._etype_map:
+            if etype not in edim_by_etype:
                 raise ValueError(f'Unsupported element type {etype}')
 
             # Physical entity type (used for BCs); keyed by its dimension
-            edim = self._petype_ndim[self._etype_map[etype][0]]
-            elenodes[etype, (edim, (etags[0],))].append(enodes)
+            elenodes[etype, (edim_by_etype[etype], (etags[0],))].append(enodes)
 
         self._elenodes = {k: np.array(v) for k, v in elenodes.items()}
 
