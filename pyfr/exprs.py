@@ -17,8 +17,9 @@ _npeval_syms = {
 
 
 def expr_vars(expr):
-    # Free variable names referenced by an expression
-    return sorted(set(re.findall(r'[A-Za-z_]\w*', expr)) - set(_npeval_syms))
+    # Free variable names referenced by an expression;
+    return sorted(set(re.findall(r'(?<![\d.])[A-Za-z_]\w*', expr))
+                  - set(_npeval_syms))
 
 
 def npeval(expr, locals):
