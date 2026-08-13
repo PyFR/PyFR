@@ -1,8 +1,8 @@
 from collections import defaultdict
 from functools import partial
 
+from boostree import RTree
 import numpy as np
-from rtree.index import Index, Property
 
 from pyfr.cache import memoize
 from pyfr.mpiutil import autofree, get_comm_rank_root, get_start_end_csize, mpi
@@ -161,8 +161,7 @@ class PointLocator:
         nodes = self.mesh.raw['nodes'][start:end]['location']
 
         # Insert these points into a spatial index
-        tree = Index((np.arange(len(nodes)), nodes, nodes),
-                     properties=Property(dimension=self.mesh.ndims))
+        tree = RTree.from_points(nodes)
 
         return nodes, start, tree
 
@@ -179,15 +178,14 @@ class PointLocator:
         smax += expand
 
         # Insert these boxes into a spatial index
-        return Index((np.arange(len(smin)), smin, smax),
-                     properties=Property(dimension=self.mesh.ndims))
+        return RTree.from_boxes(smin, smax)
 
     def _find_closest_node(self, pts):
         comm, _, _ = get_comm_rank_root()
 
         # Query the node index to find our closest node
         nodes, off, tree = self._get_nodes_off_tree()
-        nearest = tree.nearest_v(pts, pts, strict=True)[0]
+        nearest = tree.knn(pts, k=1)[0][:, 0]
 
         buf = np.empty(len(pts), dtype=[('dist', float), ('idx', int)])
         buf['dist'] = np.linalg.norm(pts - nodes[nearest], axis=1)
@@ -221,7 +219,7 @@ class PointLocator:
     def _find_closest_element_bbox(self, etype, pts):
         # Query the index to find intersecting elements
         tree = self._get_bbox_tree(etype)
-        sidx, icounts = tree.intersection_v(pts, pts)
+        sidx, icounts = tree.intersect(pts, pts)
 
         pidx = np.repeat(np.arange(len(pts)), icounts.astype(int))
         return self._find_closest_element(etype, pts, pidx, sidx)

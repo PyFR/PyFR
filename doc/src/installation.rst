@@ -116,13 +116,13 @@ Dependencies
 PyFR |release| has a hard dependency on Python 3.12+ and the following
 Python packages:
 
+#. `boostree <https://github.com/PyFR/Boostree>`_ >= 0.1.0
 #. `gimmik <https://github.com/PyFR/GiMMiK>`_ >= 3.2.1
 #. `h5py <https://www.h5py.org/>`_ >= 2.10
 #. `mako <https://www.makotemplates.org/>`_ >= 1.0.0
 #. `mpi4py <https://mpi4py.readthedocs.io/en/stable/>`_ >= 4.0
 #. `numpy <https://www.numpy.org/>`_ >= 2.3.5
 #. `platformdirs <https://pypi.org/project/platformdirs/>`_ >= 2.2.0
-#. `rtree <https://pypi.org/project/Rtree/>`_ >= 1.4.1
 
 In addition an MPI library supporting version 4 of the MPI standard is
 required.

@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 import math
 
+from boostree import RTree
 import numpy as np
-from rtree.index import Index, Property
 
 from pyfr.plugins.solver.base import BaseSolverPlugin
 from pyfr.regions import BoxRegion
@@ -196,7 +196,6 @@ class TurbulencePlugin(BaseSolverPlugin):
 
     def _get_vortex_data(self, intg):
         ls, avgu = self.ls, self.avgu
-        props = Property(dimension=3)
         eventdtype = self.eventdtype
         data = {}
 
@@ -218,15 +217,14 @@ class TurbulencePlugin(BaseSolverPlugin):
             eids = np.flatnonzero(np.any(inside, axis=0))
             ptsri = ptsr[:, eids]
             bmins, bmaxs = ptsri.min(axis=0), ptsri.max(axis=0)
-            rtree = Index((np.arange(len(eids)), bmins, bmaxs),
-                          properties=props)
+            etree = RTree.from_boxes(bmins, bmaxs)
 
             # Find (vortex, element) pairs whose bounding boxes overlap
             nvort = len(self.vortexbuf)
             vy, vz = self.vortexbuf.yinit, self.vortexbuf.zinit
             vmins = np.column_stack([np.full(nvort, -2*ls), vy - ls, vz - ls])
             vmaxs = np.column_stack([np.full(nvort, 2*ls), vy + ls, vz + ls])
-            ids, cnts = rtree.intersection_v(vmins, vmaxs)
+            ids, cnts = etree.intersect(vmins, vmaxs)
             vids = np.repeat(np.arange(nvort), cnts.astype(int))
 
             # Refine to solution points actually inside each vortex box

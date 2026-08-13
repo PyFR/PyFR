@@ -2,8 +2,8 @@ from ast import literal_eval
 from collections import defaultdict
 import re
 
+from boostree import RTree
 import numpy as np
-from rtree.index import Index, Property
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.util import match_paired_paren, subclass_where
@@ -414,8 +414,7 @@ class STLRegion(PointwiseGeometricRegion):
         fmaxs = faces.max(axis=1) + 1e-6
 
         # Use this to construct an R-tree index
-        self.tri_idx = Index((np.arange(len(faces)), fmins, fmaxs),
-                             properties=Property(dimension=3))
+        self.tri_idx = RTree.from_boxes(fmins, fmaxs)
 
     def test(self, pts):
         inside = np.ones(pts.shape[:-1], dtype=bool)
@@ -432,8 +431,8 @@ class STLRegion(PointwiseGeometricRegion):
 
             # Count how many times a ray cast in +z from this point
             # itersects a face on our surface
-            tbox = [*ro, *ro[:2], self.x1[2]]
-            for j in self.tri_idx.intersection(tbox, objects=False):
+            rmax = [*ro[:2], self.x1[2]]
+            for j in self.tri_idx.intersect([ro], [rmax])[0]:
                 u, v, t = np.dot(self.mat[j], (ro - self.fa[j]).T).tolist()
                 crossings += t >= 0 and u >= 0 and v >= 0 and (u + v) <= 1
 

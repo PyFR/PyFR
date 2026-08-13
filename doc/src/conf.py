@@ -40,7 +40,7 @@ inheritance_edge_attrs = dict(
 
 # Modules to mock for autodoc
 autodoc_mock_imports = ['h5py', 'mpi4py', 'gimmik', 'numpy', 'mako',
-                        'platformdirs', 'rtree', 'pyfr.mpiutil']
+                        'platformdirs', 'boostree', 'pyfr.mpiutil']
 
 source_suffix = '.rst'
 root_doc = 'index'
