@@ -127,6 +127,7 @@ class StatsFinalisePostProc(BasePostProcPlugin):
     systems = '.*'
     dimensions = '2|3'
     export_types = '.*'
+    source_prefix = 'tavg'
 
     def __init__(self, source, cfg, export_type=None, want=None):
         super().__init__(source, cfg, export_type, want)
@@ -204,7 +205,6 @@ class TavgDataSource(BaseDataSource):
     prefix = 'tavg'
     adapters = {'volume': TavgPostProcData,
                 'boundary': TavgBoundaryPostProcData}
-    plugins = {'stats': StatsFinalisePostProc}
 
     def prepare(self, mesh, soln, pp_plugins):
         # Averaged data lacks stored gradients; compute them on demand
