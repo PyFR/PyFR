@@ -122,6 +122,24 @@ class GMRESMixin(BaseLinearSolver):
             # Backward substitution to solve for y
             y = np.linalg.solve(self._H[:j + 1, :j + 1], self._beta[:j + 1])
 
+            # Determine if a restart is needed after this cycle
+            will_restart = not (err < rtol or h_jp1_j < self._breakdown_tol
+                                or niters >= nmax)
+
+            # Reconstruct the restart residual before the update clobbers v[0]
+            if will_restart:
+                self._add(1 / h_jp1_j, v[j + 1])
+
+                z = np.zeros(j + 2)
+                z[j + 1] = 1.0
+                for i in range(j, -1, -1):
+                    c, s = self._cs[i], self._sn[i]
+                    z[i:i + 2] = (c*z[i] - s*z[i + 1], s*z[i] + c*z[i + 1])
+                z *= np.copysign(1.0, self._beta[j + 1])
+
+                self._addv([z[j + 1], *z[:j + 1].tolist()],
+                           [v[j + 1], *v[:j + 1]])
+
             # Solution update; first cycle honours accumulate, rest add
             first = niters == j + 1
             acc = float(accumulate) if first else 1.0
@@ -136,13 +154,12 @@ class GMRESMixin(BaseLinearSolver):
                 self._addv([acc, *y.tolist()], [out_reg, *v[:j + 1]],
                            in_scale=accumulate_scale, in_scale_idxs=sidxs)
 
-            if err < rtol or h_jp1_j < self._breakdown_tol or niters >= nmax:
+            if not will_restart:
                 break
 
-            # Restart: recover residual via r_m = beta[j+1]*v_{j+1}/h_{j+1,j}
+            # Restart: install the reconstructed residual as the new v[0]
             rnorm = abs(self._beta[j + 1])
-            s = np.copysign(1 / h_jp1_j, self._beta[j + 1])
-            self._add(0, v[0], s, v[j + 1])
+            self._add(0, v[0], 1, v[j + 1])
 
         # Each matvec applies M⁻¹ once; recovery adds one more per cycle
         return niters, niters + ncycles if precond else 0
