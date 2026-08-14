@@ -1,7 +1,8 @@
 from pyfr.plugins.postproc.adapters import (BoundaryPostProcData,
                                             PostProcData)
+from pyfr.plugins.postproc.base import BasePostProcPlugin
 from pyfr.plugins.postproc.derived import TableDerivedPostProc
-from pyfr.util import subclass_where
+from pyfr.util import subclass_where, subclasses
 
 
 def get_source(prefix, cfg, stats, ndims):
@@ -11,12 +12,17 @@ def get_source(prefix, cfg, stats, ndims):
 class BaseDataSource:
     prefix = None
     adapters = None
-    plugins = {}
 
     def __init__(self, cfg, stats, ndims):
         self.cfg = cfg
         self.stats = stats
         self.ndims = ndims
+
+    @property
+    def plugins(self):
+        # Named plugins self-declare their data source via source_prefix
+        return {cls.name: cls for cls in subclasses(BasePostProcPlugin)
+                if cls.source_prefix == self.prefix}
 
     def adapter(self, soln, kind, samples, ploc, *args):
         return self.adapters[kind].from_soln(soln, samples, ploc, *args)
@@ -35,10 +41,11 @@ class BaseDataSource:
             else:
                 return TableDerivedPostProc(name, self, cfg, export_type, want)
 
-        # Resolve the explicitly requested plugins and derived tables
+        # Resolve the explicitly requested plugins and derived tables.
+        # Transforms mutate the data in place and declare no fields.
         qs = []
         for name in dict.fromkeys(names):
-            if (q := resolve(name)).fields:
+            if (q := resolve(name)).transform or q.fields:
                 qs.append(q)
 
         # Requested fields nothing else supplies become table derivations
@@ -46,6 +53,10 @@ class BaseDataSource:
         for name in sorted((want or set()) - have):
             if (q := resolve(name)).fields:
                 qs.append(q)
+
+        # Transforms run before any field derivation that consumes their
+        # output (stable sort preserves request order within each group)
+        qs.sort(key=lambda q: not q.transform)
 
         return qs
 
