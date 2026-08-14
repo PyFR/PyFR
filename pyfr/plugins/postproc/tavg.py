@@ -90,6 +90,7 @@ class StatsFinalisePostProc(BasePostProcPlugin):
     systems = '.*'
     dimensions = '2|3'
     export_types = '.*'
+    source_prefix = 'tavg'
 
     def __init__(self, source, cfg, export_type=None, kind=None, want=None):
         super().__init__(source, cfg, export_type, kind, want)
@@ -158,7 +159,6 @@ class TavgDataSource(BaseDataSource):
     prefix = 'tavg'
     adapters = {'volume': TavgPostProcData,
                 'boundary': TavgBoundaryPostProcData}
-    plugins = {'stats': StatsFinalisePostProc}
 
     @cached_property
     def texprs(self):
