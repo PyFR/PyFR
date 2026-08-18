@@ -123,7 +123,12 @@ dependent, boundary condition labelled *name* in the .pyfrm file with
            *float* | *string*
 
         - ``pressure`` --- target area-averaged static pressure on the
-          boundary. Also used as the initial Riemann invariant pressure.
+          boundary.
+
+           *float* | *string*
+
+        - ``p`` --- initial Riemann invariant pressure (optional), which the
+          controller will vary to target ``pressure``.
 
            *float* | *string*
 

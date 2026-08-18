@@ -280,7 +280,7 @@ class PressureBCMixin(ControlledBCMixin):
         self.area = scal_coll(self.bccomm.Allreduce, area, op=mpi.SUM)
 
     def _default_interp_c(self):
-        return self.target
+        return self._eval_opts(['p'], self.target)[0]
 
     def _measure(self, solns):
         p_num = 0.0
