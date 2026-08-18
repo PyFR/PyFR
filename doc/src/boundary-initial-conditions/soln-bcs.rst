@@ -127,8 +127,8 @@ dependent, boundary condition labelled *name* in the .pyfrm file with
 
            *float* | *string*
 
-        - ``p`` --- initial Riemann invariant pressure (optional), which the
-          controller will vary to target ``pressure``.
+        - ``init-pressure`` --- initial Riemann invariant pressure (optional),
+          which the controller will vary to target ``pressure``.
 
            *float* | *string*
 
