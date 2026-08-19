@@ -243,7 +243,7 @@ class MassFlowBCMixin(ControlledBCMixin):
             self._qwts_norms.append(norms*qwts[:, None])
 
     def _default_interp_c(self):
-        return self._eval_opts(['p'])[0]
+        return self._eval_opts(['init-pressure'])[0]
 
     def _measure(self, solns):
         mf = 0.0
