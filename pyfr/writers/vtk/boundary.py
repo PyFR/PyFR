@@ -7,7 +7,7 @@ from pyfr.plugins.postproc.adapters import FaceInfo
 from pyfr.polys import get_polybasis
 from pyfr.shapes import BaseShape, interp_pts, proj_pts
 from pyfr.subdiv import get_subdiv
-from pyfr.util import subclass_where
+from pyfr.util import expand_braces, subclass_where
 from pyfr.writers.vtk.base import BaseVTKWriter
 
 
@@ -32,7 +32,12 @@ class VTKBoundaryWriter(BaseVTKWriter):
         self._surface_info = defaultdict(list)
 
         rmesh, smesh = self.reader.mesh, self.mesh
-        for b in self.boundaries:
+
+        # Expand any brace enumerations, dropping duplicate boundaries
+        bnames = dict.fromkeys(b for n in self.boundaries
+                               for b in expand_braces(n))
+
+        for b in bnames:
             if f'bc/{b}' not in smesh.codec:
                 raise ValueError(f'Unknown boundary {b!r}')
 

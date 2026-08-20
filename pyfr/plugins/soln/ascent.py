@@ -9,6 +9,7 @@ from pyfr.ctypesutil import LibWrapper
 from pyfr.exprs import npeval
 from pyfr.fields import CleanToGrid
 from pyfr.inifile import process_expr
+from pyfr.readers.native import Connectivity
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.plugins.common import region_data
 from pyfr.plugins.postproc.adapters import (BoundaryPostProcData, FaceInfo,
@@ -17,7 +18,8 @@ from pyfr.plugins.postproc import get_source
 from pyfr.plugins.soln.base import BaseSolnPlugin
 from pyfr.shapes import BaseShape, proj_pts
 from pyfr.subdiv import get_subdiv
-from pyfr.util import file_path_gen, first, paren_depths, subclass_where
+from pyfr.util import (expand_braces, file_path_gen, first, paren_depths,
+                       subclass_where)
 
 
 def con_psolns_pgrads(elementscls, scfg, csolns, cgrads):
@@ -348,15 +350,18 @@ class _BoundaryAscentOutput(_VolumeAscentOutput):
         self.renderer = renderer
         self.sname = sname
 
-        # Accept bc/foo or foo to match mesh.bcon keys
-        bcname = region.removeprefix('bc/')
-        comm, _, _ = get_comm_rank_root()
-        if not comm.allreduce(bcname in renderer.mesh.bcon, op=mpi.LOR):
-            raise ValueError(f'Boundary {bcname} does not exist')
+        # Accept bc/foo or foo or bc/{foo,bar}
+        mesh = renderer.mesh
+        bcnames = expand_braces(region.removeprefix('bc/'))
+        if missing := [b for b in bcnames if f'bc/{b}' not in mesh.codec]:
+            raise ValueError(f'Boundaries do not exist: {missing}')
+
+        # Fuse the boundaries into a single surface
+        conn = Connectivity.fuse(mesh.bcon.get(b) for b in bcnames)
 
         # Per-itype patches, each a flat (eidxs, etype, mop, sop, fidx, svpts)
         self.patches = patches = defaultdict(list)
-        if (conn := renderer.mesh.bcon.get(bcname)) is not None:
+        if conn is not None:
             for etype, fidx, eidxs in conn.items():
                 itype, mop, sop, svpts = renderer.adapter.face_soln_op_vpts(
                     etype, fidx, renderer.divisor

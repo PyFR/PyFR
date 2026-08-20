@@ -39,7 +39,9 @@ on-the-fly.  The following parameters can then be set:
 
 #. ``surface-{name}`` --- attach a named surface source to the scene,
    sampling fields on the specified boundary.  The value is the
-   boundary name (with optional ``bc/`` prefix).  When at least one
+   boundary name (with optional ``bc/`` prefix); a brace enumeration
+   such as ``bc/{le, te}`` fuses several boundaries into one source.
+   When at least one
    ``surface-{name}`` is set, the volume source is omitted unless
    ``volume = true`` is also given.  Multiple surface sources can be
    defined and used in the same scene:

@@ -3,7 +3,18 @@
 *****************
 
 Parameterises constant, or if available space (x, y, [z]) and time (t)
-dependent, boundary condition labelled *name* in the .pyfrm file with
+dependent, boundary condition labelled *name* in the .pyfrm file.  A
+single section may govern several boundaries through brace enumeration;
+as such ``[soln-bcs-{le, te, ps, ss}]`` applies one condition to the
+four boundaries ``le``, ``te``, ``ps``, and ``ss``, which are fused into
+a single surface.  Each boundary must be given a condition by exactly
+one section.  Fusion matters for conditions which act on the surface as
+a whole, such as ``char-riem-inv-mass-flow``: an enumerated section is
+driven by one regulator whose measured mass flow is integrated over
+every constituent boundary, so ``mass-flow-rate`` is the total through
+the surface.  Enumerating the boundaries into separate sections instead
+yields one independent regulator per boundary, each driving to the full
+target.  Parameterised with
 
 1. ``type`` --- type of boundary condition:
 

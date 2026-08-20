@@ -6,7 +6,10 @@ Periodically integrates the pressure and viscous stress on the boundary
 labelled ``name`` and writes out the resulting force and moment (if
 requested) vectors to a CSV or HDF5 file.  When reference conditions are
 supplied the non-dimensional force coefficients are also written out.
-Parameterised with
+Here ``name`` may also be a brace enumeration of the form
+``{le, te, ps, ss}``, in which case the pressure and viscous stress are
+integrated over every named boundary as though they formed a single
+surface.  Parameterised with
 
 #. ``nsteps`` --- integrate every ``nsteps``:
 

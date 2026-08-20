@@ -8,8 +8,9 @@ import numpy as np
 from pyfr.backends.base import NullKernel
 from pyfr.cache import memoize
 from pyfr.mpiutil import autofree, get_comm_rank_root, mpi
+from pyfr.readers.native import Connectivity
 from pyfr.shapes import BaseShape
-from pyfr.util import subclasses
+from pyfr.util import expand_braces, subclasses
 
 
 class BaseSystem:
@@ -262,6 +263,35 @@ class BaseSystem:
 
         return mpi_inters
 
+    @staticmethod
+    def bc_sections(cfg, mesh, prefix='soln-bcs-'):
+        # Map each boundary onto the section which parameterises it
+        bcs = {c.removeprefix('bc/') for c in mesh.codec
+               if c.startswith('bc/')}
+
+        sects = {}
+        for sect in cfg.sections():
+            if not sect.startswith(prefix):
+                continue
+
+            names = expand_braces(sect.removeprefix(prefix))
+
+            # Enumerated sections must name valid boundaries
+            if len(names) > 1:
+                if missing := [b for b in names if b not in bcs]:
+                    raise ValueError(f'Boundaries in [{sect}] do not exist: '
+                                     f'{missing}')
+
+            for b in names:
+                if b in bcs:
+                    if b in sects:
+                        raise ValueError(f'Boundary {b} is parameterised by '
+                                         f'both [{sects[b]}] and [{sect}]')
+
+                    sects[b] = sect
+
+        return sects
+
     def _load_bc_inters(self, mesh, elemap, initsoln, serialiser):
         comm, rank, root = get_comm_rank_root()
 
@@ -271,27 +301,41 @@ class BaseSystem:
 
         prevcfg = initsoln.config if initsoln else None
 
-        # Iterate over all boundaries in the mesh
+        # Map each boundary onto its governing section
+        bcsects = self.bc_sections(self.cfg, mesh)
+
+        # Group the boundaries in the mesh by their section
+        sects = {}
         for c in mesh.codec:
             if not c.startswith('bc/'):
                 continue
 
-            # Construct an MPI communicator for this boundary
             bname = c.removeprefix('bc/')
-            localbc = bname in mesh.bcon
+            if bname not in bcsects:
+                raise ValueError(f'No boundary condition for {bname}')
+
+            sects.setdefault(bcsects[bname], []).append(bname)
+
+        # Iterate over the boundary conditions
+        for cfgsect, bnames in sects.items():
+            # Fuse the constituent boundaries
+            con = Connectivity.fuse(mesh.bcon.get(b) for b in bnames)
+
+            # Construct an MPI communicator for this BC
+            localbc = con is not None
             bccomm = autofree(comm.Split(1 if localbc else mpi.UNDEFINED))
 
             # Get the class
-            cfgsect = f'soln-bcs-{bname}'
             bcclass = bcmap[self.cfg.get(cfgsect, 'type')]
 
-            # Check if there is serialised data for this boundary in initsoln
-            sdata = initsoln.state.get(f'bcs/{bname}') if initsoln else None
+            # Serialisation and kernel tags follow the section suffix
+            sname = cfgsect.removeprefix('soln-bcs-')
+            sdata = initsoln.state.get(f'bcs/{sname}') if initsoln else None
 
             # If we have this boundary then create an instance
             if localbc:
-                bciface = bcclass(self.backend, mesh.bcon[bname], elemap,
-                                  cfgsect, self.cfg, bccomm)
+                bciface = bcclass(self.backend, con, elemap, cfgsect,
+                                  self.cfg, bccomm)
                 bciface.setup(sdata, prevcfg)
                 bc_inters.append(bciface)
             else:
@@ -299,9 +343,9 @@ class BaseSystem:
 
             # Allow the boundary to return a preparation callback
             if (pfn := bcclass.preparefn(bciface, mesh, elemap)):
-                bc_prefns[bname] = pfn
+                bc_prefns[sname] = pfn
 
-            bcclass.serialisefn(bciface, f'bcs/{bname}', serialiser)
+            bcclass.serialisefn(bciface, f'bcs/{sname}', serialiser)
 
         return bc_inters, bc_prefns
 

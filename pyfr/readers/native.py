@@ -95,6 +95,23 @@ class Connectivity:
 
         return Connectivity(self.cidxs[mask], new[mask], self.cidxmap)
 
+    @classmethod
+    def fuse(cls, cons):
+        # Fuse several connectivities, which must share a cidxmap, into one
+        cons = [c for c in cons if c is not None and len(c)]
+        if not cons:
+            return None
+        elif len(cons) == 1:
+            return cons[0]
+
+        cidxs = np.concatenate([c.cidxs for c in cons])
+        eidxs = np.concatenate([c.eidxs for c in cons])
+
+        # Order by (cidx, eidx) so the result does not depend on fuse order
+        sidx = np.lexsort((eidxs, cidxs))
+
+        return cls(cidxs[sidx], eidxs[sidx], first(cons).cidxmap)
+
 
 class NativeReader:
     def __init__(self, fname, pname=None, *, construct_con=True):

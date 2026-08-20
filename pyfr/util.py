@@ -206,6 +206,23 @@ def strip_parens(s):
                    if d == 0 and c not in ')}')
 
 
+def expand_braces(spec):
+    # Expand a brace enumeration pre{a, b}post onto [preapost, prebpost]
+    if (m := re.fullmatch(r'(.*?)\{(.*?)\}(.*)', spec)):
+        parts = [p.strip() for p in m[2].split(',')]
+        if not all(parts):
+            raise ValueError(f'Invalid brace enumeration: {spec}')
+
+        names = [f'{m[1]}{p}{m[3]}' for p in parts]
+
+        if len(set(names)) != len(names):
+            raise ValueError(f'Duplicate names in enumeration: {spec}')
+
+        return names
+    else:
+        return [spec]
+
+
 class CSVStream:
     def __init__(self, fname, *, header=None, nflush=100, reset=False):
         # Append the '.csv' extension

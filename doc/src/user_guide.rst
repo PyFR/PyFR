@@ -143,7 +143,10 @@ pyfr export
 
           pyfr export boundary mesh.pyfrm solution.pyfrs solution.vtu lower_wall upper_wall
 
-      Note that boundary export is only supported for 3D grids.
+      Each name may also be a brace enumeration such as
+      ``'{le, te, ps, ss}'``; note the quotes, which prevent the shell
+      from expanding the braces itself.  Boundary export is only
+      supported for 3D grids.
 
    pyfr export spanwise
       Exports a spanwise average of a 3D grid to a 2D VTK grid.
@@ -621,6 +624,11 @@ STL ``stl('name')``
   An STL region.  Note that the region *name* must have been already
   added to the mesh file with ``pyfr region add``.  Only valid in 3D.
   Additionally, region itself *must* be closed.
+
+Boundary ``bc/name``
+  The elements adjacent to the boundary *name*.  The name may also be a
+  brace enumeration ``bc/{le, te, ps, ss}``, which combines the
+  elements of every named boundary.
 
 All region also support rotation.  In 2D this is accomplished by passing
 a trailing `rot=angle` argument where `angle` is a rotation angle in

@@ -38,8 +38,9 @@ employed as an approximation.
     *boolean*
 
 #. ``surface`` --- a region the surface of which is sampled for the
-   FWH solver; either a boundary as ``bc/name`` or a combination of
-   the geometric shapes specified in :ref:`user_guide:regions`:
+   FWH solver; either a boundary as ``bc/name``, a brace enumeration
+   of boundaries as ``bc/{a, b}``, or a combination of the geometric
+   shapes specified in :ref:`user_guide:regions`:
 
    ``bc/name`` | ``shape(args, ...)``
 

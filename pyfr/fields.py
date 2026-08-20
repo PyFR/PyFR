@@ -295,8 +295,9 @@ class FieldRecovery:
                  for b in subclasses(scls.bbcinterscls, just_leaf=True)}
 
         info = []
+        bcsects = scls.bc_sections(self.cfg, self.mesh)
         for bc, con in self.mesh.bcon.items():
-            cfgsect = f'soln-bcs-{bc}'
+            cfgsect = bcsects[bc]
             bcls = bcmap[self.cfg.get(cfgsect, 'type')]
             if hasattr(bcls, 'common_pri_state'):
                 c = bcls.common_consts(self.cfg, cfgsect, self.ndims)

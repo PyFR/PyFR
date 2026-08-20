@@ -7,7 +7,7 @@ from pyfr.exprs import npeval
 from pyfr.plugins.mixins import SeriesWriterMixin, SurfaceRegionMixin
 from pyfr.plugins.soln.base import BaseSolnPlugin
 from pyfr.quadrules.surface import SurfaceIntegrator
-from pyfr.util import first
+from pyfr.util import expand_braces, first
 
 
 FWHSurfParams = namedtuple(
@@ -116,7 +116,16 @@ class FWHPlugin(SeriesWriterMixin, SurfaceRegionMixin, BaseSolnPlugin):
         # Solid boundary surfaces require the wall boundary treatment
         sname = self.cfg.get(cfgsect, 'surface')
         if sname.startswith('bc/'):
-            self.bctype = self.cfg.get(f'soln-bcs-{sname[3:]}', 'type')
+            bcsects = intg.system.bc_sections(self.cfg, intg.system.mesh)
+            bctypes = {self.cfg.get(bcsects[b], 'type')
+                       for b in expand_braces(sname[3:])}
+
+            # Check for malformed boundary groups
+            if len(bctypes) > 1:
+                raise ValueError(f'Surface {sname} spans mixed boundary '
+                                 f'types: {sorted(bctypes)}')
+
+            self.bctype = first(bctypes)
         else:
             self.bctype = None
 
