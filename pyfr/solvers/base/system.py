@@ -8,7 +8,6 @@ import numpy as np
 from pyfr.backends.base import NullKernel
 from pyfr.cache import memoize
 from pyfr.mpiutil import autofree, get_comm_rank_root, mpi
-from pyfr.readers.native import Connectivity
 from pyfr.shapes import BaseShape
 from pyfr.util import expand_braces, subclasses
 
@@ -274,21 +273,19 @@ class BaseSystem:
             if not sect.startswith(prefix):
                 continue
 
-            names = expand_braces(sect.removeprefix(prefix))
+            names = set(expand_braces(sect.removeprefix(prefix)))
 
             # Enumerated sections must name valid boundaries
-            if len(names) > 1:
-                if missing := [b for b in names if b not in bcs]:
-                    raise ValueError(f'Boundaries in [{sect}] do not exist: '
-                                     f'{missing}')
+            if len(names) > 1 and (missing := names - bcs):
+                raise ValueError(f'Boundaries in [{sect}] do not exist: '
+                                 f'{sorted(missing)}')
 
-            for b in names:
-                if b in bcs:
-                    if b in sects:
-                        raise ValueError(f'Boundary {b} is parameterised by '
-                                         f'both [{sects[b]}] and [{sect}]')
+            # A boundary may be parameterised by at most one section
+            if dup := min(names & sects.keys(), default=None):
+                raise ValueError(f'Boundary {dup} is parameterised by both '
+                                 f'[{sects[dup]}] and [{sect}]')
 
-                    sects[b] = sect
+            sects |= dict.fromkeys(names & bcs, sect)
 
         return sects
 
@@ -304,7 +301,7 @@ class BaseSystem:
         # Map each boundary onto its governing section
         bcsects = self.bc_sections(self.cfg, mesh)
 
-        # Group the boundaries in the mesh by their section
+        # Determine the active sections, in codec order
         sects = {}
         for c in mesh.codec:
             if not c.startswith('bc/'):
@@ -314,12 +311,12 @@ class BaseSystem:
             if bname not in bcsects:
                 raise ValueError(f'No boundary condition for {bname}')
 
-            sects.setdefault(bcsects[bname], []).append(bname)
+            sects[bcsects[bname]] = None
 
         # Iterate over the boundary conditions
-        for cfgsect, bnames in sects.items():
+        for cfgsect in sects:
             # Fuse the constituent boundaries
-            con = Connectivity.fuse(mesh.bcon.get(b) for b in bnames)
+            con = mesh.bcon_for(cfgsect.removeprefix('soln-bcs-'))
 
             # Construct an MPI communicator for this BC
             localbc = con is not None

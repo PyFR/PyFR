@@ -2,18 +2,15 @@ import numpy as np
 
 from pyfr.cache import memoize
 from pyfr.mpiutil import get_comm_rank_root, mpi
-from pyfr.readers.native import Connectivity
 from pyfr.plugins.mixins import BackendMixin, PublishMixin, SeriesWriterMixin
 from pyfr.plugins.soln.base import BaseSolnPlugin
 from pyfr.quadrules.surface import SurfaceIntegrator
-from pyfr.util import expand_braces
 
 
 class FluidForceIntegrator(SurfaceIntegrator):
     def __init__(self, cfg, cfgsect, system, bcname, morigin):
         # Fuse the boundaries in any brace enumeration into one surface
-        bcon = system.mesh.bcon
-        con = Connectivity.fuse(bcon.get(b) for b in expand_braces(bcname))
+        con = system.mesh.bcon_for(bcname)
 
         super().__init__(cfg, cfgsect, system.ele_map, con, flags='s')
 
@@ -78,20 +75,14 @@ class FluidForcePlugin(PublishMixin, SeriesWriterMixin, BackendMixin,
                 self._mcnames = ['cmr', 'cmp', 'cmy']
                 self._mcdirs = [drag, side, lift]
 
-        # Ensure the boundaries exist; the codec is global, so this
-        # check is consistent across all ranks
-        codec = intg.system.mesh.codec
-        if missing := [b for b in expand_braces(suffix)
-                       if f'bc/{b}' not in codec]:
-            raise RuntimeError(f'Boundaries do not exist: {missing}')
+        # Set interpolation matrices and quadrature weights; this also
+        # validates the boundaries against the codec on every rank
+        self.ff_int = FluidForceIntegrator(self.cfg, cfgsect, intg.system,
+                                           suffix, morigin)
 
         # The root rank needs to open the output file
         if rank == root:
             self._init_series(intg, self._fields)
-
-        # Set interpolation matrices and quadrature weights
-        self.ff_int = FluidForceIntegrator(self.cfg, cfgsect, intg.system,
-                                           suffix, morigin)
 
         # Initialise backend infrastructure
         self._init_backend(intg)

@@ -9,7 +9,7 @@ from pyfr.inifile import Inifile
 from pyfr.mpiutil import (Scatterer, SparseScatterer, autofree,
                           get_comm_rank_root)
 from pyfr.readers.shared_nodes import SharedNodesFinder
-from pyfr.util import first
+from pyfr.util import expand_braces, first
 
 
 @dataclass
@@ -44,6 +44,16 @@ class Mesh:
     node_idxs: np.ndarray = None
     node_valency: np.ndarray = None
     shared_nodes: object = None
+
+    def bcon_for(self, spec):
+        # Boundaries in any brace enumeration, fused into one connectivity
+        names = expand_braces(spec)
+
+        # The codec is global, so this check is consistent across all ranks
+        if missing := [b for b in names if f'bc/{b}' not in self.codec]:
+            raise ValueError(f'Boundaries do not exist: {missing}')
+
+        return Connectivity.fuse(self.bcon.get(b) for b in names)
 
 
 @dataclass

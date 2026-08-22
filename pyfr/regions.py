@@ -6,7 +6,7 @@ from boostree import RTree
 import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
-from pyfr.util import expand_braces, match_paired_paren, subclass_where
+from pyfr.util import match_paired_paren, subclass_where
 
 
 def parse_region_expr(expr, rdata=None):
@@ -198,21 +198,15 @@ class TagRegion(BaseRegion):
 
 class BoundaryRegion(BaseRegion):
     def __init__(self, bcname):
-        self.bcnames = expand_braces(bcname)
+        self.bcname = bcname
 
     def region_eles(self, mesh):
         eset = defaultdict(list)
 
-        # Ensure the boundaries exist across all ranks
-        if missing := [b for b in self.bcnames
-                       if f'bc/{b}' not in mesh.codec]:
-            raise ValueError(f'Boundaries do not exist: {missing}')
-
         # Determine which of our elements are directly on the boundary
-        for b in self.bcnames:
-            if b in mesh.bcon:
-                for etype, fidx, eidxs in mesh.bcon[b].items():
-                    eset[etype].extend(eidxs.tolist())
+        if (con := mesh.bcon_for(self.bcname)) is not None:
+            for etype, fidx, eidxs in con.items():
+                eset[etype].extend(eidxs.tolist())
 
         return {k: sorted(set(v)) for k, v in eset.items()}
 

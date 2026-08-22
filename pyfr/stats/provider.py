@@ -4,6 +4,7 @@ from importlib.resources import files
 import re
 
 from pyfr.exprs import subst_expr_vars
+from pyfr.util import expand_braces
 
 
 KEYWORDS = ('field', 'derived', 'derived-hidden', 'set')
@@ -16,10 +17,7 @@ def parse_stats(spec):
     pkgs, npats = [], 0
     for m in re.finditer(pat, spec):
         npats += 1
-        if m[2] is None:
-            pkgs.append(m[1])
-        else:
-            pkgs.extend(f'{m[1]}{a.strip()}{m[3]}' for a in m[2].split(','))
+        pkgs.extend(expand_braces(m[0]))
 
     # The specification must be exactly these patterns, comma separated
     rem = re.sub(r'\s', '', re.sub(pat, '', spec))
