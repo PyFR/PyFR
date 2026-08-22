@@ -295,7 +295,7 @@ class FieldRecovery:
                  for b in subclasses(scls.bbcinterscls, just_leaf=True)}
 
         info = []
-        bcsects = scls.bc_sections(self.cfg, self.mesh)
+        bcsects = self.mesh.bc_sections(self.cfg)
         for bc, con in self.mesh.bcon.items():
             cfgsect = bcsects[bc]
             bcls = bcmap[self.cfg.get(cfgsect, 'type')]

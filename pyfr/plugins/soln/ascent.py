@@ -349,7 +349,10 @@ class _BoundaryAscentOutput(_VolumeAscentOutput):
         self.renderer = renderer
         self.sname = sname
 
-        # Accept bc/foo or foo or bc/{foo, bar}
+        # Boundary surface sources take the form bc/<name>
+        if not region.startswith('bc/'):
+            raise ValueError(f'Invalid surface source: {region}')
+
         conn = renderer.mesh.bcon_for(region.removeprefix('bc/'))
 
         # Per-itype patches, each a flat (eidxs, etype, mop, sop, fidx, svpts)

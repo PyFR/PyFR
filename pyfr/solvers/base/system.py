@@ -9,7 +9,7 @@ from pyfr.backends.base import NullKernel
 from pyfr.cache import memoize
 from pyfr.mpiutil import autofree, get_comm_rank_root, mpi
 from pyfr.shapes import BaseShape
-from pyfr.util import expand_braces, subclasses
+from pyfr.util import subclasses
 
 
 class BaseSystem:
@@ -262,33 +262,6 @@ class BaseSystem:
 
         return mpi_inters
 
-    @staticmethod
-    def bc_sections(cfg, mesh, prefix='soln-bcs-'):
-        # Map each boundary onto the section which parameterises it
-        bcs = {c.removeprefix('bc/') for c in mesh.codec
-               if c.startswith('bc/')}
-
-        sects = {}
-        for sect in cfg.sections():
-            if not sect.startswith(prefix):
-                continue
-
-            names = set(expand_braces(sect.removeprefix(prefix)))
-
-            # Enumerated sections must name valid boundaries
-            if len(names) > 1 and (missing := names - bcs):
-                raise ValueError(f'Boundaries in [{sect}] do not exist: '
-                                 f'{sorted(missing)}')
-
-            # A boundary may be parameterised by at most one section
-            if dup := min(names & sects.keys(), default=None):
-                raise ValueError(f'Boundary {dup} is parameterised by both '
-                                 f'[{sects[dup]}] and [{sect}]')
-
-            sects |= dict.fromkeys(names & bcs, sect)
-
-        return sects
-
     def _load_bc_inters(self, mesh, elemap, initsoln, serialiser):
         comm, rank, root = get_comm_rank_root()
 
@@ -299,7 +272,7 @@ class BaseSystem:
         prevcfg = initsoln.config if initsoln else None
 
         # Map each boundary onto its governing section
-        bcsects = self.bc_sections(self.cfg, mesh)
+        bcsects = mesh.bc_sections(self.cfg)
 
         # Determine the active sections, in codec order
         sects = {}

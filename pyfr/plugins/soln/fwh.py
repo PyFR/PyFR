@@ -116,7 +116,7 @@ class FWHPlugin(SeriesWriterMixin, SurfaceRegionMixin, BaseSolnPlugin):
         # Solid boundary surfaces require the wall boundary treatment
         sname = self.cfg.get(cfgsect, 'surface')
         if sname.startswith('bc/'):
-            bcsects = intg.system.bc_sections(self.cfg, intg.system.mesh)
+            bcsects = intg.system.mesh.bc_sections(self.cfg)
             bctypes = {self.cfg.get(bcsects[b], 'type')
                        for b in expand_braces(sname[3:])}
 
