@@ -207,20 +207,17 @@ def strip_parens(s):
 
 
 def expand_braces(spec):
-    # Expand a brace enumeration pre{a, b}post onto [preapost, prebpost]
-    if (m := re.fullmatch(r'(.*?)\{(.*?)\}(.*)', spec)):
-        parts = [p.strip() for p in m[2].split(',')]
-        if not all(parts):
-            raise ValueError(f'Invalid brace enumeration: {spec}')
+    # Expand brace enumerations
+    if not (m := re.search(r'\{([^{}]*)\}', spec)):
+        yield spec
+        return
 
-        names = [f'{m[1]}{p}{m[3]}' for p in parts]
+    parts = [p.strip() for p in m[1].split(',')]
+    if not all(parts) or len(set(parts)) != len(parts):
+        raise ValueError(f'Invalid brace enumeration: {spec}')
 
-        if len(set(names)) != len(names):
-            raise ValueError(f'Duplicate names in enumeration: {spec}')
-
-        return names
-    else:
-        return [spec]
+    for part in parts:
+        yield from expand_braces(spec[:m.start()] + part + spec[m.end():])
 
 
 class CSVStream:

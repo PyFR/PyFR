@@ -47,7 +47,11 @@ class Mesh:
 
     def bcon_for(self, spec):
         # Boundaries in any brace enumeration, fused into one connectivity
-        names = expand_braces(spec)
+        names = list(expand_braces(spec))
+
+        # Catch double counted boundaries
+        if len(set(names)) != len(names):
+            raise ValueError(f'Duplicate boundaries in {spec}')
 
         # The codec is global, so this check is consistent across all ranks
         if missing := [b for b in names if f'bc/{b}' not in self.codec]:
