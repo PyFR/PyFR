@@ -280,11 +280,11 @@ class BaseSystem:
             if not c.startswith('bc/'):
                 continue
 
+            # Unclaimed boundaries fall back to their nominal section,
+            # with the resulting error coming from the config lookup
             bname = c.removeprefix('bc/')
-            if bname not in bcsects:
-                raise ValueError(f'No boundary condition for {bname}')
-
-            if (sect := bcsects[bname]) not in sects:
+            sect = bcsects.get(bname, f'soln-bcs-{bname}')
+            if sect not in sects:
                 sects.append(sect)
 
         # Iterate over the boundary conditions
