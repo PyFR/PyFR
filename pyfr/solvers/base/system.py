@@ -275,7 +275,7 @@ class BaseSystem:
         bcsects = mesh.bc_sections(self.cfg)
 
         # Determine the active sections, in codec order
-        sects = {}
+        sects = []
         for c in mesh.codec:
             if not c.startswith('bc/'):
                 continue
@@ -284,12 +284,17 @@ class BaseSystem:
             if bname not in bcsects:
                 raise ValueError(f'No boundary condition for {bname}')
 
-            sects[bcsects[bname]] = None
+            if (sect := bcsects[bname]) not in sects:
+                sects.append(sect)
 
         # Iterate over the boundary conditions
         for cfgsect in sects:
             # Fuse the constituent boundaries
-            con = mesh.bcon_for(cfgsect.removeprefix('soln-bcs-'))
+            # Serialisation and kernel tags follow the section suffix
+            sname = cfgsect.removeprefix('soln-bcs-')
+
+            # Fuse the constituent boundaries
+            con = mesh.bcon_for(sname)
 
             # Construct an MPI communicator for this BC
             localbc = con is not None
@@ -298,8 +303,6 @@ class BaseSystem:
             # Get the class
             bcclass = bcmap[self.cfg.get(cfgsect, 'type')]
 
-            # Serialisation and kernel tags follow the section suffix
-            sname = cfgsect.removeprefix('soln-bcs-')
             sdata = initsoln.state.get(f'bcs/{sname}') if initsoln else None
 
             # If we have this boundary then create an instance
