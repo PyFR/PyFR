@@ -289,11 +289,10 @@ class BaseSystem:
 
         # Iterate over the boundary conditions
         for cfgsect in sects:
-            # Fuse the constituent boundaries
-            # Serialisation and kernel tags follow the section suffix
+            # Name the constituent boundaries
             sname = cfgsect.removeprefix('soln-bcs-')
 
-            # Fuse the constituent boundaries
+            # Fuse the boundaries
             con = mesh.bcon_for(sname)
 
             # Construct an MPI communicator for this BC
@@ -303,6 +302,7 @@ class BaseSystem:
             # Get the class
             bcclass = bcmap[self.cfg.get(cfgsect, 'type')]
 
+            # Serialised state and kernel tags follow suffix
             sdata = initsoln.state.get(f'bcs/{sname}') if initsoln else None
 
             # If we have this boundary then create an instance
