@@ -97,8 +97,14 @@ def _locals(body):
     # First, strip away any comments
     body = re.sub(r'//.*?\n', '', body)
 
+    # Strip away any preprocessor directives
+    body = re.sub(r'(?m)^[ \t]*#(?:[^\n]*\\\n)*[^\n]*', '', body)
+
     # Strip away string literals
     body = re.sub(r'"(?:[^"\\]|\\.)*"', '""', body)
+
+    # Strip away type qualifiers
+    body = re.sub(r'\b(?:const|restrict|static|volatile)\b', '', body)
 
     # Next, find all variable declaration statements
     decls = re.findall(r'(?:[A-Za-z_]\w*)\s+([A-Za-z_]\w*[^;]*?);', body)
