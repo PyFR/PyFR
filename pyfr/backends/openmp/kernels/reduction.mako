@@ -50,7 +50,7 @@ void reduction(const struct kargs *restrict args)
                             ixdtype_t idx = (_y + ib*nrow)*BLK_SZ*${ncola} + X_IDX_AOSOA(_k, ${ncola});
                         % for j, e in enumerate(exprs):
                             % if rop == 'max':
-                            acc[${j}] = max(acc[${j}], ${e});
+                            acc[${j}] = fmax(acc[${j}], ${e});
                             % else:
                             acc[${j}] += ${e};
                             % endif
@@ -76,7 +76,7 @@ void reduction(const struct kargs *restrict args)
                             ixdtype_t idx = (_y + ib*nrow)*BLK_SZ*${ncola} + X_IDX_AOSOA(_k, ${ncola});
                         % for j, e in enumerate(exprs):
                             % if rop == 'max':
-                            acc[${j}] = max(acc[${j}], ${e});
+                            acc[${j}] = fmax(acc[${j}], ${e});
                             % else:
                             acc[${j}] += ${e};
                             % endif

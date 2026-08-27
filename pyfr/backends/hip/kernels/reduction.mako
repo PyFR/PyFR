@@ -31,7 +31,7 @@ reduction(ixdtype_t nrow, ixdtype_t ncolb, ixdtype_t ldim,
             ixdtype_t idx = j*ldim + SOA_IX(i, blockIdx.y, gridDim.y);
             % for i, e in enumerate(exprs):
             % if rop == 'max':
-            acc[${i}] = max(acc[${i}], ${e});
+            acc[${i}] = fmax(acc[${i}], ${e});
             % else:
             acc[${i}] += ${e};
             % endif
@@ -45,7 +45,7 @@ reduction(ixdtype_t nrow, ixdtype_t ncolb, ixdtype_t ldim,
         for (int i = 0; i < ${nexprs}; i++)
         {
         % if rop == 'max':
-            acc[i] = max(__shfl_down(acc[i], off), acc[i]);
+            acc[i] = fmax(__shfl_down(acc[i], off), acc[i]);
         % else:
             acc[i] += __shfl_down(acc[i], off);
         % endif
@@ -72,7 +72,7 @@ reduction(ixdtype_t nrow, ixdtype_t ncolb, ixdtype_t ldim,
             for (int off = warpSize / 2; off > 0; off >>= 1)
             {
             % if rop == 'max':
-                acc_e = max(__shfl_down(acc_e, off), acc_e);
+                acc_e = fmax(__shfl_down(acc_e, off), acc_e);
             % else:
                 acc_e += __shfl_down(acc_e, off);
             % endif

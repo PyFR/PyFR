@@ -35,7 +35,7 @@ reduction(constant ixdtype_t& nrow, constant ixdtype_t& ncolb,
             ixdtype_t idx = j*ldim + SOA_IX(i, blockIdx.y, ${ncola});
         % for i, e in enumerate(exprs):
           % if rop == 'max':
-            acc[${i}] = max(acc[${i}], ${e});
+            acc[${i}] = fmax(acc[${i}], ${e});
           % else:
             acc[${i}] += ${e};
           % endif
@@ -71,7 +71,7 @@ reduction(constant ixdtype_t& nrow, constant ixdtype_t& ncolb,
                 for (int j = 1; j < simdCnt; j++)
                 {
                 % if rop == 'max':
-                    acc_e = max(acc_e, sdata[e][j]);
+                    acc_e = fmax(acc_e, sdata[e][j]);
                 % else:
                     acc_e += sdata[e][j];
                 % endif
