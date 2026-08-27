@@ -16,7 +16,7 @@ importing the mesh and adding a partitioning:
 .. code-block:: shell
 
     $ pyfr import inc-cylinder.msh inc-cylinder.pyfrm
-    $ pyfr partition add inc-cylinder.pyfrm 3 -equad:2 -etri:1 -pmetis
+    $ pyfr partition add inc-cylinder.pyfrm 3 -e quad:2 -e tri:1 -p metis
 
 Mesh Format
 ===========

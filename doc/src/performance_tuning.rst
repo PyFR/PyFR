@@ -151,7 +151,9 @@ summarises their capabilities:
      - Yes
      - None
 
-METIS is the recommended default.  It is fast, produces high-quality
+The baseline partitioner is selected by default as it requires no
+external library.  For large production partitionings, METIS is
+recommended when available.  It is fast, produces high-quality
 decompositions, and supports both element weights and balanced
 partitioning.  SCOTCH is often the fastest option and typically
 produces comparable results; however, it does not support balanced

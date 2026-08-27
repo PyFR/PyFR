@@ -232,14 +232,14 @@ functions are available
 
 - ``pyfr tavg merge`` --- average together multiple time average files
   into a single time average file. The averaging times are read from the
-  file and do not need to be evenly spaced in time.  Passing
-  ``-r``/``--report`` additionally treats each input window as an
-  independent batch and reports the relative standard error of every
-  merged field along with every derived quantity which does not
-  involve spatial derivatives; this indicates how statistically
-  converged the averages, and any turbulence statistics computed from
-  them, are.  Example:
+  file and do not need to be evenly spaced in time.  This command can be
+  run in parallel using ``mpiexec -n n``.  Passing ``-r``/``--report``
+  additionally treats each input window as an independent batch and
+  reports the relative standard error of every merged field along with
+  every derived quantity which does not involve spatial derivatives;
+  this indicates how statistically converged the averages, and any
+  turbulence statistics computed from them, are.  Example:
 
-  .. code-block:: ini
+  .. code-block:: shell
 
       pyfr tavg merge avg-1.00.pyfrs avg-2.00.pyfrs avg-10.00.pyfrs merged_avg.pyfrs

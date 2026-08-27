@@ -21,7 +21,7 @@ It may therefore be necessary to move the slider to two or three levels
 of subdivision.  Note, however, that ParaView subdivides *recursively*
 and hence a quadrilateral subject to two levels of subdivision is broken
 down into 16 elements.  This is in contrast to PyFR where, when
-employing subdivision, ``--eopts=divisor:2`` results in each
+employing subdivision, ``--eopt=divisor:2`` results in each
 quadrilateral being divided into four elements.
 
 Clean to Grid

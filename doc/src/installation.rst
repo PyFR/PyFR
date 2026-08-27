@@ -7,7 +7,7 @@ Quick-start
 
 PyFR |release| can be installed using
 `pip <https://pypi.python.org/pypi/pip>`_ and
-`virtualenv <https://pypi.python.org/pypi/virtualenv>`_, as shown in the
+`venv <https://docs.python.org/3/library/venv.html>`_, as shown in the
 quick-start guides below.
 
 macOS
@@ -17,11 +17,11 @@ It is assumed that the Xcode Command Line Tools and
 `Homebrew <https://brew.sh/>`_ are already installed. Follow the steps
 below to setup the OpenMP backend on macOS:
 
-#. Install MPI:
+#. Install GCC and MPI:
 
    .. code-block:: shell
 
-       brew install mpi4py
+       brew install gcc open-mpi
 
 #. Download and install libxsmm and set the library path:
 
@@ -50,10 +50,9 @@ below to setup the OpenMP backend on macOS:
    .. code-block:: ini
 
        [backend-openmp]
-       cc = gcc-13
+       cc = gcc-15
 
-Note the version of the compiler which must support the ``openmp``
-flag. This has been tested on macOS 13.6.2 with an Apple M1 Max.
+The compiler must support OpenMP 5.1.
 
 Ubuntu
 ------
@@ -64,8 +63,8 @@ Follow the steps below to setup the OpenMP backend on Ubuntu:
 
    .. code-block:: shell
 
-       sudo apt install python3 python3-pip libopenmpi-dev openmpi-bin
-       pip3 install virtualenv
+       sudo apt install build-essential git python3 python3-pip python3-venv
+       sudo apt install libopenmpi-dev openmpi-bin
 
 #. Download and install libxsmm and set the library path:
 
@@ -76,11 +75,11 @@ Follow the steps below to setup the OpenMP backend on Ubuntu:
        make -j4
        export PYFR_XSMM_LIBRARY_PATH=`pwd`/lib/libxsmm.so
 
-#. Make a virtualenv and activate it:
+#. Make a venv and activate it:
 
    .. code-block:: shell
 
-       python3 -m virtualenv pyfr-venv
+       python3 -m venv pyfr-venv
        source pyfr-venv/bin/activate
 
 #. Install PyFR:
@@ -89,7 +88,7 @@ Follow the steps below to setup the OpenMP backend on Ubuntu:
 
        pip install pyfr
 
-This has been tested on Ubuntu 22.04.
+These instructions target Ubuntu 26.04.
 
 .. _compile-from-source:
 
@@ -97,17 +96,16 @@ Compiling from source
 =====================
 
 PyFR can be obtained
-`here <https://github.com/PyFR/PyFR/tree/master>`_.  To install the
-software from source, use the provided ``setup.py`` installer or add
-the root PyFR directory to ``PYTHONPATH`` using:
+`here <https://github.com/PyFR/PyFR/tree/develop>`_.  To install the
+software from source, run the following from the repository root:
 
 .. code-block:: shell
 
-    user@computer ~/PyFR$ export PYTHONPATH=.:$PYTHONPATH
+    pip install .
 
 When installing from source, we strongly recommend using
 `pip <https://pypi.python.org/pypi/pip>`_ and
-`virtualenv <https://pypi.python.org/pypi/virtualenv>`_ to manage the
+`venv <https://docs.python.org/3/library/venv.html>`_ to manage the
 Python dependencies.
 
 Dependencies
@@ -117,11 +115,11 @@ PyFR |release| has a hard dependency on Python 3.12+ and the following
 Python packages:
 
 #. `boostree <https://github.com/PyFR/Boostree>`_ >= 0.3.0
-#. `gimmik <https://github.com/PyFR/GiMMiK>`_ >= 3.2.1
+#. `gimmik <https://github.com/PyFR/GiMMiK>`_ >= 4.0
 #. `h5py <https://www.h5py.org/>`_ >= 2.10
 #. `mako <https://www.makotemplates.org/>`_ >= 1.0.0
 #. `mpi4py <https://mpi4py.readthedocs.io/en/stable/>`_ >= 4.0
-#. `numpy <https://www.numpy.org/>`_ >= 2.3.5
+#. `numpy <https://www.numpy.org/>`_ >= 2.4.2
 #. `platformdirs <https://pypi.org/project/platformdirs/>`_ >= 2.2.0
 
 In addition an MPI library supporting version 4 of the MPI standard is
@@ -143,16 +141,15 @@ HIP Backend
 The HIP backend targets AMD GPUs which are supported by the ROCm stack.
 The backend requires:
 
-#. `ROCm <https://docs.amd.com/>`_ >= 6.4.1
-#. `rocBLAS <https://github.com/ROCmSoftwarePlatform/rocBLAS>`_ >=
-   4.0.0
+#. `ROCm <https://docs.amd.com/>`_ >= 7.14
+#. `rocBLAS <https://github.com/ROCm/rocBLAS>`_ >= 5.5.0
 
 Metal Backend
 ^^^^^^^^^^^^^
 
 The Metal backend targets Apple silicon GPUs. The backend requires:
 
-#. `pyobjc-framework-Metal <https://pyobjc.readthedocs.io/en/latest>`_ >= 9.0
+#. `pyobjc-framework-Metal <https://pyobjc.readthedocs.io/en/latest>`_ >= 12.0
 
 OpenCL Backend
 ^^^^^^^^^^^^^^
@@ -183,8 +180,7 @@ The OpenMP backend targets multi-core x86-64 and ARM CPUs. The backend
 requires:
 
 #. GCC >= 12.0 or another C compiler with OpenMP 5.1 support
-#. `libxsmm <https://github.com/hfp/libxsmm>`_ >= commit
-   5424ec5e122172ec263ef0cc6473d44b8be16fb2 in the ``main`` branch.
+#. `libxsmm <https://github.com/libxsmm/libxsmm>`_ >= 2.0.0
 
 In order for PyFR to find libxsmm it must be located in a directory
 which is on the library search path.  Alternatively, the path can be
@@ -194,10 +190,10 @@ specified explicitly by exporting the environment variable
 Parallel
 ^^^^^^^^
 
-To partition meshes for running in parallel it is also necessary to
-have one of the following partitioners installed:
+PyFR includes a baseline partitioner which requires no external
+libraries.  The following optional partitioners are also supported:
 
-#. `METIS <http://glaros.dtc.umn.edu/gkhome/views/metis>`_ >= 5.2
+#. `METIS <https://github.com/KarypisLab/METIS>`_ >= 5.2
 #. `SCOTCH <https://www.labri.fr/perso/pelegrin/scotch/>`_ >= 7.0
 #. `KaHIP <https://kahip.github.io/>`_ >= 3.24
 

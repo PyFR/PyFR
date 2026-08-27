@@ -129,10 +129,9 @@ Render
 #. ``postproc-{name}`` --- run a PyFR post-processing plugin in-situ
    on one or more sources, publishing its output as a derived field.
    Value is a comma-separated list of source names (``volume`` and/or
-   any ``surface-{name}``).  See
-   :ref:`developer_guide:Post-processing Plugins` for the available
-   plugins and their configuration.  Fields are namespaced per source
-   like any other field (``volume_mach``, ``airfoil_yplus``).
+   any ``surface-{name}``).  See :doc:`postproc-plugins` for the
+   available plugins and their configuration.  Fields are namespaced per
+   source like any other field (``volume_mach``, ``airfoil_yplus``).
    Postprocs that need gradients (``vorticity``, ``yplus``, ``cf``)
    work directly in-situ; via ``pyfr ascent render`` they need a
    snapshot carrying gradients (``write-gradients = true`` for
@@ -223,10 +222,10 @@ This plugin also exposes functionality via a CLI. The following functions
 are available
 
 - ``pyfr ascent render`` --- render an image from a pre-existing mesh
-  and one or more solution files. It must be run with the same number
-  of ranks as partitions in the mesh. By default it will use settings
-  from the first section of the settings file which defines a scene;
-  as such a simulation configuration file with a
+  and one or more solution files. It can be run under MPI and must use
+  the same number of ranks as partitions in the mesh. By default it
+  will use settings from the first section of the settings file which
+  defines a scene; as such a simulation configuration file with a
   ``[soln-plugin-ascent]`` section can be passed directly.
   Alternatively, a specific section name can be provided. In both
   cases all other sections are ignored.  Multiple solution files can
@@ -242,6 +241,6 @@ are available
 
   Example:
 
-  .. code-block:: ini
+  .. code-block:: shell
 
       pyfr ascent render mesh.pyfrm solution.pyfrs settings.ini

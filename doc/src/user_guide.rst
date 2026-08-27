@@ -52,7 +52,7 @@ pyfr partition
 
       .. code-block:: shell
 
-          pyfr partition reconstruct mesh.pyfrm soln.pyfrm part_name
+          pyfr partition reconstruct mesh.pyfrm soln.pyfrs part_name
 
    pyfr partition list
       Lists partitionings in a mesh.  Example:
@@ -81,21 +81,21 @@ pyfr run
 
    .. code-block:: shell
 
-       pyfr run mesh.pyfrm configuration.ini
+       pyfr run -b openmp mesh.pyfrm configuration.ini
 
 pyfr restart
    Restart a PyFR simulation from an existing solution file.  Example:
 
    .. code-block:: shell
 
-       pyfr restart mesh.pyfrm solution.pyfrs
+       pyfr restart -b openmp mesh.pyfrm solution.pyfrs
 
    It is also possible to restart with a different configuration file.
    Example:
 
    .. code-block:: shell
 
-       pyfr restart mesh.pyfrm solution.pyfrs configuration.ini
+       pyfr restart -b openmp mesh.pyfrm solution.pyfrs configuration.ini
 
 pyfr export
    Convert a PyFR ``.pyfrs`` file into an unstructured VTK ``.vtu`` or
@@ -170,7 +170,7 @@ pyfr export
 
       .. code-block:: shell
 
-          pyfr export stl mesh.pyfrm solution.pyfrs solution.vtu teapot
+          pyfr export stl mesh.pyfrm solution.pyfrs solution.stl teapot
 
       The STL surfaces must have already been added to the mesh with
       ``pyfr region add``.
@@ -183,7 +183,7 @@ pyfr export
 
       .. code-block:: shell
 
-          pyfr export stl --eopt=divisor:4 --eopt=subdiv:spherigon mesh.pyfrm solution.pyfrs solution.vtu teapot
+          pyfr export stl --eopt=divisor:4 --eopt=subdiv:spherigon mesh.pyfrm solution.pyfrs solution.stl teapot
 
    All export commands accept ``--postproc name`` (which may be
    repeated) to compute and write derived fields such as Mach number,
@@ -407,10 +407,17 @@ pyfr mesh
    ``--json``
       Output results as JSON for scripting.
 
-The ``run``, ``restart``, ``resample``, ``mesh``, and ``export`` commands can
-be run in parallel. To do so prefix ``pyfr`` with
-``mpiexec -n <cores/devices>``. Note that there must exist a partitioning
-in the mesh with an appropriate number of parts.
+The ``run``, ``restart``, ``resample``, ``mesh``, and ``export`` core
+commands can be run in parallel.  The ``tavg merge``, ``sampler add``,
+``sampler sample``, and ``ascent render`` plugin commands are also
+MPI-capable.  To run a command in parallel prefix ``pyfr`` with
+``mpiexec -n <cores/devices>``.
+
+Except for ``tavg merge``, these commands require a mesh partitioning
+with the same number of parts as MPI ranks.  The ``run``, ``restart``,
+``resample``, ``mesh``, ``export``, ``sampler add``, and ``sampler
+sample`` commands accept ``-P name`` to select a partitioning explicitly.
+The ``ascent render`` command selects a partitioning by rank count.
 
 MPI Distribution
 ----------------

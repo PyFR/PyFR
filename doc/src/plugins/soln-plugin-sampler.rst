@@ -60,37 +60,41 @@ functions are available
 -  ``pyfr sampler add`` --- preprocesses and adds a set of points to a
    mesh.  This command can be run under MPI.  Example:
 
-   .. code-block:: ini
+   .. code-block:: shell
 
        pyfr sampler add mesh.pyfrm mypoints.csv
 
 -  ``pyfr sampler list`` --- lists the named point sets in a mesh.
    Example:
 
-   .. code-block:: ini
+   .. code-block:: shell
 
        pyfr sampler list mesh.pyfrm
 
 -  ``pyfr sampler dump`` --- dumps the locations of all points in a
    named point set.  Example:
 
-   .. code-block:: ini
+   .. code-block:: shell
 
        pyfr sampler dump mesh.pyfrm mypoints
 
 -  ``pyfr sampler remove`` --- removes a named point set from a mesh.
    Example:
 
-   .. code-block:: ini
+   .. code-block:: shell
 
        pyfr sampler remove mesh.pyfrm mypoints
 
 -  ``pyfr sampler sample`` --- samples a solution file.  This command
-   can be run in parallel using ``mpiexec -np n``.  Example:
+   can be run in parallel using ``mpiexec -n n``.  Example:
 
-   .. code-block:: ini
+   .. code-block:: shell
 
        pyfr sampler sample --pts=mypoints.csv mesh.pyfrm soln.pyfrs
+
+   Both ``sampler add`` and ``sampler sample`` accept ``-P name`` to
+   select a mesh partitioning.  Only the root rank updates the mesh for
+   ``sampler add`` or writes output for ``sampler sample``.
 
    Derived fields can be appended to the output by passing one or more
    ``--postproc name`` flags (requires ``-f primitive`` for solution
