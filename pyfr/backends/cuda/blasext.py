@@ -8,14 +8,6 @@ from pyfr.backends.cuda.provider import (CUDAKernel, CUDAKernelProvider,
 class CUDABlasExtKernels(BaseBlasExtKernels, CUDAKernelProvider):
     pvar_idx = 'VARIDX'
 
-    def batched_inv(self, m):
-        class BatchedInvKernel(CUDAKernel):
-            def run(self, stream):
-                M = m.get().transpose(2, 0, 1)
-                m.set(np.linalg.inv(M).transpose(1, 2, 0))
-
-        return BatchedInvKernel(mats=[m])
-
     def _axnpby(self, arr, tplargs):
         nv, ixdtype = tplargs['nv'], self.backend.ixdtype
         nrow, _, ldim, fpdtype = arr[0].traits[1:]

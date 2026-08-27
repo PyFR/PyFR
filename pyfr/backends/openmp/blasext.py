@@ -7,22 +7,6 @@ from pyfr.backends.openmp.provider import OpenMPKernel, OpenMPKernelProvider
 class OpenMPBlasExtKernels(BaseBlasExtKernels, OpenMPKernelProvider):
     pvar_idx = '_k'
 
-    def batched_inv(self, m):
-        neles = m.ioshape[-1]
-        datashape = m.datashape
-        nsoa, soasz = datashape[2], datashape[4]
-
-        class BatchedInvKernel(OpenMPKernel):
-            def run(self):
-                data_view = m.data.reshape(datashape)
-                for b, blk in enumerate(data_view):
-                    for c, chunk in enumerate(blk.swapaxes(0, 1)):
-                        chunk = chunk[:, :, :min(soasz, neles - (b*nsoa + c)*soasz)]
-                        inv = np.linalg.inv(chunk.transpose(2, 0, 1))
-                        chunk[:] = inv.transpose(1, 2, 0)
-
-        return BatchedInvKernel(mats=[m])
-
     def _axnpby(self, arr, tplargs):
         nv, ixdtype = tplargs['nv'], self.backend.ixdtype
         nblocks, nrow, *_, fpdtype = arr[0].traits

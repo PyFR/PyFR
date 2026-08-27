@@ -7,14 +7,6 @@ from pyfr.backends.opencl.provider import OpenCLKernel, OpenCLKernelProvider
 class OpenCLBlasExtKernels(BaseBlasExtKernels, OpenCLKernelProvider):
     pvar_idx = 'k'
 
-    def batched_inv(self, m):
-        class BatchedInvKernel(OpenCLKernel):
-            def run(self, queue, wait_for=None, ret_evt=False):
-                M = m.get().transpose(2, 0, 1)
-                m.set(np.linalg.inv(M).transpose(1, 2, 0))
-
-        return BatchedInvKernel(mats=[m])
-
     def _axnpby(self, arr, tplargs):
         nv, ixdtype = tplargs['nv'], self.backend.ixdtype
         nrow, _, ldim, fpdtype = arr[0].traits[1:]
