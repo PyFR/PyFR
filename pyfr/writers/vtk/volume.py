@@ -8,16 +8,9 @@ from pyfr.util import subclass_where
 from pyfr.writers.vtk.base import BaseVTKWriter
 
 
-class VTKVolumeWriter(BaseVTKWriter):
-    type = 'volume'
+class BaseVolumeVTKWriter(BaseVTKWriter):
     dimensions = '2|3'
     output_curved = True
-
-    def _load_soln(self, *args, **kwargs):
-        super()._load_soln(*args, **kwargs)
-
-        self.einfo = [(etype, self.soln.data[etype].shape[2])
-                      for etype in self.mesh.eidxs]
 
     def _output_topology(self):
         cnodes, svpts = {}, {}
@@ -42,6 +35,30 @@ class VTKVolumeWriter(BaseVTKWriter):
 
         return svpts
 
+    def _spts_order(self, etype):
+        shapecls = subclass_where(BaseShape, name=etype)
+        return shapecls.order_from_npts(len(self.mesh.spts[etype]))
+
+    @memoize
+    def _mesh_op(self, etype):
+        shapecls = subclass_where(BaseShape, name=etype)
+
+        # Shape point basis
+        sord = self._spts_order(etype)
+        sbasis = get_polybasis(etype, sord, shapecls.std_ele(sord))
+
+        return sbasis.nodal_basis_at(self._svpts(etype))
+
+
+class VTKVolumeWriter(BaseVolumeVTKWriter):
+    type = 'volume'
+
+    def _load_soln(self, *args, **kwargs):
+        super()._load_soln(*args, **kwargs)
+
+        self.einfo = [(etype, self.soln.data[etype].shape[2])
+                      for etype in self.mesh.eidxs]
+
     @memoize
     def _opmats(self, etype, cfg):
         # Shape
@@ -53,7 +70,6 @@ class VTKVolumeWriter(BaseVTKWriter):
         # Basis
         basis = shapecls(len(self.mesh.spts[etype]), cfg)
 
-        mesh_op = basis.sbasis.nodal_basis_at(svpts)
         soln_op = basis.ubasis.nodal_basis_at(svpts)
 
         # Linear basis for vertex data
@@ -61,7 +77,7 @@ class VTKVolumeWriter(BaseVTKWriter):
         lbasis = get_polybasis(etype, 1, linspts)
         lin_op = lbasis.nodal_basis_at(svpts)
 
-        return mesh_op, soln_op, lin_op
+        return soln_op, lin_op
 
     def _prepare_pts(self, etype):
         spts = self.mesh.spts[etype].astype(self.dtype)
@@ -72,10 +88,10 @@ class VTKVolumeWriter(BaseVTKWriter):
         cellf, pointf = {}, {}
 
         # Generate the interpolation operator matrices
-        mesh_vtu_op, soln_vtu_op, lin_vtu_op = self._opmats(etype, self.cfg)
+        soln_vtu_op, lin_vtu_op = self._opmats(etype, self.cfg)
 
         # Calculate node locations of VTU elements
-        vpts = interp_pts(mesh_vtu_op, spts)
+        vpts = interp_pts(self._mesh_op(etype), spts)
 
         # Pre-process the solution at upts
         soln = self._pre_proc_fields(soln).swapaxes(0, 1)

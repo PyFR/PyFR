@@ -209,13 +209,16 @@ class BaseVTKWriter(BaseWriter):
 
         return sizes
 
+    def _init_etypes_div(self, divisor, etdivs={}):
+        self.etypes_div = defaultdict(lambda: divisor, etdivs)
+        self.etypes_div['pyr'] += self._output_cls.pyr_divisor_bump
+
     def _load_soln(self, *args, **kwargs):
         super()._load_soln(*args, **kwargs)
 
         # Determine the per-etype divisor
-        divisor = self.divisor or self.cfg.getint('solver', 'order')
-        self.etypes_div = defaultdict(lambda: divisor)
-        self.etypes_div['pyr'] += self._output_cls.pyr_divisor_bump
+        self._init_etypes_div(self.divisor or
+                              self.cfg.getint('solver', 'order'))
 
         # Solutions need a separate processing pipeline to other data
         if self.dataprefix == 'soln':
@@ -346,6 +349,9 @@ class BaseVTKWriter(BaseWriter):
         # Load the solution
         self._load_soln(solnf)
 
+        self._write(outfname)
+
+    def _write(self, outfname):
         # Describe every output array up front
         self.fields_out = self._build_field_table()
 
@@ -371,8 +377,8 @@ class BaseVTKWriter(BaseWriter):
         return CleanToGrid(cnodemap, self.etypes_div, svptsmap, shared)
 
     def _point_arrays(self, etype):
-        _, vsoln, _, _, pointf = self._prepared[etype]
-        nsvpts, neles = vsoln.shape[0], vsoln.shape[2]
+        vpts, vsoln, _, _, pointf = self._prepared[etype]
+        nsvpts, neles = vpts.shape[0], vpts.shape[1]
 
         arrays = []
         for arr in self._post_proc_fields(vsoln.swapaxes(0, 1)):
@@ -618,8 +624,8 @@ class BaseVTKWriter(BaseWriter):
                 '</DataArray>\n</FieldData>\n')
 
     def _write_data(self, write, etype):
-        vpts, vsoln, curved, cellf, _ = self._prepared[etype]
-        nsvpts, neles = vsoln.shape[0], vsoln.shape[2]
+        vpts, _, curved, cellf, _ = self._prepared[etype]
+        nsvpts, neles = vpts.shape[0], vpts.shape[1]
 
         # Write element node locations
         out = self._output.points(etype, vpts)

@@ -135,12 +135,13 @@ def main():
     ap_export = sp.add_parser('export', help='export --help')
     ap_export = ap_export.add_subparsers()
 
-    for etype in ('boundary', 'spanwise', 'stl', 'volume'):
+    for etype in ('boundary', 'mesh', 'spanwise', 'stl', 'volume'):
         ap_export_type = ap_export.add_parser(etype,
                                               help=f'export {etype} --help')
 
         ap_export_type.add_argument('meshf', help='input mesh file')
-        ap_export_type.add_argument('solnf', help='input solution file')
+        if etype != 'mesh':
+            ap_export_type.add_argument('solnf', help='input solution file')
         ap_export_type.add_argument('outf', nargs='?', help='output file')
 
         if etype == 'boundary':
@@ -150,8 +151,9 @@ def main():
             ap_export_type.add_argument('eargs', nargs='+', metavar='stl',
                                         help='STL region to output')
 
-        ap_export_type.add_argument('-b', '--batchfile', default='-',
-                                    help='batch export file')
+        if etype != 'mesh':
+            ap_export_type.add_argument('-b', '--batchfile', default='-',
+                                        help='batch export file')
 
         ftypes = [c.name for c in subclasses(BaseWriter) if c.type == etype]
         ap_export_type.add_argument(
@@ -159,15 +161,16 @@ def main():
             help='output file type; this is usually inferred from the '
             'extension of outf'
         )
-        ap_export_type.add_argument(
-            '-f', '--field', dest='fields', action='append', metavar='FIELD',
-            help='what fields should be output; may be repeated, by default '
-            'all fields are output'
-        )
-        ap_export_type.add_argument(
-            '-l', '--list-fields', action='store_true',
-            help='list the fields the file provides and exit'
-        )
+        if etype != 'mesh':
+            ap_export_type.add_argument(
+                '-f', '--field', dest='fields', action='append',
+                metavar='FIELD', help='what fields should be output; may be '
+                'repeated, by default all fields are output'
+            )
+            ap_export_type.add_argument(
+                '-l', '--list-fields', action='store_true',
+                help='list the fields the file provides and exit'
+            )
         ap_export_type.add_argument(
             '-p', '--precision', choices=['single', 'double'],
             default='single', help='output number precision; defaults to '
@@ -177,12 +180,14 @@ def main():
             '--eopt', dest='eopts', action='append', default=[],
             metavar='key:value', help='exporter-specific option'
         )
-        ap_export_type.add_argument(
-            '--postproc', dest='pp_plugins', action='append', default=[],
-            metavar='PLUGIN', help='postprocessing plugin; may be repeated'
-        )
-        ap_export_type.add_argument('--cfg', dest='pp_cfg',
-                                    help='config file for postproc plugins')
+        if etype != 'mesh':
+            ap_export_type.add_argument(
+                '--postproc', dest='pp_plugins', action='append', default=[],
+                metavar='PLUGIN', help='postprocessing plugin; may be repeated'
+            )
+            ap_export_type.add_argument('--cfg', dest='pp_cfg',
+                                        help='config file for postproc '
+                                        'plugins')
         ap_export_type.add_argument('-P', '--pname',
                                     help='partitioning to use')
         if etype in ('boundary', 'spanwise', 'volume'):
@@ -472,10 +477,13 @@ def process_export(args):
 
     # Common arguments
     kargs = [args.eargs] if 'eargs' in args else []
-    pp_cfg = Inifile.load(args.pp_cfg) if args.pp_cfg else None
-    kwargs = {'fields': args.fields, 'prec': args.precision,
-              'pname': args.pname, 'pp_plugins': args.pp_plugins,
-              'pp_cfg': pp_cfg}
+    kwargs = {'prec': args.precision, 'pname': args.pname}
+
+    # Solution-specific arguments
+    if args.etype != 'mesh':
+        pp_cfg = Inifile.load(args.pp_cfg) if args.pp_cfg else None
+        kwargs |= {'fields': args.fields, 'pp_plugins': args.pp_plugins,
+                   'pp_cfg': pp_cfg}
 
     # Discntinuous output
     if 'discontinuous' in args:
@@ -487,7 +495,7 @@ def process_export(args):
         kwargs[k.replace('-', '_')] = int(v) if re.fullmatch(r'\d+', v) else v
 
     # Report the available fields in lieu of exporting
-    if args.list_fields:
+    if getattr(args, 'list_fields', False):
         if args.solnf == '-':
             raise ValueError('Listing fields requires an explicit solution '
                              'file')
@@ -504,8 +512,11 @@ def process_export(args):
     elif args.outf is None:
         raise ValueError('An output file is required when exporting')
 
+    # A mesh export takes no solution files
+    if args.etype == 'mesh':
+        batch = [[args.outf]]
     # Obtain files to export from a batch file
-    if args.solnf == '-' and args.outf == '-':
+    elif args.solnf == '-' and args.outf == '-':
         if rank == root:
             if args.batchfile == '-':
                 batch = sys.stdin.read()
@@ -526,15 +537,19 @@ def process_export(args):
         writer = get_writer_by_name(args.ftype, args.etype, args.meshf,
                                     *kargs, **kwargs)
     else:
-        extn = Path(batch[0][1]).suffix
+        extn = Path(batch[0][-1]).suffix
         writer = get_writer_by_extn(extn, args.etype, args.meshf, *kargs,
                                     **kwargs)
 
     # Process the files
     progress = args.progress if rank == root else NullProgressSequence()
-    with progress.start_with_bar('Process solutions') as pbar:
-        for solnf, outf in pbar.start_with_iter(batch):
-            writer.process(solnf, outf)
+    if len(batch) == 1:
+        with progress.start('Export'):
+            writer.process(*batch[0])
+    else:
+        with progress.start_with_bar('Process solutions') as pbar:
+            for b in pbar.start_with_iter(batch):
+                writer.process(*b)
 
 
 def process_resample(args):

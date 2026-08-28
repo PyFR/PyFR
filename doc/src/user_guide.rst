@@ -148,6 +148,17 @@ pyfr export
       from expanding the braces itself.  Boundary export is only
       supported for 3D grids.
 
+   pyfr export mesh
+      Exports a bare mesh, without any solution data.  Example:
+
+      .. code-block:: shell
+
+          pyfr export mesh mesh.pyfrm mesh.vtu
+
+      By default the order of the output cells is equal to that of the
+      shape points in the mesh; this can be overridden with the
+      ``--eopt=order:n`` and ``--eopt=divisor:n`` flags.
+
    pyfr export spanwise
       Exports a spanwise average of a 3D grid to a 2D VTK grid.
       Example:
