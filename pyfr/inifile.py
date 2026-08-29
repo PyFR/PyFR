@@ -122,13 +122,16 @@ class Inifile:
     def remove_option(self, section, option):
         self._cp.remove_option(section, option)
 
-    def sect_eq(self, other, section):
+    def sect_agree(self, other, section):
         try:
             sitems = dict(self._cp.items(section))
             oitems = dict(other._cp.items(section))
-            return sitems == oitems
         except NoSectionError:
             return False
+
+        # Require agreement on the options common to both sections
+        common = sitems.keys() & oitems.keys()
+        return all(sitems[k] == oitems[k] for k in common)
 
     def sect_diff(self, other, section):
         sitems = dict(self._cp.items(section))

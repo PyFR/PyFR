@@ -75,9 +75,8 @@ class BaseSystem:
         # Load the interfaces
         self._int_inters = self._load_int_inters(mesh, elemap)
         self._mpi_inters = self._load_mpi_inters(mesh, elemap)
-        self._bc_inters, self._bc_prefns = self._load_bc_inters(mesh, elemap,
-                                                                initsoln,
-                                                                serialiser)
+        bcs = self._load_bc_inters(mesh, elemap, initsoln, serialiser)
+        self._bc_inters, self._bc_bindfns, self._bc_advfns = bcs
 
     def _alloc_register_banks(self, registers, eles, ics):
         self.ele_banks = [[] for _ in eles]
@@ -267,7 +266,7 @@ class BaseSystem:
 
         bccls = self.bbcinterscls
         bcmap = {b.type: b for b in subclasses(bccls, just_leaf=True)}
-        bc_inters, bc_prefns = [], {}
+        bc_inters, bc_bindfns, bc_advfns = [], {}, {}
 
         prevcfg = initsoln.config if initsoln else None
 
@@ -314,13 +313,16 @@ class BaseSystem:
             else:
                 bciface = None
 
-            # Allow the boundary to return a preparation callback
-            if (pfn := bcclass.preparefn(bciface, mesh, elemap)):
-                bc_prefns[sname] = pfn
+            # Allow the boundary to return bind and advance callbacks
+            bfn, afn = bcclass.hookfns(bciface, mesh, elemap)
+            if bfn:
+                bc_bindfns[sname] = bfn
+            if afn:
+                bc_advfns[sname] = afn
 
             bcclass.serialisefn(bciface, f'bcs/{sname}', serialiser)
 
-        return bc_inters, bc_prefns
+        return bc_inters, bc_bindfns, bc_advfns
 
     def _gen_kernels(self, nregs, eles, iint, mpiint, bcint):
         self._kernels = kernels = defaultdict(list)
@@ -422,10 +424,15 @@ class BaseSystem:
 
         return deps
 
+    def bc_advance(self, intg):
+        # Advance any boundary condition controller state
+        for fn in self._bc_advfns.values():
+            fn(intg)
+
     def _prepare_kernels(self, t, uinbank, foutbank):
         _, binders, bckerns = self._get_kernels(uinbank, foutbank)
 
-        for b, bfn in self._bc_prefns.items():
+        for b, bfn in self._bc_bindfns.items():
             bfn(self, uinbank, t, bckerns[b])
 
         for b in binders:

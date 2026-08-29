@@ -214,6 +214,9 @@ class BaseIntegrator(metaclass=RegisterMeta):
 
         self.backend.wait()
 
+        # Advance any boundary condition controller state
+        self.system.bc_advance(self)
+
         # Evaluate trigger conditions
         if self.triggers:
             self.triggers.evaluate(self)

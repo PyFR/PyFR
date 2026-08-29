@@ -135,10 +135,16 @@ class ControlledBCMixin:
 
         self._init_extra(cfg, cfgsect)
 
-        if cfg.hasopt(cfgsect, 'file') and bccomm.rank == 0:
+        # Read any CSV options on every rank to keep the config in sync
+        if cfg.hasopt(cfgsect, 'file'):
             fname = cfg.get(cfgsect, 'file')
             nflush = cfg.getint(cfgsect, 'flushsteps', 10)
-            self.csv = CSVStream(fname, header=self._csv_header, nflush=nflush)
+
+            if bccomm.rank == 0:
+                self.csv = CSVStream(fname, header=self._csv_header,
+                                     nflush=nflush)
+            else:
+                self.csv = None
         else:
             self.csv = None
 
@@ -162,69 +168,80 @@ class ControlledBCMixin:
             yield ufpts, qwts, norms
 
     def setup(self, sdata, prevcfg):
-        sect_eq = (prevcfg is not None and
-                   self.cfg.sect_eq(prevcfg, self.cfgsect))
+        agree = (prevcfg is not None and
+                 self.cfg.sect_agree(prevcfg, self.cfgsect))
 
-        if sdata is not None and sdata[4] != 0 and sect_eq:
+        # Ensure all ranks on the boundary reach the same verdict
+        agree = self.bccomm.allreduce(agree, op=mpi.LAND)
+
+        if sdata is not None and sdata[4] != 0 and agree:
             self.interp_c = sdata[0]
             self.interp_m = sdata[1]
             self.meas_avg = sdata[2]
             self.tprev = sdata[3]
-            self.nstep_counter = sdata[4]
+            self.nupdates = sdata[4]
         else:
             self.interp_c = self._default_interp_c()
             self.interp_m = 0.0
             self.meas_avg = 0.0
             self.tprev = None
-            self.nstep_counter = 0
+            self.nupdates = 0
 
     @classmethod
-    def preparefn(cls, bciface, mesh, elemap):
+    def hookfns(cls, bciface, mesh, elemap):
         if bciface:
-            return bciface.prepare
+            return bciface.bind, bciface.advance
         else:
-            return None
+            return None, None
 
-    def prepare(self, system, ubank, t, kerns):
-        update = self.nstep_counter % self.nsteps == 0
-        if (update or not self.tprev) and t >= self.tstart:
-            solns = dict(zip(system.ele_types, system.ele_scal_upts(ubank)))
-            meas = self._measure(solns)
-
-            if not self.tprev:
-                self.meas_avg = meas
-                self.tprev = t
-            else:
-                a = self.alpha
-                self.meas_avg = a*meas + (1 - a)*self.meas_avg
-                dt = t - self.tprev
-                self.tprev = t
-
-                # Current Riemann invariant pressure
-                p0 = self.interp_m*t + self.interp_c
-
-                # Compute corrected Riemann pressure
-                p1 = self._correction(p0, dt)
-
-                # Update interpolation coefficients
-                self.interp_m = (p1 - p0) / dt
-                self.interp_c = p0 - self.interp_m*t
-
-                # Log to CSV
-                if self.csv:
-                    self.csv(t, self.meas_avg, p1)
-
+    def bind(self, system, ubank, t, kerns):
         # Bind interpolation to kernels
         for k in kerns.values():
             k.bind(ic=self.interp_c, im=self.interp_m)
 
-        self.nstep_counter += 1
+    def advance(self, intg):
+        t = intg.tcurr
+
+        # Guard against repeat invocations at a given time
+        repeat = self.tprev is not None and t <= self.tprev
+
+        if t < self.tstart or intg.nacptsteps % self.nsteps or repeat:
+            return
+
+        solns = dict(zip(intg.system.ele_types, intg.soln))
+
+        if self.tprev is None:
+            self.meas_avg = self._measure(solns)
+        else:
+            meas = self._measure(solns)
+
+            a = self.alpha
+            self.meas_avg = a*meas + (1 - a)*self.meas_avg
+            dt = t - self.tprev
+
+            # Current Riemann invariant pressure
+            p0 = self.interp_m*t + self.interp_c
+
+            # Compute corrected Riemann pressure
+            p1 = self._correction(p0, dt)
+
+            # Update interpolation coefficients
+            self.interp_m = (p1 - p0) / dt
+            self.interp_c = p0 - self.interp_m*t
+
+            # Log to CSV
+            if self.csv:
+                self.csv(t, self.meas_avg, p1)
+
+        self.tprev = t
+        self.nupdates += 1
 
     @classmethod
     def serialisefn(cls, bciface, prefix, srl):
         sfn = lambda: np.void(
             (bciface.interp_c, bciface.interp_m, bciface.meas_avg,
-             bciface.tprev or 0, bciface.nstep_counter),
+             bciface.tprev if bciface.tprev is not None else 0,
+             bciface.nupdates),
             dtype='f8,f8,f8,f8,i8'
         )
         srl.register(prefix, sfn if bciface else None)

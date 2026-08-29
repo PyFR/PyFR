@@ -79,8 +79,8 @@ class BaseAdvectionBCInters(BaseInters):
         self.set_external('t', 'scalar fpdtype_t')
 
     @classmethod
-    def preparefn(cls, bciface, mesh, elemap):
-        pass
+    def hookfns(cls, bciface, mesh, elemap):
+        return None, None
 
     def _eval_opts(self, opts, default=None):
         # Boundary conditions, much like initial conditions, can be
