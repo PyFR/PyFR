@@ -89,7 +89,7 @@ class BlockJacobiPreconditioner(Preconditioner):
         )
 
         # Allocate the per-element inverse and per-colour Jacobian matrices
-        groups = [ext.alias_group() for _ in range(self.ncolours)]
+        groups = [ext.group() for _ in range(self.ncolours)]
 
         self._invs, self._jstages = [], []
         for etidx, _, neles, n, tile in self._einfos:

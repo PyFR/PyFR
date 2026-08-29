@@ -26,41 +26,92 @@ class _Arena:
         self.alignb = alignb
         self.nbytes = 0
         self._pending = []
+        self._children = []
+        self._sealed = False
 
+    def _check_open(self):
+        if self._sealed:
+            raise RuntimeError('Extent has already been committed')
+
+    def _rsize(self, obj):
+        return obj.nbytes - obj.nbytes % -self.alignb
+
+
+class _Group(_Arena):
     def reserve(self, obj):
-        nbytes = obj.nbytes - obj.nbytes % -self.alignb
+        self._check_open()
+
         self._pending.append((obj, self.nbytes))
-        self.nbytes += nbytes
+        self.nbytes += self._rsize(obj)
+
+    def union(self):
+        self._check_open()
+
+        u = _Union(self.alignb)
+        self._children.append(u)
+        return u
+
+    def _seal(self):
+        # Lay each union out at the tail of the group
+        for u in self._children:
+            u._seal()
+            self._pending.extend((o, self.nbytes + off)
+                                 for o, off in u._pending)
+            self.nbytes += u.nbytes
+
+        self._sealed = True
 
 
-class _AliasGroup(_Arena):
-    pass
+class _Union(_Arena):
+    def reserve(self, obj):
+        self._check_open()
+
+        self._pending.append((obj, 0))
+        self.nbytes = max(self.nbytes, self._rsize(obj))
+
+    def group(self):
+        self._check_open()
+
+        g = _Group(self.alignb)
+        self._children.append(g)
+        return g
+
+    def _seal(self):
+        # Admit each group as a single overlapping member
+        for g in self._children:
+            g._seal()
+            self._pending.extend(g._pending)
+            self.nbytes = max(self.nbytes, g.nbytes)
+
+        self._sealed = True
 
 
-class Extent(_Arena, _StorageBase):
+class Extent(_Union, _StorageBase):
     def __init__(self, alignb):
         super().__init__(alignb)
         self.basedata = None
-        self._alias_groups = []
+        self._primary = self.group()
         self._storage_root = self
 
-    def alias_group(self):
-        g = _AliasGroup(self.alignb)
-        self._alias_groups.append(g)
-        return g
+    def reserve(self, obj):
+        self._primary.reserve(obj)
+
+    def union(self):
+        return self._primary.union()
 
     def commit(self, alloc_fn):
-        for g in self._alias_groups:
-            self.nbytes = max(self.nbytes, g.nbytes)
+        self._check_open()
+        self._seal()
+
+        # Check nothing has been reserved into two arenas
+        objs = [o for o, _ in self._pending]
+        if len(objs) != len(set(map(id, objs))):
+            raise RuntimeError('Object reserved into multiple arenas')
 
         self.basedata = alloc_fn(self.nbytes)
 
         for obj, offset in self._pending:
             obj.bind(self, self.basedata, offset)
-
-        for g in self._alias_groups:
-            for obj, offset in g._pending:
-                obj.bind(self, self.basedata, offset)
 
 
 class MatrixBase(_StorageBase):

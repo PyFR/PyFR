@@ -9,7 +9,7 @@ import numpy as np
 
 from pyfr.backends.base.provider import NotSuitableError
 from pyfr.backends.base.makoutil import mfilttag
-from pyfr.backends.base.types import _AliasGroup, Extent
+from pyfr.backends.base.types import _Arena, Extent
 from pyfr.template import DottedTemplateLookup
 from pyfr.util import digest
 
@@ -107,7 +107,7 @@ class BaseBackend:
             case str() as name:
                 ext = self._extents.setdefault(name, Extent(self.alignb))
                 ext.reserve(obj)
-            case Extent() | _AliasGroup() as ext:
+            case _Arena() as ext:
                 ext.reserve(obj)
             case _:
                 raise ValueError(f'Invalid extent: {extent!r}')
