@@ -29,17 +29,19 @@ class OpenCLMatrixBase(_OpenCLMatrixCommon, base.MatrixBase):
         # Remove
         del self._initval
 
-    def _get(self):
+    def _get_impl(self, start, end):
+        n = (end or self.nbytes // self.itemsize) - start
+
         # Get a pinned bounce buffer from the backend
-        buf = self.backend.xfer_buf((self.nrow, self.leaddim), self.dtype)
+        buf = self.backend.xfer_buf((n,), self.dtype)
 
         # Copy from device
         self.backend.queue.barrier()
-        self.backend.cl.memcpy(self.backend.queue, buf, self.data, self.nbytes,
-                               blocking=True)
+        self.backend.cl.memcpy(self.backend.queue, buf, self.data,
+                               n*self.itemsize, blocking=True,
+                               srcoff=start*self.itemsize)
 
-        # Unpack and ensure we return owned data (not a view of the buffer)
-        return np.require(self._unpack(buf), requirements='O')
+        return buf
 
     def _set(self, ary):
         # Pack into a pinned bounce buffer and copy to device

@@ -23,12 +23,12 @@ class MetalMatrixBase(base.MatrixBase):
         # Remove
         del self._initval
 
-    def _get(self):
+    def _get_impl(self, start, end):
         # Ensure all GPU work has completed
         self.backend.wait()
 
-        # Unpack
-        return self._unpack(self.hdata).copy()
+        # Return the requested range of the host mapping
+        return self.hdata[start:end]
 
     def _set(self, ary):
         # Wait for any outstanding work to finish

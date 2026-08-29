@@ -32,8 +32,8 @@ class OpenMPMatrixBase(base.MatrixBase):
         # Remove
         del self._initval
 
-    def _get(self):
-        return self._unpack(self.data)
+    def _get_impl(self, start, end):
+        return self.data.reshape(-1)[start:end]
 
     def _set(self, ary):
         self.data[:] = self._pack(ary)

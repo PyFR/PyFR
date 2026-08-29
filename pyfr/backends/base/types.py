@@ -1,5 +1,6 @@
 from bisect import insort
 from collections import defaultdict, deque
+from copy import copy
 import time
 
 import numpy as np
@@ -125,17 +126,21 @@ class MatrixBase(_StorageBase):
         backend.malloc(self, extent)
 
     def get(self):
+        return np.require(self._unpack(self._get()), requirements='O')
+
+    def _get(self, start=0, end=None):
         # If we are yet to be allocated use our initial value
         if hasattr(self, '_initval'):
             if self._initval is not None:
-                return self._initval
+                return self._pack(self._initval).reshape(-1)[start:end]
             else:
-                return np.zeros(self.ioshape, dtype=self.dtype)
+                n = (end or self.nbytes // self.itemsize) - start
+                return np.zeros(n, dtype=self.dtype)
         # Otherwise defer to the backend
         else:
-            return self._get()
+            return self._get_impl(start, end)
 
-    def _get(self):
+    def _get_impl(self, start, end):
         pass
 
     def _pack(self, ary, out=None):
@@ -213,7 +218,8 @@ class MatrixSlice(_StorageBase):
         self.nblocks = (self.ncol - self.ncol % -self.leaddim) // self.leaddim
 
         if backend.blocks:
-            self.ba, self.bb = self.ca // self.leaddim, self.cb // self.leaddim
+            self.ba = self.ca // self.leaddim
+            self.bb = self.ba + self.nblocks
 
         self.traits = (self.nblocks, self.nrow, self.ncol, self.leaddim,
                        self.dtype)
@@ -223,6 +229,24 @@ class MatrixSlice(_StorageBase):
         # Only set nbytes for slices which are safe to memcpy
         if ca == 0 and cb == mat.ncol:
             self.nbytes = self.nrow*self.leaddim*self.nblocks*self.itemsize
+
+    def get(self):
+        # Check the parent two dimensional
+        if len(self.parent.ioshape) != 2:
+            raise ValueError('Slices of packed matrices cannot be read')
+
+        # Fetch our containing block or row range and extract our window
+        ldim, bsz = self.leaddim, self.blocksz
+        if self.backend.blocks:
+            buf = self.parent._get(self.ba*bsz, self.bb*bsz)
+            buf = buf.reshape(self.nblocks, -1, ldim)[:, self.ra:self.rb]
+            buf = buf.swapaxes(0, 1).reshape(self.nrow, -1)[:, :self.ncol]
+        else:
+            buf = self.parent._get(self.ra*ldim, self.rb*ldim)
+            buf = buf.reshape(-1, ldim)[:, self.ca:self.cb]
+
+        # Return a copy of the data
+        return np.require(buf, requirements='O')
 
     @property
     def basedata(self):
@@ -319,6 +343,10 @@ class View:
         if any(m.dtype != self.refdtype for m in self._mats):
             raise TypeError('Mixed data types are not supported')
 
+        if any(m.tags & {'xchg', 'noblock'} for m in self._mats):
+            raise TypeError('Views of xchg or noblock matrices are not '
+                            'supported')
+
         # Index type
         ixdtype = backend.ixdtype
 
@@ -352,6 +380,15 @@ class View:
         else:
             self.rstrides_val = 0
             self.rstrides = None
+
+    def slice(self, p, q):
+        v = copy(self)
+        v.n = q - p
+        v.mapping = self.mapping.slice(ca=p, cb=q)
+        if self.rstrides is not None:
+            v.rstrides = self.rstrides.slice(ca=p, cb=q)
+
+        return v
 
 
 class XchgView:
