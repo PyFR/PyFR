@@ -11,16 +11,16 @@ class CUDALinalgKernels(BaseGPULinalgKernels, CUDAKernelProvider):
         self._sgsize = 32
 
     def _batched_inv(self, m, out, *, eidxs):
-        n, neles = out.block_size, m.ioshape[2]
+        n, nemax = out.block_size, m.ioshape[2]
         cuda = self.backend.cuda
-        ftsz = self._compute_dtype(m.dtype).itemsize
+        cdtype = self._compute_dtype(m.dtype)
+        itemsz = np.dtype(cdtype).itemsize
 
         kern, nthreads = self._compile_inv(out, m.dtype)
 
-        chunk = min(neles, kern.resident_blocks(nthreads))
-        sc = self._inv_sc(n, self._compute_dtype(m.dtype))
-        anb, cnb = ftsz*n*n, ftsz*n*sc
-        totalnb = chunk*(anb + cnb)
+        chunk = min(nemax, kern.resident_blocks(nthreads))
+        sc = self._inv_sc(n, cdtype)
+        anbytes, cnbytes = chunk*itemsz*n*n, chunk*itemsz*n*sc
 
         # Static args set once; A/C scratch carved from one allocation
         params = kern.make_params((chunk, 1, 1), (nthreads, 1, 1))
@@ -28,15 +28,25 @@ class CUDALinalgKernels(BaseGPULinalgKernels, CUDAKernelProvider):
         params.set_args(out, m, eidxs, m.leaddim, start=2)
         params.set_arg(7, 1.0)
 
+        check_inv_eidxs = self.check_inv_eidxs
+        ecurr = eidxs
+
         class BatchedInvKernel(CUDAKernel):
-            def bind(self, *, scale=1.0):
-                params.set_arg(7, scale)
+            def bind(self, *, scale=None, eidxs=None):
+                nonlocal ecurr
+
+                if scale is not None:
+                    params.set_arg(7, scale)
+                if eidxs is not None:
+                    check_inv_eidxs(ecurr, eidxs, nemax)
+                    params.set_arg(4, eidxs)
+                    ecurr = eidxs
 
             def run(self, stream):
-                buf = cuda.mem_alloc(totalnb, stream)
-                params.set_args(int(buf), int(buf) + chunk*anb)
-                for eoff in range(0, neles, chunk):
-                    params.grid[0] = min(chunk, neles - eoff)
+                buf = cuda.mem_alloc(anbytes + cnbytes, stream)
+                params.set_args(int(buf), int(buf) + anbytes)
+                for eoff in range(0, ecurr.ncol, chunk):
+                    params.grid[0] = min(chunk, ecurr.ncol - eoff)
                     params.set_arg(6, eoff)
                     kern.exec_async(stream, params)
                 buf.free_async(stream)

@@ -4,27 +4,36 @@ from pyfr.backends.base.provider import NotSuitableError
 from pyfr.nputil import is_bf16, npdtype_to_ctype
 
 
-def batched_inv_ok_dtypes(mdtype, odtype):
-    mdtype, odtype = np.dtype(mdtype), np.dtype(odtype)
-    o16 = odtype == np.float16 or is_bf16(odtype)
-    return mdtype == odtype or (mdtype == np.float32 and o16)
+class BaseLinalgKernels:
+    @staticmethod
+    def batched_inv_ok_dtypes(mdtype, odtype):
+        mdtype, odtype = np.dtype(mdtype), np.dtype(odtype)
+        o16 = odtype == np.float16 or is_bf16(odtype)
+        return mdtype == odtype or (mdtype == np.float32 and o16)
+
+    @staticmethod
+    def check_inv_eidxs(curr, new, nemax):
+        # Check the rebound index window fits within the staging capacity
+        if new.dtype != curr.dtype or new.ncol > nemax:
+            raise ValueError('Rebound eidxs must match type and fit capacity')
+
+    @staticmethod
+    def apply_tiled_tplargs(minv, *, nupts, nvars, in_scale, out_scale):
+        return {
+            'nupts': nupts, 'nvars': nvars, 'block_size': minv.block_size,
+            'trows': minv.trows, 'tcols': minv.tcols,
+            'ntiles_c': minv.ntiles_c,
+            'in_scale': in_scale, 'out_scale': out_scale,
+            'pcdtype': npdtype_to_ctype(minv.dtype)
+        }
 
 
-def apply_tiled_tplargs(minv, *, nupts, nvars, in_scale, out_scale):
-    return {
-        'nupts': nupts, 'nvars': nvars, 'block_size': minv.block_size,
-        'trows': minv.trows, 'tcols': minv.tcols, 'ntiles_c': minv.ntiles_c,
-        'in_scale': in_scale, 'out_scale': out_scale,
-        'pcdtype': npdtype_to_ctype(minv.dtype)
-    }
-
-
-class BaseGPULinalgKernels:
+class BaseGPULinalgKernels(BaseLinalgKernels):
     # Threads per block for the tiled matvec
     _mv_nthreads = 64
 
     def batched_inv_tiled(self, m, out, *, eidxs):
-        if (not batched_inv_ok_dtypes(m.dtype, out.dtype) or
+        if (not self.batched_inv_ok_dtypes(m.dtype, out.dtype) or
             m.ioshape[0] != out.block_size):
             raise NotSuitableError('Incompatible tiled inverse output')
 
@@ -32,8 +41,9 @@ class BaseGPULinalgKernels:
 
     def batched_tiled_matvec(self, x, minv, y, *, nupts, nvars, in_scale=(),
                              out_scale=()):
-        tplargs = apply_tiled_tplargs(minv, nupts=nupts, nvars=nvars,
-                                      in_scale=in_scale, out_scale=out_scale)
+        tplargs = self.apply_tiled_tplargs(minv, nupts=nupts, nvars=nvars,
+                                           in_scale=in_scale,
+                                           out_scale=out_scale)
         tplargs['mvthreads'] = self._mv_nthreads
         return self._batched_tiled_matvec(x, minv, y, tplargs)
 

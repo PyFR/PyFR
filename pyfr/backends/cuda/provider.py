@@ -18,7 +18,7 @@ class CUDAKernel(Kernel):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        if hasattr(self, 'bind') and hasattr(self, 'add_to_graph'):
+        if hasattr(self, 'add_to_graph'):
             self.gnodes = WeakKeyDictionary()
 
 
@@ -39,7 +39,7 @@ class CUDAUnorderedMetaKernel(BaseUnorderedMetaKernel):
 
 class CUDAKernelProvider(BaseKernelProvider):
     @memoize
-    def _build_kernel(self, name, src, argtypes, argn=[]):
+    def _build_kernel(self, name, src, argtypes):
         mod = CUDACompilerModule(self.backend, src)
         return mod.get_function(name, argtypes)
 
@@ -95,8 +95,7 @@ class CUDAPointwiseKernelProvider(CUDAKernelProvider,
 
         self.kernel_generator_cls = KernelGenerator
 
-    def _instantiate_kernel(self, dims, fun, arglst, argm, argv):
-        rtargs = []
+    def _instantiate_kernel(self, dims, fun, args):
         block = self._block1d if len(dims) == 1 else self._block2d
         grid = get_grid_for_block(block, dims[-1])
 
@@ -105,37 +104,28 @@ class CUDAPointwiseKernelProvider(CUDAKernelProvider,
 
         params = fun.make_params(grid, block)
 
-        # Process the arguments
-        for i, k in enumerate(arglst):
-            if isinstance(k, str):
-                rtargs.append((i, k))
-            else:
-                params.set_arg(i, k)
+        # Set the iteration dimensions
+        params.set_args(*dims)
 
         class PointwiseKernel(CUDAKernel):
-            if rtargs:
-                rtnames = tuple(k for _, k in rtargs)
+            _set_arg = staticmethod(params.set_arg)
 
-                def bind(self, **kwargs):
-                    for i, k in rtargs:
-                        if k in kwargs:
-                            params.set_arg(i, kwargs[k])
+            def bind(self, **kwargs):
+                super().bind(**kwargs)
 
-                    # Notify any graphs we're in about our new parameters
-                    for graph, gnode in self.gnodes.items():
-                        graph.stale_kparams[gnode] = params
+                # Notify any graphs we're in about our new parameters
+                for graph, gnode in self.gnodes.items():
+                    graph.stale_kparams[gnode] = params
 
             def add_to_graph(self, graph, deps):
                 gnode = graph.graph.add_kernel(params, deps)
 
-                # If our parameters can change then we need to keep a
-                # (weak) reference to the graph so we can notify it
-                if rtargs:
-                    self.gnodes[graph] = gnode
+                # Keep a (weak) graph reference so rebinds can notify it
+                self.gnodes[graph] = gnode
 
                 return gnode
 
             def run(self, stream):
                 fun.exec_async(stream, params)
 
-        return PointwiseKernel(argm, argv)
+        return PointwiseKernel(args=args)

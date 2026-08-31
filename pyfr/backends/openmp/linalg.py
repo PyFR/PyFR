@@ -4,14 +4,13 @@ from functools import cached_property
 
 import numpy as np
 
-from pyfr.backends.base.linalg import (apply_tiled_tplargs,
-                                       batched_inv_ok_dtypes)
+from pyfr.backends.base.linalg import BaseLinalgKernels
 from pyfr.backends.openmp.provider import OpenMPKernel, OpenMPKernelProvider
 from pyfr.nputil import BLASThreadCtrl, bf16_to_f32, f32_to_bf16, is_bf16
 from pyfr.util import ndrange
 
 
-class OpenMPLinalgKernels(OpenMPKernelProvider):
+class OpenMPLinalgKernels(OpenMPKernelProvider, BaseLinalgKernels):
     def __init__(self, backend):
         super().__init__(backend)
 
@@ -41,9 +40,11 @@ class OpenMPLinalgKernels(OpenMPKernelProvider):
                                   initializer=init)
 
     def batched_inv_tiled(self, m, out, *, eidxs):
-        if (not batched_inv_ok_dtypes(m.dtype, out.dtype) or
+        if (not self.batched_inv_ok_dtypes(m.dtype, out.dtype) or
             out.block_size != m.nrow):
             raise ValueError('Invalid tiled output matrix')
+
+        check_inv_eidxs = self.check_inv_eidxs
 
         nrow, csubsz, nb = m.nrow, m.backend.csubsz, m.datashape[0]
         nworkers = min(self._omp_num_threads(), nb)
@@ -53,18 +54,28 @@ class OpenMPLinalgKernels(OpenMPKernelProvider):
         ibf16, obf16 = is_bf16(m.dtype), is_bf16(out.dtype)
         eye = np.eye(nrow, dtype=np.float32 if ibf16 else m.dtype)
 
-        earr = eidxs.get().ravel()
-        blocks, rem = divmod(earr, out.csubsz)
-        soas, inners = divmod(rem, out.soasz)
-
         class BatchedInvTiledKernel(OpenMPKernel):
             _scale = 1.0
 
-            def bind(self, *, scale=1.0):
-                self._scale = scale
+            def bind(self, *, scale=None, eidxs=None):
+                if scale is not None:
+                    self._scale = scale
+                if eidxs is not None:
+                    check_inv_eidxs(self._ecurr, eidxs, m.ioshape[2])
+                    self._set_eidxs(eidxs)
+
+            def _set_eidxs(self, eidxs):
+                self._ecurr = eidxs
+                self._earr = earr = eidxs.get().ravel()
+                self._blocks, rem = divmod(earr, out.csubsz)
+                self._soas, self._inners = divmod(rem, out.soasz)
 
             def run(self):
                 data = m.data.reshape(m.datashape)
+                earr = self._earr
+                blocks, soas, inners = self._blocks, self._soas, self._inners
+                n = -(-len(earr) // csubsz)
+                chunk = max(-(-n // nworkers), 1)
 
                 def process(b0, b1):
                     start = b0*csubsz
@@ -87,25 +98,28 @@ class OpenMPLinalgKernels(OpenMPKernelProvider):
                             blk = f32_to_bf16(blk)
                         out.data[b, i, j, :r1 - r0, s, :c1 - c0, n] = blk
 
-                if nworkers > 1:
+                if executor:
                     with BLASThreadCtrl.serial():
                         # Submit the inversion work to the thread pool
-                        fs = [executor.submit(process, i*nb//nworkers,
-                                              (i + 1)*nb//nworkers)
-                              for i in range(nworkers)]
+                        futures = [executor.submit(process, i, i + chunk)
+                                   for i in range(0, n, chunk)]
 
                         # Wait for completion
-                        for f in fs:
+                        for f in futures:
                             f.result()
                 else:
-                    process(0, nb)
+                    process(0, n)
 
-        return BatchedInvTiledKernel(mats=[m, out, eidxs])
+        kern = BatchedInvTiledKernel(mats=[m, out, eidxs])
+        kern._set_eidxs(eidxs)
+
+        return kern
 
     def batched_tiled_matvec(self, x, minv, y, *, nupts, nvars,
                              in_scale=(), out_scale=()):
-        tplargs = apply_tiled_tplargs(minv, nupts=nupts, nvars=nvars,
-                                      in_scale=in_scale, out_scale=out_scale)
+        tplargs = self.apply_tiled_tplargs(minv, nupts=nupts, nvars=nvars,
+                                           in_scale=in_scale,
+                                           out_scale=out_scale)
 
         tpl = self.backend.lookup.get_template('batched_tiled_matvec')
         src = tpl.render(**tplargs)

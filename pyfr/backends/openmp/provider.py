@@ -11,11 +11,14 @@ from pyfr.nputil import npdtype_to_ctypestype
 
 
 class OpenMPKernel(Kernel):
-    def __init__(self, mats=[], views=[], misc=[], kernel=None):
-        super().__init__(mats, views, misc)
+    def __init__(self, args={}, mats=[], misc=[], kernel=None):
+        super().__init__(args, mats, misc)
 
         if kernel:
             self.kernel = kernel
+
+    def _set_arg(self, i, v):
+        self.kernel.set_arg(i, v)
 
     def add_to_graph(self, graph, dnodes):
         graph.klist.append(self.kernel)
@@ -76,16 +79,11 @@ class OpenMPKRunArgs(Structure):
 
 
 class OpenMPKernelFunction:
-    def __init__(self, backend, fun, argcls, argidxs={}):
+    def __init__(self, backend, fun, argcls):
         self.krunner = backend.krunner
         self.fun = fun
         self.kargs = argcls()
-
-        # Blocking info
-        self._argidxs = argidxs
-        self.argsizes = [None]*len(argcls._fields_)
         self.nblocks = None
-        self.subs_offsets = [0]*len(argcls._fields_)
 
     @cached_property
     def runargs(self):
@@ -105,30 +103,8 @@ class OpenMPKernelFunction:
     def arg_off(self, i):
         return getattr(self.kargs.__class__, f'arg{i}').offset
 
-    def set_argidxs(self, arg_idxs):
-        self._argidxs = arg_idxs
-
-    def arg_idx(self, name):
-        return self._argidxs[name]
-
-    def arg_blocksz(self, i):
-        return self.argsizes[i]
-
-    def subs_off(self, i):
-        return self.subs_offsets[i]
-
     def set_arg(self, i, v):
         setattr(self.kargs, f'arg{i}', getattr(v, '_as_parameter_', v))
-
-        try:
-            self.argsizes[i] = v.blocksz*v.itemsize
-        except (AttributeError, IndexError):
-            pass
-
-        try:
-            self.subs_offsets[i] = v.ra*v.leaddim*v.itemsize
-        except (AttributeError, IndexError):
-            pass
 
     def set_args(self, *args, start=0):
         for i, arg in enumerate(args, start=start):
@@ -159,41 +135,23 @@ class OpenMPKernelProvider(BaseKernelProvider):
         return lib.function(name, restype,
                             [npdtype_to_ctypestype(arg) for arg in argtypes])
 
-    def _build_kernel(self, name, src, argtypes, argnames=[]):
+    def _build_kernel(self, name, src, argtypes):
         lib = self._build_library(src)
         fun = lib.function(name)
 
-        argidxs = {n: i for i, n in enumerate(argnames)}
-        return OpenMPKernelFunction(
-            self.backend, fun, self._get_arg_cls(tuple(argtypes)), argidxs
-        )
+        return OpenMPKernelFunction(self.backend, fun,
+                                    self._get_arg_cls(tuple(argtypes)))
 
 
 class OpenMPPointwiseKernelProvider(OpenMPKernelProvider,
                                     BasePointwiseKernelProvider):
     kernel_generator_cls = OpenMPKernelGenerator
 
-    def _instantiate_kernel(self, dims, fun, arglst, argm, argv):
-        rtargs = []
-
-        # Set the number of blocks and argument index mapping
+    def _instantiate_kernel(self, dims, fun, args):
+        # Set the number of blocks
         fun.set_nblocks(-(-dims[-1] // self.backend.csubsz))
-        fun.set_argidxs({n: i for n, (i, _) in argm.items()})
 
-        # Process the arguments
-        for i, k in enumerate(arglst):
-            if isinstance(k, str):
-                rtargs.append((i, k))
-            else:
-                fun.set_arg(i, k)
+        # Set the iteration dimensions
+        fun.set_args(*dims)
 
-        class PointwiseKernel(OpenMPKernel):
-            if rtargs:
-                rtnames = tuple(k for _, k in rtargs)
-
-                def bind(self, **kwargs):
-                    for i, k in rtargs:
-                        if k in kwargs:
-                            self.kernel.set_arg(i, kwargs[k])
-
-        return PointwiseKernel(argm, argv, kernel=fun)
+        return OpenMPKernel(args=args, kernel=fun)

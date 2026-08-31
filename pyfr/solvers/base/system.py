@@ -375,10 +375,10 @@ class BaseSystem:
 
                             tag_kern(pn, p, kern)
 
-        bindable = [k for ks in kernels.values() for k in ks if k.rtnames]
+        allkerns = [k for ks in kernels.values() for k in ks]
         for cb_names, cb in self._kernel_callbacks:
-            for k in bindable:
-                if any(name in cb_names for name in k.rtnames):
+            for k in allkerns:
+                if not k.argnames.isdisjoint(cb_names):
                     cb(k)
 
     def _gen_mpireqs(self, mpiint):
@@ -403,7 +403,7 @@ class BaseSystem:
         binders, bckerns = [], defaultdict(dict)
         for kn, kerns in kernels.items():
             for k in kerns:
-                if k.rtnames:
+                if 't' in k.argnames:
                     binders.append(k.bind)
 
                 if kn.startswith('bcint/'):

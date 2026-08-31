@@ -227,7 +227,7 @@ class BackendFieldReducer:
 
         kerns = self._get_kerns(intg.idxcurr)
         for kern in kerns:
-            if hasattr(kern, 'bind'):
+            if 't' in kern.argnames:
                 kern.bind(t=intg.tcurr)
         self._backend.run_kernels(kerns)
 

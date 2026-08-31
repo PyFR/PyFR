@@ -62,7 +62,7 @@ class MetalKernelProvider(BaseKernelProvider):
             v[off:off + blk.nbytes] = blk[:m.nbytes - off]
 
     @memoize
-    def _build_kernel(self, name, src, argtypes, argn=[]):
+    def _build_kernel(self, name, src, argtypes):
         from Metal import MTLSizeMake
 
         # Build the pipeline using the compiler (with disk caching)
@@ -113,9 +113,7 @@ class MetalPointwiseKernelProvider(MetalKernelProvider,
 
         self.kernel_generator_cls = KernelGenerator
 
-    def _instantiate_kernel(self, dims, fun, arglst, argm, argv):
-        kargs, rtargs = [], []
-
+    def _instantiate_kernel(self, dims, fun, args):
         # Determine the thread group and grid sizes
         if len(dims) == 1:
             tgrp = self._tgrp1d
@@ -124,27 +122,28 @@ class MetalPointwiseKernelProvider(MetalKernelProvider,
             tgrp = self._tgrp2d
             grid = (dims[1] - dims[1] % -tgrp[0], tgrp[1], 1)
 
-        # Process the arguments
-        for i, k in enumerate(arglst):
-            if isinstance(k, str):
-                kargs.append(None)
-                rtargs.append((i, k))
-            elif isinstance(k, (int, float)):
-                kargs.append(k)
-            else:
-                k = getattr(k, 'data', k)
-                kargs.append(k if isinstance(k, tuple) else (k, 0))
+        # Argument setting with buffers as (buffer, offset) pairs
+        def set_arg(i, k):
+            match k:
+                case int() | float():
+                    kargs[i] = k
+                case object(data=tuple() as v):
+                    kargs[i] = v
+                case object(data=v) | v:
+                    kargs[i] = (v, 0)
+
+        # Total argument count for the dimensions and named arguments
+        nargs = len(dims) + sum(len(s[1]) for _, s, _ in args.values())
+
+        # Set the iteration dimensions
+        kargs = [None]*nargs
+        for i, d in enumerate(dims):
+            set_arg(i, int(d))
 
         class PointwiseKernel(MetalKernel):
-            if rtargs:
-                rtnames = tuple(k for _, k in rtargs)
-
-                def bind(self, **kwargs):
-                    for i, k in rtargs:
-                        if k in kwargs:
-                            kargs[i] = kwargs[k]
+            _set_arg = staticmethod(set_arg)
 
             def run(self, cbuf):
                 fun(cbuf, grid, tgrp, *kargs)
 
-        return PointwiseKernel(argm, argv)
+        return PointwiseKernel(args=args)

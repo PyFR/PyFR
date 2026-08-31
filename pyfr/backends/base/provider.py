@@ -1,5 +1,5 @@
 from contextlib import contextmanager
-import itertools as it
+from functools import cached_property
 import re
 import types
 
@@ -10,17 +10,56 @@ from pyfr.cache import memoize
 
 class Kernel:
     compound = False
-    rtnames = ()
 
-    def __init__(self, mats=[], views=[], misc=[], dt=float('nan')):
+    def __init__(self, args={}, mats=[], misc=[], dt=float('nan')):
+        self.args = args
         self.mats = mats
-        self.views = views
         self.misc = misc
         self.dt = dt
+
+        # Arguments sealed by committed graph group substitutions
+        self.sealed = set()
 
     @property
     def retval(self):
         return None
+
+    @property
+    def leaves(self):
+        return [self]
+
+    @cached_property
+    def argnames(self):
+        return frozenset(self.args)
+
+    def bind(self, **kwargs):
+        # Rebind the named arguments
+        for n, v in kwargs.items():
+            i, spec, curr = self.args[n]
+            form = spec[0]
+
+            if i in self.sealed:
+                raise RuntimeError(f'Argument {n} is sealed by a graph '
+                                   'substitution')
+
+            # Validate the argument and expand it into kernel arguments
+            if form == 's' and isinstance(v, int | float):
+                kargs = [v]
+            elif form == 's' or isinstance(v, int | float):
+                raise ValueError('Rebound argument must be of identical kind')
+            elif v.traits == curr.traits:
+                kargs = v.kargs(form)
+            else:
+                raise ValueError(f'Trait mismatch {v.traits} != {curr.traits}')
+
+            # Update the underlying kernel
+            for j, s in enumerate(kargs, start=i):
+                self._set_arg(j, s)
+
+            self.args[n] = (i, spec, v)
+
+    def _set_arg(self, i, v):
+        pass
 
     def run(self, *args):
         pass
@@ -36,16 +75,9 @@ class BaseMetaKernel(Kernel):
 
         self.kernels = list(kernels)
 
-        bkerns = [k for k in self.kernels if hasattr(k, 'bind')]
-
-        if bkerns:
-            self._bkerns = bkerns
-            self.bind = self._bind
-            self.rtnames = tuple({n for k in bkerns for n in k.rtnames})
-
-    def _bind(self, **kwargs):
-        for k in self._bkerns:
-            k.bind(**kwargs)
+    @property
+    def leaves(self):
+        return [l for k in self.kernels for l in k.leaves]
 
     def run(self, *args):
         for k in self.kernels:
@@ -138,69 +170,35 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
 
         return src, ndim, argn, argt
 
-    def _build_kernel(self, name, src, args, argn=[]):
+    def _build_kernel(self, name, src, args):
         pass
 
-    def _build_arglst(self, dims, argn, argt, argdict):
-        # Possible matrix types
-        mattypes = (
-            self.backend.const_matrix_cls, self.backend.matrix_cls,
-            self.backend.xchg_matrix_cls, self.backend.matrix_slice_cls
-        )
+    def _build_args(self, ndim, argn, argt, argdict):
+        # Named arguments along with their indices and specs
+        args, i = {}, ndim
 
-        # Possible view types
-        viewtypes = (self.backend.view_cls, self.backend.xchg_view_cls)
-
-        # Scalar types which can be resolved at runtime
-        scaltypes = (self.backend.fpdtype, self.backend.ixdtype)
-
-        # Matrices and views this kernel operates on
-        argmats, argviews = {}, {}
-
-        # First arguments are the iteration dimensions
-        ndim, arglst = len(dims), [int(d) for d in dims]
-
-        # Followed by the objects themselves
-        for aname, atypes in zip(argn[ndim:], argt[ndim:]):
-            try:
-                ka = argdict[aname]
-            except KeyError:
-                # Allow scalar arguments to be resolved at runtime
-                if len(atypes) == 1 and atypes[0] in scaltypes:
-                    ka = aname
+        # Arguments are laid out after the iteration dimensions
+        for aname, (form, atypes) in zip(argn[ndim:], argt[ndim:]):
+            # Default unbound scalar arguments to zero
+            if form == 's':
+                if atypes[0] == self.backend.fpdtype:
+                    ka = float(argdict.get(aname, 0))
                 else:
-                    raise
-
-            # Matrix
-            if isinstance(ka, mattypes):
-                argmats[aname] = (len(arglst), ka)
+                    ka = int(argdict.get(aname, 0))
+            else:
+                ka = argdict[aname]
+                mscls = self.backend.matrix_slice_cls
 
                 # Check that argument is not a row sliced matrix
-                if isinstance(ka, mattypes[-1]) and ka.nrow != ka.parent.nrow:
+                if isinstance(ka, mscls) and ka.nrow != ka.parent.nrow:
                     raise ValueError('Row sliced matrices are not supported')
-                else:
-                    arglst += [ka, ka.leaddim] if len(atypes) == 2 else [ka]
-            # View
-            elif isinstance(ka, viewtypes):
-                argviews[aname] = (len(arglst), ka)
 
-                if isinstance(ka, self.backend.view_cls):
-                    view = ka
-                else:
-                    view = ka.view
+            args[aname] = (i, (form, atypes), ka)
+            i += len(atypes)
 
-                arglst += [view.basedata, view.mapping]
-                if len(atypes) == 3 and atypes[2] == np.uintp:
-                    arglst.append(view.rstrides)
-                elif len(atypes) == 3:
-                    arglst.append(view.rstrides_val)
-            # Other; let the backend handle it
-            else:
-                arglst.append(ka)
+        return args
 
-        return arglst, argmats, argviews
-
-    def _instantiate_kernel(self, dims, fun, arglst, argmv):
+    def _instantiate_kernel(self, dims, fun, args):
         pass
 
     def register(self, mod):
@@ -224,13 +222,17 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
                                                         tplargs)
 
             # Compile the kernel
-            fun = self._build_kernel(name, src, list(it.chain(*argt)), argn)
+            argtypes = [t for _, ts in argt for t in ts]
+            fun = self._build_kernel(name, src, argtypes)
 
             # Process the argument list
-            argb, argm, argv = self._build_arglst(dims, argn, argt, kwargs)
+            args = self._build_args(len(dims), argn, argt, kwargs)
 
-            # Return a Kernel subclass instance
-            return self._instantiate_kernel(dims, fun, argb, argm, argv)
+            # Create the kernel and set its arguments
+            kern = self._instantiate_kernel(dims, fun, args)
+            kern.bind(**{n: v for n, (_, _, v) in args.items()})
+
+            return kern
 
         # Attach the module to the method as an attribute
         kernel_meth._mod = mod

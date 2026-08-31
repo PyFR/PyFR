@@ -5,116 +5,17 @@ import time
 
 import numpy as np
 
+from pyfr.backends.base.storage import _StorageBase
 from pyfr.mpiutil import autofree, mpi
 
 
-class _StorageBase:
-    @property
-    def storage_root(self):
-        return self._storage_root
-
-    def same_storage(self, other):
-        return self.storage_root is other.storage_root
-
-    def bind(self, root, basedata, offset):
-        self._storage_root = root
-        self.onalloc(basedata, offset)
+class _MatrixArg:
+    def kargs(self, form):
+        # Expand into a pointer, plus a leading dimension if present
+        return [self, self.leaddim] if form == 'ml' else [self]
 
 
-class _Arena:
-    def __init__(self, alignb):
-        self.alignb = alignb
-        self.nbytes = 0
-        self._pending = []
-        self._children = []
-        self._sealed = False
-
-    def _check_open(self):
-        if self._sealed:
-            raise RuntimeError('Extent has already been committed')
-
-    def _rsize(self, obj):
-        return obj.nbytes - obj.nbytes % -self.alignb
-
-
-class _Group(_Arena):
-    def reserve(self, obj):
-        self._check_open()
-
-        self._pending.append((obj, self.nbytes))
-        self.nbytes += self._rsize(obj)
-
-    def union(self):
-        self._check_open()
-
-        u = _Union(self.alignb)
-        self._children.append(u)
-        return u
-
-    def _seal(self):
-        # Lay each union out at the tail of the group
-        for u in self._children:
-            u._seal()
-            self._pending.extend((o, self.nbytes + off)
-                                 for o, off in u._pending)
-            self.nbytes += u.nbytes
-
-        self._sealed = True
-
-
-class _Union(_Arena):
-    def reserve(self, obj):
-        self._check_open()
-
-        self._pending.append((obj, 0))
-        self.nbytes = max(self.nbytes, self._rsize(obj))
-
-    def group(self):
-        self._check_open()
-
-        g = _Group(self.alignb)
-        self._children.append(g)
-        return g
-
-    def _seal(self):
-        # Admit each group as a single overlapping member
-        for g in self._children:
-            g._seal()
-            self._pending.extend(g._pending)
-            self.nbytes = max(self.nbytes, g.nbytes)
-
-        self._sealed = True
-
-
-class Extent(_Union, _StorageBase):
-    def __init__(self, alignb):
-        super().__init__(alignb)
-        self.basedata = None
-        self._primary = self.group()
-        self._storage_root = self
-
-    def reserve(self, obj):
-        self._primary.reserve(obj)
-
-    def union(self):
-        return self._primary.union()
-
-    def commit(self, alloc_fn):
-        self._check_open()
-        self._seal()
-
-        # Check nothing has been reserved into two arenas
-        objs = [o for o, _ in self._pending]
-        if len(objs) != len(set(map(id, objs))):
-            raise RuntimeError('Object reserved into multiple arenas')
-
-        self.basedata = alloc_fn(self.nbytes)
-
-        for obj, offset in self._pending:
-            obj.bind(self, self.basedata, offset)
-
-
-class MatrixBase(_StorageBase):
+class MatrixBase(_MatrixArg, _StorageBase):
     _base_tags = set()
 
     def __init__(self, backend, dtype, ioshape, initval, extent, tags):
@@ -209,8 +110,8 @@ class MatrixBase(_StorageBase):
         if out is not None:
             out.reshape(ary.shape)[:] = ary
             return out
-
-        return np.ascontiguousarray(ary, dtype=self.dtype)
+        else:
+            return np.ascontiguousarray(ary, dtype=self.dtype)
 
     def _unpack(self, ary):
         # Unpack from blocked AoSoA to blocked SoA
@@ -247,7 +148,7 @@ class Matrix(MatrixBase):
         pass
 
 
-class MatrixSlice(_StorageBase):
+class MatrixSlice(_MatrixArg, _StorageBase):
     def __init__(self, backend, mat, ra, rb, ca, cb):
         self.backend = backend
         self.parent = mat
@@ -315,7 +216,6 @@ class MatrixSlice(_StorageBase):
     @property
     def storage_root(self):
         return self.parent.storage_root
-
 
 
 class ConstMatrix(MatrixBase):
@@ -422,24 +322,43 @@ class View:
         mapping = (offset + blkdisp + rowdisp + coldisp)[None, :]
         self.mapping = backend.const_matrix(mapping, dtype=ixdtype, tags=tags)
 
-        # Row strides
+        # Row strides, with a scalar shortcut if they are uniform
         if self.nvrow > 1:
             rstrides = (rstridemap*leaddim)[None, :]
-            self.rstrides_val = int(rstrides.flat[0])
+            if (rstrides == rstrides.flat[0]).all():
+                self.rstride = int(rstrides.flat[0])
+            else:
+                self.rstride = None
             self.rstrides = backend.const_matrix(rstrides, dtype=ixdtype,
                                                  tags=tags)
         else:
-            self.rstrides_val = 0
+            self.rstride = 0
             self.rstrides = None
+
+        self.traits = (self.n, self.nvrow, self.nvcol, self.refdtype)
 
     def slice(self, p, q):
         v = copy(self)
         v.n = q - p
+        v.traits = (v.n, *self.traits[1:])
         v.mapping = self.mapping.slice(ca=p, cb=q)
         if self.rstrides is not None:
             v.rstrides = self.rstrides.slice(ca=p, cb=q)
 
         return v
+
+    def kargs(self, form):
+        # Expand into base data, mapping, and any row stride arguments
+        match form:
+            case 'va':
+                return [self.basedata, self.mapping, self.rstrides]
+            case 'vs' if self.rstride is not None:
+                return [self.basedata, self.mapping, self.rstride]
+            case 'vs':
+                raise ValueError('Kernel requires a view with a uniform row '
+                                 'stride')
+            case _:
+                return [self.basedata, self.mapping]
 
 
 class XchgView:
@@ -454,6 +373,11 @@ class XchgView:
 
         # Now create an exchange matrix to pack the view into
         self.xchgmat = backend.xchg_matrix((nvrow, nvcol*n), tags=tags)
+
+        self.traits = self.view.traits
+
+    def kargs(self, form):
+        return self.view.kargs(form)
 
     def recvreq(self, comm, pid, tag):
         return self.xchgmat.recvreq(comm, pid, tag)

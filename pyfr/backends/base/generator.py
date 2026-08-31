@@ -107,18 +107,18 @@ class BaseKernelGenerator:
         self._dims = ['_nx'] if ndim == 1 else ['_ny', '_nx']
 
     def argspec(self):
-        # Argument names and types
+        # Argument names plus their form and types
         argn, argt = [], []
 
         # Dimensions
         argn += self._dims
-        argt += [[self.ixdtype]]*self.ndim
+        argt += [('s', [self.ixdtype])]*self.ndim
 
         # Scalar args (fpdtype or ixdtype)
         for sa in self.scalargs:
             argn.append(sa.name)
             dtype = self.ixdtype if sa.dtype == 'ixdtype_t' else self.fpdtype
-            argt.append([dtype])
+            argt.append(('s', [dtype]))
 
         # Vector args
         for va in self.vectargs:
@@ -127,17 +127,17 @@ class BaseKernelGenerator:
             if va.isview:
                 match self.ndim, va.ncdim:
                     case 2, _ if va.isbroadcastc:
-                        argt.append([np.uintp, np.uintp])
+                        argt.append(('v', [np.uintp]*2))
                     case 2, _:
-                        argt.append([np.uintp, np.uintp, self.ixdtype])
+                        argt.append(('vs', [np.uintp]*2 + [self.ixdtype]))
                     case _, 2 if va.cdims[0] > 1:
-                        argt.append([np.uintp]*3)
+                        argt.append(('va', [np.uintp]*3))
                     case _:
-                        argt.append([np.uintp]*2)
+                        argt.append(('v', [np.uintp]*2))
             elif self.needs_ldim(va):
-                argt.append([np.uintp, self.ixdtype])
+                argt.append(('ml', [np.uintp, self.ixdtype]))
             else:
-                argt.append([np.uintp])
+                argt.append(('m', [np.uintp]))
 
         # Return
         return self.ndim, argn, argt

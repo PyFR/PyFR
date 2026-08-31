@@ -163,14 +163,21 @@ class OpenMPGraph(base.Graph):
 
         for s in subs:
             for k, aname in s:
-                for j in kranges[k]:
-                    aidx = self.klist[j].arg_idx(aname)
-                    aoff = self.klist[j].arg_off(aidx)
-                    absz = self.klist[j].arg_blocksz(aidx)
-                    suboff = self.klist[j].subs_off(aidx)
+                for kl, j in zip(k.leaves, kranges[k], strict=True):
+                    # Per-block size and offset of the argument
+                    aidx, _, v = kl.args[aname]
+                    absz = v.blocksz*v.itemsize
+                    if isinstance(v, self.backend.matrix_slice_cls):
+                        suboff = v.ra*v.leaddim*v.itemsize
+                    else:
+                        suboff = 0
 
+                    aoff = self.klist[j].arg_off(aidx)
                     argsubs[j].append((aoff, allocsz + suboff))
                     argmasks[j] |= 1 << aidx
+
+                    # Mark the substituted argument as sealed
+                    kl.sealed.add(aidx)
 
             allocsz += absz
 

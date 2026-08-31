@@ -79,7 +79,7 @@ class OpenCLKernelProvider(BaseKernelProvider):
 
         return self.backend.compiler.build(src, flags)
 
-    def _build_kernel(self, name, src, argtypes, argn=[]):
+    def _build_kernel(self, name, src, argtypes):
         argtypes = [npdtype_to_ctypestype(arg) for arg in argtypes]
 
         return self._build_program(src).get_kernel(name, argtypes)
@@ -100,9 +100,7 @@ class OpenCLPointwiseKernelProvider(OpenCLKernelProvider,
 
         self.kernel_generator_cls = KernelGenerator
 
-    def _instantiate_kernel(self, dims, fun, arglst, argm, argv):
-        rtargs = []
-
+    def _instantiate_kernel(self, dims, fun, args):
         # Determine the work group sizes
         if len(dims) == 1:
             ls = self._ls1d
@@ -113,23 +111,13 @@ class OpenCLPointwiseKernelProvider(OpenCLKernelProvider,
 
         fun.set_dims(gs, ls)
 
-        # Process the arguments
-        for i, k in enumerate(arglst):
-            if isinstance(k, str):
-                rtargs.append((i, k))
-            else:
-                fun.set_arg(i, k)
+        # Set the iteration dimensions
+        fun.set_args(*dims)
 
         class PointwiseKernel(OpenCLKernel):
-            if rtargs:
-                rtnames = tuple(k for _, k in rtargs)
-
-                def bind(self, **kwargs):
-                    for i, k in rtargs:
-                        if k in kwargs:
-                            fun.set_arg(i, kwargs[k])
+            _set_arg = staticmethod(fun.set_arg)
 
             def run(self, queue, wait_for=None, ret_evt=False):
                 return fun.exec_async(queue, wait_for, ret_evt)
 
-        return PointwiseKernel(argm, argv)
+        return PointwiseKernel(args=args)
