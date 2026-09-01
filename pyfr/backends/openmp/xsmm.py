@@ -81,8 +81,9 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
         try:
             blkptr, blkptr_nt = self._kerns[ckey]
         except KeyError:
+            cbytes = out.nrow*ldc*out.nblocks*out.itemsize
             c_is_nt = (beta == 0 and
-                       out.nbytes >= 32*1024**2 and
+                       cbytes >= 32*1024**2 and
                        self.backend.alignb >= 64)
 
             a_np = np.ascontiguousarray(a.get())
