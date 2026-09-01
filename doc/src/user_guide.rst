@@ -360,21 +360,23 @@ pyfr mesh
 
        pyfr mesh mesh.pyfrm config.ini
 
-   This outputs statistics on the scaled Jacobian, mesh scale, and
-   aspect ratio for each element type.  The mesh scale is particularly
-   useful for estimating CFL-limited time steps.
+   This outputs statistics on the scaled Jacobian, mesh scale,
+   aspect ratio, and element volume for each element type.  The mesh
+   scale is particularly useful for estimating CFL-limited time steps.
 
    For each element type the number of curved elements is reported.
    When curved elements are present, a separate *Scaled Jacobian
    (curved)* section is shown with statistics and a histogram
    filtered to just the curved population.  The scaled Jacobian is
-   defined as min(J)/max(J) within each element, where J is the
-   Jacobian determinant.  A value of 1 indicates a perfectly uniform
-   mapping, values approaching 0 indicate the element is close to
-   self-intersection, and negative values indicate an invalid
-   (self-intersecting) element.  Uniform curvature that does not
-   distort the mapping---such as a boundary layer where both sides
-   curve together---will retain a scaled Jacobian close to 1.
+   defined pointwise as det(J) divided by the product of the norms of
+   the tangent vectors, minimised over the element.  It measures how
+   close the tangent basis is to being orthogonal and lies in
+   [-1, 1].  A value of 1 indicates a mapping whose tangent vectors
+   are mutually orthogonal, values approaching 0 indicate a sheared
+   or collapsing element, and negative values indicate an inverted
+   element.  The measure is invariant to stretching, so a legitimate
+   boundary-layer cell with a very large aspect ratio still scores 1;
+   only genuine shear or degeneracy reduces it.
 
    The summary section includes the minimum scaled Jacobian among
    curved elements, which is highlighted when it falls below the

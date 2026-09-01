@@ -6,7 +6,8 @@ import shutil
 import numpy as np
 
 from pyfr.inifile import Inifile
-from pyfr.mpiutil import autofree, get_comm_rank_root, init_mpi, mpi
+from pyfr.mpiutil import (autofree, get_comm_rank_root, init_mpi, mpi,
+                          scal_coll)
 from pyfr.plugins.base import BaseCLIPlugin
 from pyfr.plugins.common import cli_external
 from pyfr.readers.native import NativeReader
@@ -15,19 +16,72 @@ from pyfr.util import subclass_where, subclasses, tty
 from pyfr.writers.native import NativeWriter
 
 
-Metrics = namedtuple('Metrics', 'djac h aspect scaled_jac char_len ploc')
+Metrics = namedtuple('Metrics',
+                     'djac h aspect scaled_jac jvar vol char_len ploc')
 EleInfo = namedtuple(
-    'EleInfo', 'neles nupts curved eidxs metrics n_inverted n_nan '
-    'n_poor_scaled_jac n_high_aspect max_nsr', defaults=(None,)
+    'EleInfo', 'neles nupts nmpts sptsord curved eidxs metrics n_inverted '
+    'n_nan n_poor_scaled_jac n_high_aspect max_nsr', defaults=(None,)
 )
-SRStats = namedtuple('SRStats',
-                     'n_high min max mean std hist_counts hist_edges')
+FieldStats = namedtuple('FieldStats',
+                        'n min max mean std hist_counts hist_edges')
+WorstEle = namedtuple('WorstEle', 'etype eidx val ploc')
+
+
+def _reduce_field(arr, nbins=10):
+    comm, _, _ = get_comm_rank_root()
+
+    v = np.asanyarray(arr, dtype=float).ravel()
+    v = v[np.isfinite(v)]
+
+    lmin = np.min(v) if len(v) else np.inf
+    lmax = np.max(v) if len(v) else -np.inf
+
+    # Reduce the extrema over all ranks to fix the bin edges
+    lo = scal_coll(comm.Allreduce, lmin, op=mpi.MIN)
+    hi = scal_coll(comm.Allreduce, lmax, op=mpi.MAX)
+
+    n = scal_coll(comm.Allreduce, len(v))
+    s = scal_coll(comm.Allreduce, np.sum(v))
+    ss = scal_coll(comm.Allreduce, np.sum(v*v))
+
+    # Bin the values when they span a range
+    if lo < hi:
+        edges = np.linspace(lo, hi, nbins + 1)
+        counts = np.histogram(v, bins=edges)[0]
+        comm.Allreduce(mpi.IN_PLACE, counts)
+    else:
+        edges = np.zeros(nbins + 1)
+        counts = np.zeros(nbins, dtype=int)
+
+    mean = s / n if n else 0.0
+    std = np.sqrt(max(ss / n - mean**2, 0)) if n else 0.0
+
+    return FieldStats(n, lo, hi, mean, std, counts, edges)
+
+
+def _scaled_jac(ele):
+    sj = None
+
+    for name in ('upts', 'fpts'):
+        jac = ele.jac_at_np(name)
+
+        # Normalise the determinant by the tangent vector norms
+        tnorm = np.prod(np.linalg.norm(jac, axis=-1), axis=-1)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            s = np.where(tnorm > 0, np.linalg.det(jac) / tnorm, 0)
+
+        # Keep the worst value seen at any of the solver's points
+        s = np.min(s, axis=0)
+        sj = s if sj is None else np.minimum(sj, s)
+
+    return sj
 
 
 def _compute_metrics(ele):
     # Jacobian determinant at solution points
-    rcpdjac = ele.rcpdjac_at_np('upts')
-    djac = 1.0 / rcpdjac
+    djac = np.linalg.det(ele.jac_at_np('upts'))
+    with np.errstate(divide='ignore', invalid='ignore'):
+        rcpdjac = 1.0 / djac
 
     # Metric terms at solution points
     smats = ele.smat_at_np('upts')
@@ -43,32 +97,40 @@ def _compute_metrics(ele):
     # Aspect ratio
     aspect = h_max / h_min
 
-    # Scaled Jacobian: normalise by value at element centroid of ideal shape
-    # For simplicity, use min(djac) / max(djac) per element as proxy
-    djac_min_per_ele = np.min(djac, axis=0)
-    djac_max_per_ele = np.max(djac, axis=0)
+    # Scaled Jacobian at the solution and flux points
+    scaled_jac = _scaled_jac(ele)
+
+    # Variation of the Jacobian determinant within each element
+    adjac = np.abs(djac)
     with np.errstate(divide='ignore', invalid='ignore'):
-        scaled_jac = np.where(
-            djac_max_per_ele > 0,
-            djac_min_per_ele / djac_max_per_ele,
-            np.nan
-        )
+        jvar = np.min(adjac, axis=0) / np.max(adjac, axis=0)
+
+    # Element volume from the solution point quadrature
+    wts = ele.basis.ubasis.invvdm[:, 0]
+    vol = wts.sum() * (wts @ djac)
 
     # Volume-based characteristic length
-    char_len = np.mean(djac, axis=0) ** (1.0 / ele.ndims)
+    char_len = np.abs(np.mean(djac, axis=0))**(1.0 / ele.ndims)
 
     # Physical locations
     ploc = ele.ploc_at_np('upts')
 
-    return Metrics(djac, h_min, aspect, scaled_jac, char_len, ploc)
+    return Metrics(djac, h_min, aspect, scaled_jac, jvar, vol, char_len, ploc)
 
 
-def _find_worst(arr, ploc, eidxs, n=10, minimise=True):
+def _find_worst(etype, arr, ploc, eidxs, n=10, minimise=True):
+    # Rank NaNs as the worst elements of all
     fill = -np.inf if minimise else np.inf
-    order = np.argsort(np.where(np.isnan(arr), fill, arr))
-    idxs = order[:n] if minimise else order[:-n-1:-1]
+    val = np.where(np.isnan(arr), fill, arr)
 
-    return [(arr[i], eidxs[i], np.mean(ploc[:, :, i], axis=0)) for i in idxs]
+    # Break ties on the element index
+    idxs = np.lexsort((eidxs, val if minimise else -val))[:n]
+
+    # Locate each element by the centroid of its solution points
+    cents = np.mean(ploc[..., idxs], axis=0).T
+
+    return [WorstEle(etype, ei, v, c)
+            for ei, v, c in zip(eidxs[idxs], arr[idxs], cents)]
 
 
 def _print_worst_table(worst, title, col):
@@ -82,42 +144,32 @@ def _print_worst_table(worst, title, col):
         loc_str = ', '.join(f'{c:.3f}' for c in loc)
 
         if j == 0:
-            print(f'{t.red}{t.bold}  {etype:<8} {el:>10} {val:>12.4f} '
+            print(f'{t.red}{t.bold}  {etype:<8} {el:>10} {val:>12.4g} '
                   f'({loc_str}){t.reset}')
         else:
-            print(f'  {etype:<8} {el:>10} {val:>12.4f} ({loc_str})')
+            print(f'  {etype:<8} {el:>10} {val:>12.4g} ({loc_str})')
 
 
-def _render_histogram(values=None, bins=10, width=30, highlight_min=False,
-                      counts=None, edges=None):
+def _render_histogram(counts, edges, width=30, highlight_min=False):
     t = tty
-
-    if counts is None:
-        values = values[np.isfinite(values)]
-        if not len(values):
-            return []
-
-        counts, edges = np.histogram(values, bins=bins)
-        total = len(values)
-    else:
-        total = counts.sum()
+    total = counts.sum()
 
     if not total:
         return []
 
     # Skip if range is negligible relative to magnitude
-    if np.ptp(edges) < 1e-6 * max(abs(edges[-1]), 1e-10):
+    span = np.ptp(edges)
+    if span < 1e-6*max(abs(edges[-1]), 1e-10):
         return []
 
     max_count = counts.max() or 1
 
-    # Compute format spec for consistent formatting
-    mag = max(abs(edges[0]), abs(edges[-1]), 1e-10)
-    exp = int(np.floor(np.log10(mag)))
-    if -3 <= exp <= 4:
-        fmt = f'8.{max(0, 3 - exp)}f'
+    # Set the printed precision from the span
+    exp = int(np.floor(np.log10(span)))
+    if -6 <= exp <= 4:
+        fmt = f'10.{max(0, 3 - exp)}f'
     else:
-        fmt = '8.2e'
+        fmt = '10.3e'
 
     # Unicode block characters for smooth bars
     blocks = ' ▏▎▍▌▋▊▉█'
@@ -138,27 +190,36 @@ def _render_histogram(values=None, bins=10, width=30, highlight_min=False,
     return lines
 
 
-def _format_stats(arr, name, highlight_min=False):
+def _format_stats(fs, name, highlight_min=False):
     t = tty
-    arr_flat = arr.flatten()
-    finite = arr_flat[np.isfinite(arr_flat)]
-    if not len(finite):
+
+    if not fs.n:
         return f'  {name}: No valid data'
 
-    mn, mx = np.min(finite), np.max(finite)
-    mean, std = np.mean(finite), np.std(finite)
-
     if highlight_min:
-        mn_str = f'{t.red}{t.bold}{mn:9.3g}{t.reset}'
+        mn_str = f'{t.red}{t.bold}{fs.min:9.3g}{t.reset}'
     else:
-        mn_str = f'{mn:9.3g}'
+        mn_str = f'{fs.min:9.3g}'
 
     return (f'  {name}:\n'
-            f'    Min: {mn_str}  Max: {mx:9.3g}  '
-            f'Mean: {mean:9.3g} ± {std:9.3g}')
+            f'    Min: {mn_str}  Max: {fs.max:9.3g}  '
+            f'Mean: {fs.mean:9.3g} ± {fs.std:9.3g}')
 
 
 class _MeshAnalyser:
+    # Per-element-type quantities and counts
+    statlabels = {'scaled_jac': 'Scaled Jacobian', 'h': 'Mesh Scale (h)',
+                  'aspect': 'Aspect Ratio', 'vol': 'Element Volume',
+                  'jvar': 'Jacobian Variation',
+                  'curved': 'Scaled Jacobian (curved)'}
+    sumcounts = ('neles', 'ncurved', 'n_inverted', 'n_nan', 'n_poor')
+    maxcounts = ('nupts', 'nmpts', 'q')
+
+    # Whole-mesh counts and minimums
+    gsums = ('n_total', 'n_inverted', 'n_nan', 'n_poor_scaled_jac',
+             'n_high_aspect', 'n_curved')
+    gmins = ('min_scaled_jac', 'min_curved_scaled_jac')
+
     def __init__(self, mesh, elementscls, basismap, cfg, jac_thresh,
                  ar_thresh, sr_thresh=0):
         self.mesh = mesh
@@ -170,13 +231,10 @@ class _MeshAnalyser:
         self.nsr = None
 
         self.etypes = {}
-        self.stats = {
-            'n_total': 0, 'n_inverted': 0, 'n_nan': 0,
-            'n_poor_scaled_jac': 0, 'n_high_aspect': 0, 'n_curved': 0,
-            'min_scaled_jac': np.inf, 'min_h': np.inf,
-            'min_curved_scaled_jac': np.inf,
-            'min_h_etype': None, 'min_h_eidx': None,
-        }
+        self.stats = {k: 0 for k in self.gsums}
+        self.stats |= {k: np.inf for k in self.gmins}
+        self.stats |= {'min_h': np.inf, 'min_h_etype': None,
+                       'min_h_eidx': None}
 
         for etype, spts in mesh.spts.items():
             ele = elementscls(basismap[etype], spts, cfg)
@@ -190,16 +248,17 @@ class _MeshAnalyser:
             n_pj = int(np.sum(m.scaled_jac < jac_thresh))
             n_ha = int(np.sum(np.any(m.aspect > ar_thresh, axis=0)))
 
-            self.etypes[etype] = EleInfo(ele.neles, ele.nupts, curved,
-                                         mesh.eidxs[etype], m, n_inv, n_nan,
-                                         n_pj, n_ha)
+            self.etypes[etype] = EleInfo(
+                ele.neles, ele.nupts, ele.nmpts, ele.basis.nsptsord, curved,
+                mesh.eidxs[etype], m, n_inv, n_nan, n_pj, n_ha
+            )
 
-            self.stats['n_total'] += ele.neles
-            self.stats['n_inverted'] += n_inv
-            self.stats['n_nan'] += n_nan
-            self.stats['n_poor_scaled_jac'] += n_pj
-            self.stats['n_high_aspect'] += n_ha
-            self.stats['n_curved'] += n_curved
+            counts = {'n_total': ele.neles, 'n_inverted': n_inv,
+                      'n_nan': n_nan, 'n_poor_scaled_jac': n_pj,
+                      'n_high_aspect': n_ha, 'n_curved': n_curved}
+
+            for k in self.gsums:
+                self.stats[k] += counts[k]
 
             # Track global minimums
             sjmin = np.nanmin(m.scaled_jac)
@@ -224,7 +283,7 @@ class _MeshAnalyser:
 
     def _compute_nsr(self):
         mesh = self.mesh
-        comm, rank, root = get_comm_rank_root()
+        comm, _, _ = get_comm_rank_root()
 
         # Per-element characteristic length and worst neighbour ratio
         cl = {et: r.metrics.char_len for et, r in self.etypes.items()}
@@ -232,7 +291,7 @@ class _MeshAnalyser:
 
         def process(con, lcl, rcl):
             face_r = np.maximum(lcl, rcl) / np.minimum(lcl, rcl)
-            for et, fi, ei, mask in con.foreach():
+            for et, _, ei, mask in con.foreach():
                 np.maximum.at(nsr[et], ei, face_r[mask])
 
         # Internal faces
@@ -252,29 +311,12 @@ class _MeshAnalyser:
         for et in nsr:
             self.etypes[et] = self.etypes[et]._replace(max_nsr=nsr[et])
 
-        self.nsr = self._reduce_nsr(nsr)
+        # Neighbour ratio statistics and the count above the threshold
+        local = np.concatenate(list(nsr.values()))
+        nhigh = int(np.sum(local > self.nsr_thresh))
 
-    def _reduce_nsr(self, nsr):
-        comm, rank, root = get_comm_rank_root()
-
-        local_all = np.concatenate(list(nsr.values()))
-
-        # Global stats via scalar reductions
-        lo = comm.allreduce(float(np.min(local_all)), op=mpi.MIN)
-        hi = comm.allreduce(float(np.max(local_all)), op=mpi.MAX)
-        gn = comm.reduce(len(local_all), root=root)
-        gs = comm.reduce(float(np.sum(local_all)), root=root)
-        gss = comm.reduce(float(np.sum(local_all**2)), root=root)
-        gnh = comm.reduce(int(np.sum(local_all > self.nsr_thresh)), root=root)
-
-        # Distributed histogram with globally consistent edges
-        edges = np.linspace(lo, hi, 11)
-        counts = comm.reduce(np.histogram(local_all, bins=edges)[0], root=root)
-
-        if rank == root:
-            gmean = gs / gn
-            gstd = np.sqrt(max(gss / gn - gmean**2, 0))
-            return SRStats(gnh, lo, hi, gmean, gstd, counts, edges)
+        self.nsr = _reduce_field(local)
+        self.stats['n_high_nsr'] = scal_coll(comm.Allreduce, nhigh)
 
     def _gather_worst(self, get_arr, n, minimise=True):
         comm, rank, root = get_comm_rank_root()
@@ -282,37 +324,104 @@ class _MeshAnalyser:
         # For each element type, find the worst n elements
         candidates = []
         for etype, res in self.etypes.items():
-            worst = _find_worst(get_arr(res), res.metrics.ploc, res.eidxs, n=n,
-                                minimise=minimise)
-            candidates.extend((etype, gi, val, loc) for val, gi, loc in worst)
+            candidates += _find_worst(etype, get_arr(res), res.metrics.ploc,
+                                      res.eidxs, n=n, minimise=minimise)
+
+        def key(c):
+            val = c.val if minimise else -c.val
+            return (val, c.etype, c.eidx)
 
         # Locally sort the candidates
-        candidates.sort(key=lambda c: c[2], reverse=not minimise)
+        candidates.sort(key=key)
 
         # Gather the top n candidates from each rank to the root rank
         candidates = comm.gather(candidates[:n], root=root)
         if rank == root:
             candidates = [c for cl in candidates for c in cl]
-            candidates.sort(key=lambda c: c[2], reverse=not minimise)
+            candidates.sort(key=key)
             return candidates[:n]
         else:
             return []
+
+    def _highlight_min(self, etype, f):
+        fs = self.fieldstats[etype, f]
+
+        if f in ('scaled_jac', 'curved'):
+            return fs.min < self.jac_thresh
+        elif f == 'vol':
+            return fs.min <= 0
+        elif f == 'h':
+            return etype == self.stats['min_h_etype']
+        else:
+            return False
+
+    def _print_histogram(self, fs, title, highlight_min=False):
+        t = tty
+        hist = _render_histogram(fs.hist_counts, fs.hist_edges,
+                                 highlight_min=highlight_min)
+
+        if hist:
+            print(f'  {t.cyan}{title} Distribution:{t.reset}')
+            print(*hist, '', sep='\n')
+
+    def _local_fields(self, etype):
+        res = self.etypes.get(etype)
+
+        # Return empty arrays for types absent from this rank
+        if res is None:
+            return dict.fromkeys(self.statlabels, np.empty(0))
+        else:
+            m = res.metrics
+            return {'scaled_jac': m.scaled_jac, 'h': np.min(m.h, axis=0),
+                    'aspect': np.max(m.aspect, axis=0), 'vol': m.vol,
+                    'jvar': m.jvar, 'curved': m.scaled_jac[res.curved]}
+
+    def _local_counts(self, etype):
+        res = self.etypes.get(etype)
+
+        if res is None:
+            return dict.fromkeys(self.sumcounts + self.maxcounts, 0)
+        else:
+            return {'neles': res.neles, 'ncurved': int(res.curved.sum()),
+                    'n_inverted': res.n_inverted, 'n_nan': res.n_nan,
+                    'n_poor': res.n_poor_scaled_jac, 'nupts': res.nupts,
+                    'nmpts': res.nmpts, 'q': res.sptsord}
 
     def reduce(self, n_worst=0):
         # Reduce per-rank stats to root via MPI
         comm, rank, root = get_comm_rank_root()
 
-        for key in ['n_total', 'n_inverted', 'n_nan', 'n_poor_scaled_jac',
-                    'n_high_aspect', 'n_curved']:
-            self.stats[key] = comm.reduce(self.stats[key], root=root)
+        for key in self.gsums:
+            self.stats[key] = scal_coll(comm.Allreduce, self.stats[key])
 
-        for key in ['min_scaled_jac', 'min_h', 'min_curved_scaled_jac']:
-            self.stats[key] = comm.reduce(self.stats[key], op=mpi.MIN,
-                                          root=root)
+        for key in self.gmins:
+            self.stats[key] = scal_coll(comm.Allreduce, self.stats[key],
+                                        op=mpi.MIN)
 
-        if self.nsr:
-            self.stats['n_high_nsr'] = self.nsr.n_high
-            self.stats['max_nsr'] = self.nsr.max
+        # Reduce the smallest h together with the element holding it
+        eidx = self.stats['min_h_eidx']
+        cand = (float(self.stats['min_h']), self.stats['min_h_etype'] or '',
+                -1 if eidx is None else int(eidx))
+        h, etype, eidx = comm.allreduce(cand, op=mpi.MIN)
+
+        self.stats['min_h'] = h
+        self.stats['min_h_etype'] = etype or None
+        self.stats['min_h_eidx'] = None if eidx < 0 else eidx
+
+        self.ginfo, self.fieldstats = {}, {}
+
+        for etype in self.mesh.etypes:
+            for f, arr in self._local_fields(etype).items():
+                self.fieldstats[etype, f] = _reduce_field(arr)
+
+            # Sum the element counts and take the sizes from any holder
+            loc = self._local_counts(etype)
+            gi = {k: scal_coll(comm.Allreduce, loc[k])
+                  for k in self.sumcounts}
+            gi |= {k: scal_coll(comm.Allreduce, loc[k], op=mpi.MAX)
+                   for k in self.maxcounts}
+
+            self.ginfo[etype] = gi
 
         # Gather worst-N candidates from all ranks
         self.worst_sj = self._gather_worst(lambda r: r.metrics.scaled_jac,
@@ -335,42 +444,32 @@ class _MeshAnalyser:
 
         print(f'{t.bold}Mesh Quality Report{t.reset}', '='*w, '', sep='\n')
 
-        for etype, res in self.etypes.items():
-            m = res.metrics
+        for etype in self.mesh.etypes:
+            gi = self.ginfo[etype]
             hdr = (f'{t.bold}Element Type: {etype}{t.reset} '
-                   f'({res.neles} elements, {res.curved.sum()} curved), '
-                   f'order = {self.order}, nupts = {res.nupts}')
+                   f'({gi['neles']} elements, {gi['ncurved']} curved), '
+                   f'p = {self.order}, q = {gi['q']}, '
+                   f'nupts = {gi['nupts']}, nmpts = {gi['nmpts']}')
             print(hdr + '\n')
 
-            # Check if this element type has the global minimum h
-            has_min_h = etype == s['min_h_etype']
+            for f, label in self.statlabels.items():
+                if f == 'curved' and not gi['ncurved']:
+                    continue
 
-            stat_fields = [('scaled_jac', 'Scaled Jacobian', False),
-                           ('h', 'Mesh Scale (h)', has_min_h),
-                           ('aspect', 'Aspect Ratio', False)]
-            for key, name, hl in stat_fields:
-                fs = _format_stats(getattr(m, key), name, highlight_min=hl)
-                print(fs + '\n')
+                hl = self._highlight_min(etype, f)
+                print(_format_stats(self.fieldstats[etype, f], label,
+                                    highlight_min=hl) + '\n')
 
             # Scaled Jacobian stats filtered to curved elements
-            if res.curved.any():
-                csj = m.scaled_jac[res.curved]
-                hl_curved = np.nanmin(csj) < self.jac_thresh
-                fs = _format_stats(csj, 'Scaled Jacobian (curved)',
-                                   highlight_min=hl_curved)
-                print(fs + '\n')
+            if gi['ncurved']:
+                hl_curved = self._highlight_min(etype, 'curved')
+                self._print_histogram(self.fieldstats[etype, 'curved'],
+                                      self.statlabels['curved'],
+                                      highlight_min=hl_curved)
 
-                chist = _render_histogram(csj, highlight_min=hl_curved)
-                if chist:
-                    print(f'  {t.cyan}Scaled Jacobian (curved) '
-                          f'Distribution:{t.reset}')
-                    print(*chist, '', sep='\n')
-
-            h_min = np.min(m.h, axis=0)
-            hist = _render_histogram(h_min, highlight_min=has_min_h)
-            if hist:
-                print(f'  {t.cyan}Mesh Scale Distribution:{t.reset}')
-                print(*hist, '', sep='\n')
+            hl_h = self._highlight_min(etype, 'h')
+            self._print_histogram(self.fieldstats[etype, 'h'], 'Mesh Scale',
+                                  highlight_min=hl_h)
 
         # Neighbour size ratio section
         if self.nsr:
@@ -384,11 +483,7 @@ class _MeshAnalyser:
             print(f'  Min: {nsr.min:9.3g}  Max: {max_str}  Mean: '
                   f'{nsr.mean:9.3g} ± {nsr.std:9.3g}\n')
 
-            hist = _render_histogram(counts=nsr.hist_counts,
-                                     edges=nsr.hist_edges)
-            if hist:
-                print(f'  {t.cyan}Neighbour Size Ratio Distribution:{t.reset}')
-                print(*hist, '', sep='\n')
+            self._print_histogram(nsr, 'Neighbour Size Ratio')
 
         print('-'*w, f'{t.bold}Summary{t.reset}', '-'*w, sep='\n')
 
@@ -425,7 +520,7 @@ class _MeshAnalyser:
 
         if self.nsr:
             print(f'  {t.cyan}Max neighbour size ratio:{t.reset} '
-                  f'{s['max_nsr']:9.3g}')
+                  f'{self.nsr.max:9.3g}')
 
         # Worst elements
         if n_worst > 0:
@@ -444,7 +539,7 @@ class _MeshAnalyser:
         sr = self.nsr
 
         # Determine status
-        high_nsr = sr is not None and sr.n_high
+        high_nsr = sr is not None and s['n_high_nsr']
         if s['n_inverted'] or s['n_nan']:
             status = 'error'
         elif s['n_poor_scaled_jac'] or s['n_high_aspect'] or high_nsr:
@@ -454,9 +549,8 @@ class _MeshAnalyser:
 
         # Extract global metrics, converting inf to None for JSON
         make_inf_none = lambda v: float(v) if np.isfinite(v) else None
-        glob = {k: s[k] for k in ('n_inverted', 'n_nan', 'n_poor_scaled_jac',
-                                  'n_high_aspect', 'n_curved')}
-        for k in ('min_scaled_jac', 'min_curved_scaled_jac', 'min_h'):
+        glob = {k: s[k] for k in self.gsums if k != 'n_total'}
+        for k in self.gmins + ('min_h',):
             glob[k] = make_inf_none(s[k])
 
         if np.isfinite(s['min_h']):
@@ -465,7 +559,7 @@ class _MeshAnalyser:
             glob['geometric_dt_factor'] = None
 
         if sr:
-            glob['n_high_size_ratio'] = sr.n_high
+            glob['n_high_size_ratio'] = s['n_high_nsr']
             glob['max_size_ratio'] = sr.max
 
         output = {
@@ -473,20 +567,19 @@ class _MeshAnalyser:
             'element_types': {}, 'global': glob,
         }
 
-        _skip = {'curved', 'eidxs', 'metrics', 'n_high_aspect', 'max_nsr'}
-        for etype, res in self.etypes.items():
-            m = res.metrics
-            etd = {k: v for k, v in res._asdict().items() if k not in _skip}
-            etd['n_curved'] = int(res.curved.sum())
+        for etype in self.mesh.etypes:
+            gi = self.ginfo[etype]
+            etd = {'neles': gi['neles'], 'n_curved': gi['ncurved'],
+                   'nupts': gi['nupts'], 'nmpts': gi['nmpts'],
+                   'mesh_order': gi['q'], 'n_inverted': gi['n_inverted'],
+                   'n_nan': gi['n_nan'], 'n_poor_scaled_jac': gi['n_poor']}
 
-            for attr in ('scaled_jac', 'h', 'aspect'):
-                etd[f'min_{attr}'] = float(np.nanmin(getattr(m, attr)))
-                etd[f'max_{attr}'] = float(np.nanmax(getattr(m, attr)))
-
-            if res.curved.any():
-                csj = m.scaled_jac[res.curved]
-                etd['min_curved_scaled_jac'] = float(np.nanmin(csj))
-                etd['max_curved_scaled_jac'] = float(np.nanmax(csj))
+            for key in self.statlabels:
+                fs = self.fieldstats[etype, key]
+                if fs.n:
+                    etd[f'min_{key}'] = float(fs.min)
+                    etd[f'max_{key}'] = float(fs.max)
+                    etd[f'mean_{key}'] = float(fs.mean)
 
             output['element_types'][etype] = etd
 
