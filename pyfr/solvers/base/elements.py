@@ -296,6 +296,31 @@ class BaseElements:
         return newfn
 
     @memoize
+    def _jacop_at(self, name):
+        pt = getattr(self.basis, name) if isinstance(name, str) else name
+
+        # Metric basis with grid point (q<=p) or pseudo grid points (q>p)
+        mbasis = self.basis.mbasis
+
+        # Jacobian operator at these points
+        jacop = np.rollaxis(mbasis.jac_nodal_basis_at(pt), 2)
+        return jacop.reshape(-1, self.nmpts)
+
+    @memoize
+    def jac_at_np(self, name):
+        # Physical locations of the pseudo grid points
+        x = self.ploc_at_np('mpts')
+
+        # Cast as a matrix multiply and apply to eles
+        jac = self._jacop_at(name) @ x.reshape(self.nmpts, -1)
+
+        # Reshape (npts*ndims, neles*ndims) => (npts, ndims, ndims, neles)
+        jac = jac.reshape(-1, self.ndims, self.ndims, self.neles)
+
+        # Transpose to get (npts, neles, ndims, ndims) for batched linalg
+        return jac.transpose(0, 3, 1, 2)
+
+    @memoize
     def smat_at_np(self, name):
         smats_mpts, _ = self._smats_djacs_mpts
 
@@ -323,7 +348,7 @@ class BaseElements:
         # Interpolate the djacs
         djac = m0 @ djacs_mpts
 
-        if np.any(djac < -1e-5):
+        if np.any(djac < -1e-8*np.max(np.abs(djac), axis=0)):
             raise RuntimeError('Negative mesh Jacobians detected')
 
         return 1.0 / djac
@@ -377,17 +402,13 @@ class BaseElements:
         mag_pnorm = np.einsum('...i,...i', pnorm, pnorm)
 
         # Check that none of these magnitudes are zero
-        if np.any(np.sqrt(mag_pnorm) < 1e-10):
+        if np.any(mag_pnorm < 1e-24*np.max(mag_pnorm, axis=0)):
             raise RuntimeError('Zero face normals detected')
 
         return pnorm
 
     @cached_property
     def _smats_djacs_mpts(self):
-        # Metric basis with grid point (q<=p) or pseudo grid points (q>p)
-        mpts = self.basis.mpts
-        mbasis = self.basis.mbasis
-
         # Dimensions, number of elements and number of mpts
         ndims, neles, nmpts = self.ndims, self.neles, self.nmpts
 
@@ -395,17 +416,10 @@ class BaseElements:
         x = self.ploc_at_np('mpts')
 
         # Jacobian operator at these points
-        jacop = np.rollaxis(mbasis.jac_nodal_basis_at(mpts), 2)
-        jacop = jacop.reshape(-1, nmpts)
-
-        # Cast as a matrix multiply and apply to eles
-        jac = jacop @ x.reshape(nmpts, -1)
-
-        # Reshape (nmpts*ndims, neles*ndims) => (nmpts, ndims, neles, ndims)
-        jac = jac.reshape(nmpts, ndims, ndims, neles)
+        jacop = self._jacop_at('mpts')
 
         # Transpose to get (ndims, ndims, nmpts, neles)
-        jac = jac.transpose(1, 2, 0, 3)
+        jac = self.jac_at_np('mpts').transpose(2, 3, 0, 1)
 
         smats = np.empty((ndims, nmpts, ndims, neles))
 
