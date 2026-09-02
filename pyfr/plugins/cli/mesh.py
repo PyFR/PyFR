@@ -133,6 +133,10 @@ def _find_worst(etype, arr, ploc, eidxs, n=10, minimise=True):
             for ei, v, c in zip(eidxs[idxs], arr[idxs], cents)]
 
 
+def _highlight(s, on):
+    return f'{tty.red}{tty.bold}{s}{tty.reset}' if on else s
+
+
 def _print_worst_table(worst, title, col):
     t = tty
     print()
@@ -143,24 +147,18 @@ def _print_worst_table(worst, title, col):
     for j, (etype, el, val, loc) in enumerate(worst):
         loc_str = ', '.join(f'{c:.3f}' for c in loc)
 
-        if j == 0:
-            print(f'{t.red}{t.bold}  {etype:<8} {el:>10} {val:>12.4g} '
-                  f'({loc_str}){t.reset}')
-        else:
-            print(f'  {etype:<8} {el:>10} {val:>12.4g} ({loc_str})')
+        # Call out the single worst element in the table
+        print(_highlight(f'  {etype:<8} {el:>10} {val:>12.4g} ({loc_str})',
+                         j == 0))
 
 
-def _render_histogram(counts, edges, width=30, highlight_min=False):
-    t = tty
-    total = counts.sum()
+def _print_histogram(fs, title, highlight_min=False, width=30):
+    counts, edges = fs.hist_counts, fs.hist_edges
+    total, span = counts.sum(), np.ptp(edges)
 
-    if not total:
-        return []
-
-    # Skip if range is negligible relative to magnitude
-    span = np.ptp(edges)
-    if span < 1e-6*max(abs(edges[-1]), 1e-10):
-        return []
+    # Skip when empty or the range is negligible relative to magnitude
+    if not total or span < 1e-6*max(abs(edges[-1]), 1e-10):
+        return
 
     max_count = counts.max() or 1
 
@@ -171,9 +169,10 @@ def _render_histogram(counts, edges, width=30, highlight_min=False):
     else:
         fmt = '10.3e'
 
+    print(f'  {tty.cyan}{title} Distribution:{tty.reset}')
+
     # Unicode block characters for smooth bars
     blocks = ' ▏▎▍▌▋▊▉█'
-    lines = []
 
     for idx, (lo, hi, c) in enumerate(zip(edges[:-1], edges[1:], counts)):
         frac = c / max_count * width
@@ -183,26 +182,18 @@ def _render_histogram(counts, edges, width=30, highlight_min=False):
         bar = bar.ljust(width)
         pct = 100 * c / total
         line = f'  [{lo:{fmt}},{hi:{fmt}}) │{bar}│ {c:>5} ({pct:4.1f}%)'
-        if highlight_min and idx == 0 and c > 0:
-            line = f'{t.red}{t.bold}{line}{t.reset}'
-        lines.append(line)
+        print(_highlight(line, highlight_min and idx == 0 and c > 0))
 
-    return lines
+    print()
 
 
-def _format_stats(fs, name, highlight_min=False):
-    t = tty
-
+def _format_stats(fs, name, highlight_min=False, highlight_max=False):
     if not fs.n:
         return f'  {name}: No valid data'
 
-    if highlight_min:
-        mn_str = f'{t.red}{t.bold}{fs.min:9.3g}{t.reset}'
-    else:
-        mn_str = f'{fs.min:9.3g}'
-
     return (f'  {name}:\n'
-            f'    Min: {mn_str}  Max: {fs.max:9.3g}  '
+            f'    Min: {_highlight(f'{fs.min:9.3g}', highlight_min)}  '
+            f'Max: {_highlight(f'{fs.max:9.3g}', highlight_max)}  '
             f'Mean: {fs.mean:9.3g} ± {fs.std:9.3g}')
 
 
@@ -233,8 +224,6 @@ class _MeshAnalyser:
         self.etypes = {}
         self.stats = {k: 0 for k in self.gsums}
         self.stats |= {k: np.inf for k in self.gmins}
-        self.stats |= {'min_h': np.inf, 'min_h_etype': None,
-                       'min_h_eidx': None}
 
         for etype, spts in mesh.spts.items():
             ele = elementscls(basismap[etype], spts, cfg)
@@ -243,8 +232,9 @@ class _MeshAnalyser:
             n_curved = int(np.sum(curved))
 
             # Count issues per element (int cast for JSON serialization)
-            n_inv = int(np.sum(np.any(m.djac <= 0, axis=0)))
-            n_nan = int(np.sum(np.any(np.isnan(m.djac), axis=0)))
+            nan = np.any(np.isnan(m.djac), axis=0)
+            n_inv = int(np.sum((m.scaled_jac <= 0) & ~nan))
+            n_nan = int(np.sum(nan))
             n_pj = int(np.sum(m.scaled_jac < jac_thresh))
             n_ha = int(np.sum(np.any(m.aspect > ar_thresh, axis=0)))
 
@@ -261,22 +251,13 @@ class _MeshAnalyser:
                 self.stats[k] += counts[k]
 
             # Track global minimums
-            sjmin = np.nanmin(m.scaled_jac)
-            self.stats['min_scaled_jac'] = min(self.stats['min_scaled_jac'],
-                                               sjmin)
-
+            mins = {'min_scaled_jac': np.nanmin(m.scaled_jac)}
             if n_curved:
-                csjmin = np.nanmin(m.scaled_jac[curved])
-                k = 'min_curved_scaled_jac'
-                self.stats[k] = min(self.stats[k], csjmin)
+                csj = np.nanmin(m.scaled_jac[curved])
+                mins['min_curved_scaled_jac'] = csj
 
-            h_min_per_ele = np.nanmin(m.h, axis=0)
-            min_h_idx = np.nanargmin(h_min_per_ele)
-            min_h_val = h_min_per_ele[min_h_idx]
-            if min_h_val < self.stats['min_h']:
-                self.stats['min_h'] = min_h_val
-                self.stats['min_h_etype'] = etype
-                self.stats['min_h_eidx'] = mesh.eidxs[etype][min_h_idx]
+            for k, v in mins.items():
+                self.stats[k] = min(self.stats[k], v)
 
         if sr_thresh > 0:
             self._compute_nsr()
@@ -351,18 +332,10 @@ class _MeshAnalyser:
         elif f == 'vol':
             return fs.min <= 0
         elif f == 'h':
-            return etype == self.stats['min_h_etype']
+            mh = self.min_h_ele
+            return mh is not None and etype == mh.etype
         else:
             return False
-
-    def _print_histogram(self, fs, title, highlight_min=False):
-        t = tty
-        hist = _render_histogram(fs.hist_counts, fs.hist_edges,
-                                 highlight_min=highlight_min)
-
-        if hist:
-            print(f'  {t.cyan}{title} Distribution:{t.reset}')
-            print(*hist, '', sep='\n')
 
     def _local_fields(self, etype):
         res = self.etypes.get(etype)
@@ -398,16 +371,6 @@ class _MeshAnalyser:
             self.stats[key] = scal_coll(comm.Allreduce, self.stats[key],
                                         op=mpi.MIN)
 
-        # Reduce the smallest h together with the element holding it
-        eidx = self.stats['min_h_eidx']
-        cand = (float(self.stats['min_h']), self.stats['min_h_etype'] or '',
-                -1 if eidx is None else int(eidx))
-        h, etype, eidx = comm.allreduce(cand, op=mpi.MIN)
-
-        self.stats['min_h'] = h
-        self.stats['min_h_etype'] = etype or None
-        self.stats['min_h_eidx'] = None if eidx < 0 else eidx
-
         self.ginfo, self.fieldstats = {}, {}
 
         for etype in self.mesh.etypes:
@@ -426,9 +389,13 @@ class _MeshAnalyser:
         # Gather worst-N candidates from all ranks
         self.worst_sj = self._gather_worst(lambda r: r.metrics.scaled_jac,
                                            n_worst)
-        self.worst_h = self._gather_worst(
-            lambda r: np.min(r.metrics.h, axis=0), n_worst
-        )
+
+        # Take the CFL limiting element from the worst mesh scales
+        worst_h = self._gather_worst(lambda r: np.min(r.metrics.h, axis=0),
+                                     max(n_worst, 1))
+        self.worst_h = worst_h[:n_worst]
+        self.min_h_ele = worst_h[0] if worst_h else None
+
         if self.nsr_thresh > 0:
             self.worst_nsr = self._gather_worst(lambda r: r.max_nsr, n_worst,
                                                 minimise=False)
@@ -437,71 +404,61 @@ class _MeshAnalyser:
 
         return rank == root
 
-    def output_text(self, n_worst):
-        w = min(shutil.get_terminal_size().columns, 72)
-        t = tty
-        s = self.stats
+    def _print_etype(self, etype):
+        t, gi = tty, self.ginfo[etype]
 
-        print(f'{t.bold}Mesh Quality Report{t.reset}', '='*w, '', sep='\n')
+        print(f'{t.bold}Element Type: {etype}{t.reset} '
+              f'({gi['neles']} elements, {gi['ncurved']} curved), '
+              f'p = {self.order}, q = {gi['q']}, '
+              f'nupts = {gi['nupts']}, nmpts = {gi['nmpts']}\n')
 
-        for etype in self.mesh.etypes:
-            gi = self.ginfo[etype]
-            hdr = (f'{t.bold}Element Type: {etype}{t.reset} '
-                   f'({gi['neles']} elements, {gi['ncurved']} curved), '
-                   f'p = {self.order}, q = {gi['q']}, '
-                   f'nupts = {gi['nupts']}, nmpts = {gi['nmpts']}')
-            print(hdr + '\n')
-
-            for f, label in self.statlabels.items():
-                if f == 'curved' and not gi['ncurved']:
-                    continue
-
+        for f, label in self.statlabels.items():
+            if f != 'curved' or gi['ncurved']:
                 hl = self._highlight_min(etype, f)
                 print(_format_stats(self.fieldstats[etype, f], label,
-                                    highlight_min=hl) + '\n')
+                                    highlight_min=hl), '', sep='\n')
 
-            # Scaled Jacobian stats filtered to curved elements
-            if gi['ncurved']:
-                hl_curved = self._highlight_min(etype, 'curved')
-                self._print_histogram(self.fieldstats[etype, 'curved'],
-                                      self.statlabels['curved'],
-                                      highlight_min=hl_curved)
+        # Scaled Jacobian stats filtered to curved elements
+        if gi['ncurved']:
+            _print_histogram(self.fieldstats[etype, 'curved'],
+                             self.statlabels['curved'],
+                             self._highlight_min(etype, 'curved'))
 
-            hl_h = self._highlight_min(etype, 'h')
-            self._print_histogram(self.fieldstats[etype, 'h'], 'Mesh Scale',
-                                  highlight_min=hl_h)
+        _print_histogram(self.fieldstats[etype, 'h'], 'Mesh Scale',
+                         self._highlight_min(etype, 'h'))
 
-        # Neighbour size ratio section
-        if self.nsr:
-            nsr = self.nsr
-            print(f'{t.bold}Neighbour Size Ratio{t.reset}\n')
+    def _print_nsr(self):
+        hl = self.nsr.max > self.nsr_thresh
 
-            if nsr.max > 5:
-                max_str = f'{t.red}{t.bold}{nsr.max:9.3g}{t.reset}'
-            else:
-                max_str = f'{nsr.max:9.3g}'
-            print(f'  Min: {nsr.min:9.3g}  Max: {max_str}  Mean: '
-                  f'{nsr.mean:9.3g} ± {nsr.std:9.3g}\n')
+        print(_format_stats(self.nsr, 'Neighbour Size Ratio',
+                            highlight_max=hl), '', sep='\n')
+        _print_histogram(self.nsr, 'Neighbour Size Ratio')
 
-            self._print_histogram(nsr, 'Neighbour Size Ratio')
+    def _print_summary(self, w):
+        t, s = tty, self.stats
 
         print('-'*w, f'{t.bold}Summary{t.reset}', '-'*w, sep='\n')
 
-        def _count(label, val):
-            c = t.green if val == 0 else t.red
-            return f'  {label}  {c}{val}{t.reset}'
+        jl = f'Scaled Jacobian < {self.jac_thresh}:'
+        al = f'Aspect ratio > {self.ar_thresh}:'
+        counts = {'Inverted elements (J ≤ 0):': s['n_inverted'],
+                  'Elements with NaN Jacobian:': s['n_nan'],
+                  jl: s['n_poor_scaled_jac'], al: s['n_high_aspect']}
 
-        print(f'  Curved elements:            '
-              f'{s['n_curved']} / {s['n_total']}')
-        print(_count('Inverted elements (J ≤ 0):  ', s['n_inverted']))
-        print(_count('Elements with NaN Jacobian: ', s['n_nan']))
-        jl = f'Scaled Jacobian < {self.jac_thresh}:'.ljust(28)
-        al = f'Aspect ratio > {self.ar_thresh}:'.ljust(28)
-        print(_count(jl, s['n_poor_scaled_jac']))
-        print(_count(al, s['n_high_aspect']))
         if self.nsr:
-            sl = f'Neighbour size ratio > {self.nsr_thresh}:'.ljust(28)
-            print(_count(sl, s['n_high_nsr']))
+            sl = f'Neighbour size ratio > {self.nsr_thresh}:'
+            counts[sl] = s['n_high_nsr']
+
+        # Size the label column so that long thresholds still line up
+        lw = max(len(l) for l in counts)
+
+        print(f'  {'Curved elements:'.ljust(lw)}  '
+              f'{s['n_curved']} / {s['n_total']}')
+
+        for label, val in counts.items():
+            c = t.green if val == 0 else t.red
+            print(f'  {label.ljust(lw)}  {c}{val}{t.reset}')
+
         print()
 
         min_csj = s['min_curved_scaled_jac']
@@ -510,11 +467,11 @@ class _MeshAnalyser:
             print(f'  {c}Min scaled Jacobian (curved):{t.reset} '
                   f'{min_csj:9.3g}')
 
-        if np.isfinite(s['min_h']):
-            dt_factor = s['min_h'] / (2*self.order + 1)
-            etype, eidx = s['min_h_etype'], s['min_h_eidx']
+        mh = self.min_h_ele
+        if mh is not None and np.isfinite(mh.val):
+            dt_factor = mh.val / (2*self.order + 1)
             print(f'  {t.cyan}Likely CFL limiting element:{t.reset}'
-                  f' {etype} {eidx} (h = {s['min_h']:.3g})')
+                  f' {mh.etype} {mh.eidx} (h = {mh.val:.3g})')
             print(f'  {t.cyan}Geometric dt factor:{t.reset} '
                   f'h_min/(2p+1) = {dt_factor:9.3g}')
 
@@ -522,17 +479,33 @@ class _MeshAnalyser:
             print(f'  {t.cyan}Max neighbour size ratio:{t.reset} '
                   f'{self.nsr.max:9.3g}')
 
-        # Worst elements
+    def _print_worst(self, w):
+        print('='*w)
+
+        tables = [
+            (self.worst_sj, 'Worst Elements by Scaled Jacobian', 'Scaled J'),
+            (self.worst_h, 'Smallest Mesh Scale (CFL limiting)', 'h_min'),
+            (self.worst_nsr, 'Worst Neighbour Size Ratios', 'NSR'),
+        ]
+
+        for worst, title, col in [t for t in tables if t[0]]:
+            _print_worst_table(worst, title, col)
+
+    def output_text(self, n_worst):
+        t, w = tty, min(shutil.get_terminal_size().columns, 72)
+
+        print(f'{t.bold}Mesh Quality Report{t.reset}', '='*w, '', sep='\n')
+
+        for etype in self.mesh.etypes:
+            self._print_etype(etype)
+
+        if self.nsr:
+            self._print_nsr()
+
+        self._print_summary(w)
+
         if n_worst > 0:
-            print('='*w)
-
-            pwt = _print_worst_table
-            pwt(self.worst_sj, 'Worst Elements by Scaled Jacobian',
-                'Scaled J')
-            pwt(self.worst_h, 'Smallest Mesh Scale (CFL limiting)', 'h_min')
-
-            if self.worst_nsr:
-                pwt(self.worst_nsr, 'Worst Neighbour Size Ratios', 'NSR')
+            self._print_worst(w)
 
     def output_json(self):
         s = self.stats
@@ -548,14 +521,16 @@ class _MeshAnalyser:
             status = 'ok'
 
         # Extract global metrics, converting inf to None for JSON
-        make_inf_none = lambda v: float(v) if np.isfinite(v) else None
+        mh = self.min_h_ele.val if self.min_h_ele is not None else np.inf
         glob = {k: s[k] for k in self.gsums if k != 'n_total'}
-        for k in self.gmins + ('min_h',):
-            glob[k] = make_inf_none(s[k])
+        for k in self.gmins:
+            glob[k] = float(s[k]) if np.isfinite(s[k]) else None
 
-        if np.isfinite(s['min_h']):
-            glob['geometric_dt_factor'] = s['min_h'] / (2*self.order + 1)
+        if np.isfinite(mh):
+            glob['min_h'] = float(mh)
+            glob['geometric_dt_factor'] = mh / (2*self.order + 1)
         else:
+            glob['min_h'] = None
             glob['geometric_dt_factor'] = None
 
         if sr:
