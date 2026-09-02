@@ -16,7 +16,7 @@ from pyfr.writers.vtk.output import CleanToGridVTKOutput, DirectVTKOutput
 Field = namedtuple('Field', 'name vtkname kind ncomps dtype')
 
 
-def _extra_field(name, kind, ncomps, dtype):
+def extra_field(name, kind, ncomps, dtype):
     vtkname = name.replace('-', ' ').title()
     return Field(name, vtkname, kind, int(ncomps) or 1, dtype)
 
@@ -90,9 +90,9 @@ class BaseVTKWriter(BaseWriter):
             # Nodal shapes track the element type, per-element ones do not
             shape = first(eshapes.values())
             if all(self._is_nodal(et, s) for et, s in eshapes.items()):
-                f = _extra_field(name, 'point', np.prod(shape[1:]), base)
+                f = extra_field(name, 'point', np.prod(shape[1:]), base)
             elif len(set(eshapes.values())) == 1:
-                f = _extra_field(name, 'cell', np.prod(shape), base)
+                f = extra_field(name, 'cell', np.prod(shape), base)
             else:
                 continue
 
@@ -121,8 +121,8 @@ class BaseVTKWriter(BaseWriter):
 
         dtype = np.dtype(self.dtype)
         for fname, varnames in self.pp_pipe.fields.items():
-            self._extra_fields[fname] = _extra_field(fname, 'point',
-                                                     len(varnames), dtype)
+            self._extra_fields[fname] = extra_field(fname, 'point',
+                                                    len(varnames), dtype)
 
     def _postproc(self, soln_t, ploc, *extra):
         if self.pp_pipe.plugins:

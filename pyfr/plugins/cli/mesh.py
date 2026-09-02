@@ -1,23 +1,19 @@
 from collections import namedtuple
 import json
-from pathlib import Path
 import shutil
 
 import numpy as np
 
 from pyfr.inifile import Inifile
-from pyfr.mpiutil import (autofree, get_comm_rank_root, init_mpi, mpi,
-                          scal_coll)
+from pyfr.mpiutil import get_comm_rank_root, init_mpi, mpi, scal_coll
 from pyfr.plugins.base import BaseCLIPlugin
 from pyfr.plugins.common import cli_external
+from pyfr.quality import element_metrics, neighbour_size_ratio
 from pyfr.readers.native import NativeReader
 from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where, subclasses, tty
-from pyfr.writers.native import NativeWriter
 
 
-Metrics = namedtuple('Metrics',
-                     'djac h aspect scaled_jac jvar vol char_len ploc')
 EleInfo = namedtuple(
     'EleInfo', 'neles nupts nmpts sptsord curved eidxs metrics n_inverted '
     'n_nan n_poor_scaled_jac n_high_aspect max_nsr', defaults=(None,)
@@ -57,65 +53,6 @@ def _reduce_field(arr, nbins=10):
     std = np.sqrt(max(ss / n - mean**2, 0)) if n else 0.0
 
     return FieldStats(n, lo, hi, mean, std, counts, edges)
-
-
-def _scaled_jac(ele):
-    sj = None
-
-    for name in ('upts', 'fpts'):
-        jac = ele.jac_at_np(name)
-
-        # Normalise the determinant by the tangent vector norms
-        tnorm = np.prod(np.linalg.norm(jac, axis=-1), axis=-1)
-        with np.errstate(divide='ignore', invalid='ignore'):
-            s = np.where(tnorm > 0, np.linalg.det(jac) / tnorm, 0)
-
-        # Keep the worst value seen at any of the solver's points
-        s = np.min(s, axis=0)
-        sj = s if sj is None else np.minimum(sj, s)
-
-    return sj
-
-
-def _compute_metrics(ele):
-    # Jacobian determinant at solution points
-    djac = np.linalg.det(ele.jac_at_np('upts'))
-    with np.errstate(divide='ignore', invalid='ignore'):
-        rcpdjac = 1.0 / djac
-
-    # Metric terms at solution points
-    smats = ele.smat_at_np('upts')
-
-    # J^{-1} scaled by 1/det(J)
-    jinv = smats * rcpdjac[None, :, None, :]
-
-    # Mesh scale: h_i = 2 / ||J^{-1}_i||_2 per reference direction
-    h_per_dir = 2.0 / np.sqrt(np.sum(jinv**2, axis=2))
-    h_min = np.min(h_per_dir, axis=0)
-    h_max = np.max(h_per_dir, axis=0)
-
-    # Aspect ratio
-    aspect = h_max / h_min
-
-    # Scaled Jacobian at the solution and flux points
-    scaled_jac = _scaled_jac(ele)
-
-    # Variation of the Jacobian determinant within each element
-    adjac = np.abs(djac)
-    with np.errstate(divide='ignore', invalid='ignore'):
-        jvar = np.min(adjac, axis=0) / np.max(adjac, axis=0)
-
-    # Element volume from the solution point quadrature
-    wts = ele.basis.ubasis.invvdm[:, 0]
-    vol = wts.sum() * (wts @ djac)
-
-    # Volume-based characteristic length
-    char_len = np.abs(np.mean(djac, axis=0))**(1.0 / ele.ndims)
-
-    # Physical locations
-    ploc = ele.ploc_at_np('upts')
-
-    return Metrics(djac, h_min, aspect, scaled_jac, jvar, vol, char_len, ploc)
 
 
 def _find_worst(etype, arr, ploc, eidxs, n=10, minimise=True):
@@ -227,7 +164,7 @@ class _MeshAnalyser:
 
         for etype, spts in mesh.spts.items():
             ele = elementscls(basismap[etype], spts, cfg)
-            m = _compute_metrics(ele)
+            m = element_metrics(ele)
             curved = mesh.spts_curved[etype]
             n_curved = int(np.sum(curved))
 
@@ -263,32 +200,13 @@ class _MeshAnalyser:
             self._compute_nsr()
 
     def _compute_nsr(self):
-        mesh = self.mesh
         comm, _, _ = get_comm_rank_root()
 
-        # Per-element characteristic length and worst neighbour ratio
+        # Worst neighbour size ratio seen by each element
         cl = {et: r.metrics.char_len for et, r in self.etypes.items()}
-        nsr = {et: np.ones(r.neles) for et, r in self.etypes.items()}
+        nsr = neighbour_size_ratio(self.mesh, cl)
 
-        def process(con, lcl, rcl):
-            face_r = np.maximum(lcl, rcl) / np.minimum(lcl, rcl)
-            for et, _, ei, mask in con.foreach():
-                np.maximum.at(nsr[et], ei, face_r[mask])
-
-        # Internal faces
-        if mesh.con:
-            for lhs, rhs in [mesh.con, mesh.con[::-1]]:
-                process(lhs, lhs.map_eles(cl), rhs.map_eles(cl))
-
-        # MPI faces
-        nbrs = sorted(mesh.con_p)
-        ncomm = autofree(comm.Create_dist_graph_adjacent(nbrs, nbrs))
-        send = [con.map_eles(cl) for con in mesh.con_p.values()]
-        recv = ncomm.neighbor_alltoall(send)
-        for con, rcl in zip(mesh.con_p.values(), recv):
-            process(con, con.map_eles(cl), rcl)
-
-        # Stash per-element max_nsr for export and display
+        # Stash the per-element ratio for display
         for et in nsr:
             self.etypes[et] = self.etypes[et]._replace(max_nsr=nsr[et])
 
@@ -560,52 +478,6 @@ class _MeshAnalyser:
 
         print(json.dumps(output, indent=2))
 
-    def export(self, path):
-        mesh, cfg = self.mesh, self.cfg
-
-        # Build file stats record
-        fstats = Inifile()
-        fstats.set('data', 'prefix', 'quality')
-
-        fields = ['scaled-jacobian', 'mesh-scale', 'aspect-ratio', 'is-curved']
-        if self.nsr:
-            fields.append('size-ratio')
-        fstats.set('data', 'fields', ', '.join(fields))
-
-        # Prepare shapes and field groups
-        shapes = {et: (len(fields), r.nupts) for et, r in self.etypes.items()}
-        field_groups = {'quality': fields}
-
-        # Create writer
-        writer = NativeWriter(mesh, cfg, np.float64, path.parent, path.name,
-                              'quality')
-        writer.set_shapes_eidxs(shapes, mesh.eidxs, field_groups)
-
-        # Pack data per element type: (neles, nfields, nupts)
-        data = {}
-        for etype, res in self.etypes.items():
-            m = res.metrics
-            neles, nupts = res.neles, res.nupts
-
-            # Expand per-element scalars to all solution points
-            sj = np.broadcast_to(m.scaled_jac[:, None], (neles, nupts))
-            ic = np.broadcast_to(res.curved[:, None], (neles, nupts))
-
-            fields = [sj, m.h.T, m.aspect.T, ic.astype(float)]
-            if res.max_nsr is not None:
-                msr = res.max_nsr[:, None]
-                fields.append(np.broadcast_to(msr, (neles, nupts)))
-
-            data[etype] = {'quality': np.stack(fields, axis=1)}
-
-        # Write
-        metadata = {
-            'mesh-uuid': mesh.uuid,
-            'config': cfg.tostr(),
-            'stats': fstats.tostr(),
-        }
-        writer.write(data, tcurr=0.0, metadata=metadata)
-
 
 class MeshCLIPlugin(BaseCLIPlugin):
     name = 'mesh'
@@ -619,8 +491,6 @@ class MeshCLIPlugin(BaseCLIPlugin):
                             help='output as JSON')
         parser.add_argument('--worst', type=int, default=0, metavar='N',
                             help='show N worst elements')
-        parser.add_argument('--export', type=Path, metavar='FILE',
-                            help='export quality fields to .pyfrs file')
         parser.add_argument('--order', type=int, metavar='P',
                             help='override polynomial order from config')
         parser.add_argument('--jac-thresh', type=float, default=0.5,
@@ -658,6 +528,3 @@ class MeshCLIPlugin(BaseCLIPlugin):
                 ma.output_json()
             else:
                 ma.output_text(args.worst)
-
-        if args.export:
-            ma.export(args.export)

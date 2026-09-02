@@ -159,6 +159,19 @@ pyfr export
       shape points in the mesh; this can be overridden with the
       ``--eopt=order:n`` and ``--eopt=divisor:n`` flags.
 
+      Providing a configuration file with ``--cfg`` also outputs the
+      mesh quality fields *scaled-jacobian*, *jacobian-variation*,
+      *element-volume*, *mesh-scale*, *aspect-ratio*, and
+      *size-ratio* as cell data.  These are the per-element
+      quantities summarised by ``pyfr mesh``, and are defined there.
+      Example:
+
+      .. code-block:: shell
+
+          pyfr export mesh --cfg config.ini mesh.pyfrm mesh.vtu
+
+      A subset can be selected with ``-f``.
+
    pyfr export spanwise
       Exports a spanwise average of a 3D grid to a 2D VTK grid.
       Example:
@@ -392,6 +405,9 @@ pyfr mesh
    exchanged across partition boundaries so the result is
    independent of the number of ranks.
 
+   To visualise these quantities pass the same configuration file to
+   ``pyfr export mesh --cfg``.
+
    Optional arguments:
 
    ``--order``
@@ -400,11 +416,6 @@ pyfr mesh
    ``--worst N``
       Show the N worst elements by scaled Jacobian, mesh scale,
       and neighbour size ratio.
-
-   ``--export FILE``
-      Export quality fields to a ``.pyfrs`` file for visualisation.
-      The exported fields are *scaled-jacobian*, *mesh-scale*,
-      *aspect-ratio*, *is-curved*, and *size-ratio* (when enabled).
 
    ``--jac-thresh J``
       Scaled Jacobian threshold (default 0.5).

@@ -161,12 +161,12 @@ def main():
             help='output file type; this is usually inferred from the '
             'extension of outf'
         )
+        ap_export_type.add_argument(
+            '-f', '--field', dest='fields', action='append',
+            metavar='FIELD', help='what fields should be output; may be '
+            'repeated, by default all fields are output'
+        )
         if etype != 'mesh':
-            ap_export_type.add_argument(
-                '-f', '--field', dest='fields', action='append',
-                metavar='FIELD', help='what fields should be output; may be '
-                'repeated, by default all fields are output'
-            )
             ap_export_type.add_argument(
                 '-l', '--list-fields', action='store_true',
                 help='list the fields the file provides and exit'
@@ -188,6 +188,10 @@ def main():
             ap_export_type.add_argument('--cfg', dest='pp_cfg',
                                         help='config file for postproc '
                                         'plugins')
+        else:
+            ap_export_type.add_argument('--cfg',
+                                        help='add mesh quality fields '
+                                        'computed with this config file')
         ap_export_type.add_argument('-P', '--pname',
                                     help='partitioning to use')
         if etype in ('boundary', 'spanwise', 'volume'):
@@ -477,13 +481,15 @@ def process_export(args):
 
     # Common arguments
     kargs = [args.eargs] if 'eargs' in args else []
-    kwargs = {'prec': args.precision, 'pname': args.pname}
+    kwargs = {'prec': args.precision, 'pname': args.pname,
+              'fields': args.fields}
 
     # Solution-specific arguments
     if args.etype != 'mesh':
         pp_cfg = Inifile.load(args.pp_cfg) if args.pp_cfg else None
-        kwargs |= {'fields': args.fields, 'pp_plugins': args.pp_plugins,
-                   'pp_cfg': pp_cfg}
+        kwargs |= {'pp_plugins': args.pp_plugins, 'pp_cfg': pp_cfg}
+    else:
+        kwargs['cfg'] = Inifile.load(args.cfg) if args.cfg else None
 
     # Discntinuous output
     if 'discontinuous' in args:
