@@ -307,6 +307,16 @@ initiate MPI requests.  The average amount of time each rank spends
 waiting for MPI requests per right hand side evaluation can be obtained
 by vertically summing all of the ``-median`` fields together.
 
+Per-peer wait attribution can additionally be enabled with
+``collect-wait-times-per-peer = true``.  In this mode PyFR uses
+``MPI_Waitsome`` and attributes each blocking interval equally across the
+requests completed by that call.  The resulting sparse
+``rhs-graph-*-send-*`` and ``rhs-graph-*-recv-*`` fields contain
+``(rank, peer, value)`` triplets, where ``rank`` is the rank reporting the
+statistic.  Corresponding ``*-bytes`` fields give the static message sizes.
+This mode has additional measurement overhead and should only be enabled when
+per-peer information is required.
+
 There exists an inverse relationship between the amount of computational
 work a rank has to perform and the amount of time it spends waiting for
 MPI requests to complete.  Hence, ranks which spend comparatively less

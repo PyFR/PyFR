@@ -18,6 +18,11 @@ Parameterises the backend with
 
     ``True`` | ``False``
 
+#. ``collect-wait-times-per-peer`` --- if to additionally attribute MPI
+   request wait times to individual peers. Requires ``collect-wait-times``:
+
+    ``True`` | ``False``
+
 #. ``collect-wait-times-len`` --- size of the wait time history buffer:
 
      *int*

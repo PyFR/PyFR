@@ -2,6 +2,7 @@ from bisect import insort
 from collections import defaultdict, deque
 from copy import copy
 import time
+import weakref
 
 import numpy as np
 
@@ -259,11 +260,25 @@ class TiledMatrix(_StorageBase):
 class XchgMatrix(Matrix):
     _base_tags = {'xchg'}
 
+    def _makereq(self, req, pid, send):
+        req = autofree(req)
+
+        if self.backend.cfg.getbool('backend', 'collect-wait-times-per-peer',
+                                    False):
+            if not hasattr(self.backend, 'mpi_req_info'):
+                self.backend.mpi_req_info = {}
+
+            rid = id(req)
+            self.backend.mpi_req_info[rid] = (pid, send, self.hdata.nbytes)
+            weakref.finalize(req, self.backend.mpi_req_info.pop, rid, None)
+
+        return req
+
     def recvreq(self, comm, pid, tag):
-        return autofree(comm.Recv_init(self.hdata, pid, tag))
+        return self._makereq(comm.Recv_init(self.hdata, pid, tag), pid, False)
 
     def sendreq(self, comm, pid, tag):
-        return autofree(comm.Send_init(self.hdata, pid, tag))
+        return self._makereq(comm.Send_init(self.hdata, pid, tag), pid, True)
 
 
 class View:
@@ -411,18 +426,27 @@ class Graph:
         # MPI wrappers
         self._startall = mpi.Prequest.Startall
 
-        if backend.cfg.getbool('backend', 'collect-wait-times', False):
+        collect_wait = backend.cfg.getbool('backend', 'collect-wait-times',
+                                           False)
+        per_peer = backend.cfg.getbool(
+            'backend', 'collect-wait-times-per-peer', False
+        )
+        if per_peer and not collect_wait:
+            raise ValueError('collect-wait-times-per-peer requires '
+                             'collect-wait-times')
+
+        self._wait_times = None
+        self._send_wait_times = self._recv_wait_times = None
+        if collect_wait:
             n = backend.cfg.getint('backend', 'collect-wait-times-len', 10000)
-            self._wait_times = wait_times = deque(maxlen=n)
+            self._wait_times = deque(maxlen=n)
 
-            # Wrap the wait all function with a timing variant
-            def waitall(reqs):
-                if reqs:
-                    t = time.perf_counter_ns()
-                    mpi.Prequest.Waitall(reqs)
-                    wait_times.append((time.perf_counter_ns() - t) / 1e9)
-
-            self._waitall = waitall
+            if per_peer:
+                self._send_wait_times = defaultdict(lambda: deque(maxlen=n))
+                self._recv_wait_times = defaultdict(lambda: deque(maxlen=n))
+                self._waitall = self._waitall_detailed
+            else:
+                self._waitall = self._waitall_timed
         else:
             self._waitall = mpi.Prequest.Waitall
 
@@ -586,5 +610,56 @@ class Graph:
     def run(self, *args):
         pass
 
+    def _waitall_timed(self, reqs):
+        if reqs:
+            t = time.perf_counter_ns()
+            mpi.Prequest.Waitall(reqs)
+            self._wait_times.append((time.perf_counter_ns() - t) / 1e9)
+
+    def _waitall_detailed(self, reqs):
+        if not reqs:
+            return
+
+        reqinfo = self.backend.mpi_req_info
+        lreqs = list(reqs)
+        wait_ns = 0
+
+        while True:
+            t0 = time.perf_counter_ns()
+            idxs = mpi.Prequest.Waitsome(lreqs)
+            t1 = time.perf_counter_ns()
+
+            if idxs is None:
+                break
+
+            dt_ns = t1 - t0
+            wait_ns += dt_ns
+            share = dt_ns / (1e9*max(len(idxs), 1))
+
+            for i in idxs:
+                peer, send, _ = reqinfo[id(lreqs[i])]
+                times = (self._send_wait_times if send
+                         else self._recv_wait_times)
+                times[peer].append(share)
+                lreqs[i] = mpi.REQUEST_NULL
+
+        self._wait_times.append(wait_ns / 1e9)
+
     def get_wait_times(self):
-        return list(self._wait_times)
+        return list(self._wait_times or ())
+
+    def get_wait_times_by_peer(self):
+        def asdict(times):
+            return {p: list(t) for p, t in (times or {}).items()}
+
+        return asdict(self._send_wait_times), asdict(self._recv_wait_times)
+
+    def get_mpi_bytes(self):
+        send, recv = defaultdict(int), defaultdict(int)
+        reqinfo = getattr(self.backend, 'mpi_req_info', {})
+
+        for req in self.mpi_reqs:
+            peer, is_send, nbytes = reqinfo[id(req)]
+            (send if is_send else recv)[peer] += nbytes
+
+        return dict(send), dict(recv)

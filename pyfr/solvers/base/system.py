@@ -486,6 +486,48 @@ class BaseSystem:
 
         return stats
 
+    def rhs_wait_times_by_peer(self):
+        times = defaultdict(lambda: [defaultdict(list), defaultdict(list)])
+
+        # Group together timings for graphs which are semantically equivalent
+        for u, f in self._rhs_uin_fout:
+            for i, g in enumerate(self._rhs_graphs(u, f)):
+                for ptimes, samples in zip(times[i],
+                                           g.get_wait_times_by_peer()):
+                    for peer, vals in samples.items():
+                        ptimes[peer].extend(vals)
+
+        # Compute statistics for each graph, direction, and peer
+        stats = []
+        for i in range(max(times, default=-1) + 1):
+            gstats = []
+            for ptimes in times[i]:
+                pstats = {}
+                for peer, vals in ptimes.items():
+                    mean = statistics.mean(vals) if vals else 0
+                    stdev = (statistics.stdev(vals, mean)
+                             if len(vals) >= 2 else 0)
+                    median = statistics.median(vals) if vals else 0
+                    pstats[peer] = mean, stdev, median
+
+                gstats.append(pstats)
+            stats.append(tuple(gstats))
+
+        return stats
+
+    def rhs_mpi_bytes(self):
+        nbytes = {}
+
+        for u, f in self._rhs_uin_fout:
+            for i, g in enumerate(self._rhs_graphs(u, f)):
+                gb = g.get_mpi_bytes()
+                if i in nbytes and nbytes[i] != gb:
+                    raise RuntimeError('Inconsistent MPI request sizes across '
+                                       'equivalent RHS graphs')
+                nbytes[i] = gb
+
+        return [nbytes[i] for i in range(max(nbytes, default=-1) + 1)]
+
     def _compute_grads_graph(self, uinbank):
         raise NotImplementedError(f'Solver {self.name!r} does not compute '
                                   'corrected gradients of the solution')

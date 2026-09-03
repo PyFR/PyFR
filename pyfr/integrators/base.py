@@ -385,6 +385,34 @@ class BaseIntegrator(metaclass=RegisterMeta):
                     stats.set('backend-wait-times', f'rhs-graph-{i}-{k}',
                               ','.join(f'{v[j]:.3g}' for v in ms))
 
+            if self.cfg.getbool('backend', 'collect-wait-times-per-peer',
+                                False):
+                peer_times = comm.allgather(
+                    self.system.rhs_wait_times_by_peer()
+                )
+                for i, gs in enumerate(zip(*peer_times)):
+                    for d, di in [('send', 0), ('recv', 1)]:
+                        for j, k in enumerate(['mean', 'stdev', 'median']):
+                            vals = []
+                            for rank, g in enumerate(gs):
+                                for peer, v in sorted(g[di].items()):
+                                    vals.append(f'({rank},{peer},{v[j]:.3g})')
+
+                            stats.set('backend-wait-times',
+                                      f'rhs-graph-{i}-{d}-{k}',
+                                      ','.join(vals))
+
+                mpi_bytes = comm.allgather(self.system.rhs_mpi_bytes())
+                for i, gs in enumerate(zip(*mpi_bytes)):
+                    for d, di in [('send', 0), ('recv', 1)]:
+                        vals = []
+                        for rank, g in enumerate(gs):
+                            for peer, v in sorted(g[di].items()):
+                                vals.append(f'({rank},{peer},{v})')
+
+                        stats.set('backend-wait-times',
+                                  f'rhs-graph-{i}-{d}-bytes', ','.join(vals))
+
         # Backend memory
         comm, _, _ = get_comm_rank_root()
         mem_info = comm.allgather(self.backend.memory_info())
