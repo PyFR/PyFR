@@ -181,7 +181,7 @@ class BaseFluidElements:
             wkerns.append(self._be.kernel(
                 'wavespeed', tplargs=tplargs | {'ktype': rgn},
                 dims=[self.nupts, r[rgn]], u=s(self.scal_upts[uin], rgn),
-                wspd=self._wspd, **kw
+                wspd=s(self._wspd, rgn), **kw
             ))
 
         if len(wkerns) > 1:
