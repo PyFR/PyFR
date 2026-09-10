@@ -12,7 +12,7 @@
 
 <%pyfr:kernel name='tflux' ndim='2'
               u='in fpdtype_t[${str(nvars)}]'
-              artvisc='in broadcast-col fpdtype_t'
+              artvisc_vtx='in broadcast-col view(${str(nverts)}) fpdtype_t'
               f='inout fpdtype_t[${str(ndims)}][${str(nvars)}]'
               gradu='inout fpdtype_t[${str(ndims)}][${str(nvars)}]'
               smats='in fpdtype_t[${str(ndims)}][${str(ndims)}]'
@@ -36,7 +36,11 @@
     fpdtype_t p, v[${ndims}];
     ${pyfr.expand('inviscid_flux', 'u', 'ftemp', 'p', 'v')};
     ${pyfr.expand('viscous_flux_add', 'u', gradu, 'ftemp')};
+% if shock_capturing == 'artificial-viscosity':
+    fpdtype_t artvisc;
+    ${pyfr.expand('interp_artvisc', 'artvisc_vtx', 'upts', 'artvisc')};
     ${pyfr.expand('artificial_viscosity_add', gradu, 'ftemp', 'artvisc')};
+% endif
 
     // Transform the fluxes
 % for i, j in pyfr.ndrange(ndims, nvars):

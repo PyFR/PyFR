@@ -12,19 +12,126 @@ typedef ${pyfr.npdtype_to_ctype(fpdtype)} fpdtype_t;
 typedef ${pyfr.npdtype_to_ctype(ixdtype)} ixdtype_t;
 
 // Atomic helpers
-__device__ void atomic_min_fpdtype(fpdtype_t* addr, fpdtype_t val)
+% for op, op_pos, op_neg in [('min', 'Min', 'Max'), ('max', 'Max', 'Min')]:
+__device__ void atomic_${op}_fpdtype(fpdtype_t* addr, fpdtype_t val)
 {
 % if pyfr.npdtype_to_ctype(fpdtype) == 'float':
     if (!signbit(val))
-        atomicMin((int*) addr, __float_as_int(val));
+        atomic${op_pos}((int*) addr, __float_as_int(val));
     else
-        atomicMax((unsigned int*) addr, __float_as_uint(val));
+        atomic${op_neg}((unsigned int*) addr, __float_as_uint(val));
 % else:
     if (!signbit(val))
-        atomicMin((long long*) addr, __double_as_longlong(val));
+        atomic${op_pos}((long long*) addr, __double_as_longlong(val));
     else
-        atomicMax((unsigned long long*) addr, (unsigned long long) __double_as_longlong(val));
+        atomic${op_neg}((unsigned long long*) addr, (unsigned long long) __double_as_longlong(val));
 % endif
 }
+% endfor
+
+struct half {
+    unsigned short bits;
+    __device__ half() {}
+    __device__ half(fpdtype_t d) {
+        float f = (float) d;
+        unsigned short h;
+        asm("cvt.rn.f16.f32 %0, %1;" : "=h"(h) : "f"(f));
+        bits = h;
+    }
+    __device__ operator fpdtype_t() const {
+        float f;
+        asm("cvt.f32.f16 %0, %1;" : "=f"(f) : "h"(bits));
+        return (fpdtype_t) f;
+    }
+};
+
+struct bf16 {
+    unsigned short bits;
+    __device__ bf16() {}
+    __device__ bf16(fpdtype_t d) {
+        unsigned int u = __float_as_uint((float) d);
+        bits = (unsigned short) ((u + 0x7FFF + ((u >> 16) & 1)) >> 16);
+    }
+    __device__ operator fpdtype_t() const {
+        return (fpdtype_t) __uint_as_float((unsigned int) bits << 16);
+    }
+};
+
+__device__ static inline bf16 f32_to_bf16(float f) { return bf16(f); }
+__device__ static inline float bf16_to_f32(bf16 b) { return (float) b; }
+
+#define PYFR_THREAD_ID threadIdx.x
+#define PYFR_BLOCK_ID blockIdx.x
+#define PYFR_BLOCK_ID_Y blockIdx.y
+#define PYFR_SYNC_THREADS() __syncthreads()
+#define PYFR_SYNC_GMEM_THREADS() __syncthreads()
+#define PYFR_SHARED __shared__
+#define PYFR_GMEM
+#define PYFR_LMEM
+
+#define TILED_IX(e, r, c, block_sz, tile_sz) \
+    ((e) * (block_sz) * (block_sz) + \
+     ((r) / (tile_sz)) * ((block_sz) / (tile_sz)) * (tile_sz) * (tile_sz) + \
+     ((c) / (tile_sz)) * (tile_sz) * (tile_sz) + \
+     ((r) % (tile_sz)) * (tile_sz) + \
+     ((c) % (tile_sz)))
+
+__device__ void atomic_sum_fpdtype(fpdtype_t* addr, fpdtype_t val)
+{
+    atomicAdd(addr, val);
+}
+
+// Global thread position
+#define PYFR_GLOBAL_ID_X (ixdtype_t(blockIdx.x)*blockDim.x + threadIdx.x)
+#define PYFR_GLOBAL_ID_Y (blockIdx.y*blockDim.y + threadIdx.y)
+
+// Subgroup shuffle primitive
+#define PYFR_SHFL_XOR(v, o) __shfl_xor_sync(0xffffffff, v, o)
+
+<%def name="argmax_storage(ftype)">
+<% nsg = -(-nthreads // sgsize) %>
+    PYFR_SHARED ${ftype} argmaxv[${nsg}];
+    PYFR_SHARED short argmaxi[${nsg}];
+</%def>
+
+<%def name="argmax_reduce(ftype, val, idx, dst)">
+<% nsg = -(-nthreads // sgsize) %>
+    {
+        short amsg = PYFR_THREAD_ID / ${sgsize}, amsl = PYFR_THREAD_ID % ${sgsize};
+        ${ftype} amv = ${val}; int ami = ${idx};
+        for (int amo = ${sgsize} / 2; amo > 0; amo >>= 1) {
+            ${ftype} amov = PYFR_SHFL_XOR(amv, amo);
+            int amoi = PYFR_SHFL_XOR(ami, amo);
+            if (amov > amv || (amov == amv && amoi < ami)) { amv = amov; ami = amoi; }
+        }
+        if (amsl == 0) { argmaxv[amsg] = amv; argmaxi[amsg] = ami; }
+        PYFR_SYNC_THREADS();
+        amv = argmaxv[0]; ami = argmaxi[0];
+        for (int amw = 1; amw < ${nsg}; amw++)
+            if (argmaxv[amw] > amv || (argmaxv[amw] == amv && argmaxi[amw] < ami)) { amv = argmaxv[amw]; ami = argmaxi[amw]; }
+        if (PYFR_THREAD_ID == 0) ${dst} = ami;
+        PYFR_SYNC_THREADS();
+    }
+</%def>
+
+// FP-precise block support
+#define PYFR_FP_PRECISE_BEGIN
+
+<%def name="_kdecl(name, bounds)">\
+% if bounds:
+__global__ __launch_bounds__(${bounds}) void ${name}\
+% else:
+__global__ void ${name}\
+% endif
+</%def>
+<%def name="_karg(intent, t, n)">\
+% if intent == 'in':
+const ${t}* __restrict__ ${n}\
+% elif intent == 'out':
+${t}* __restrict__ ${n}\
+% else:
+${t} ${n}\
+% endif
+</%def>
 
 ${next.body()}

@@ -69,9 +69,6 @@ class OpenCLCLBlastKernels(OpenCLKernelProvider):
         try:
             dt = self._mul_timing[ckey]
         except KeyError:
-            # Save a copy of the contents of the output matrix
-            out_np = getattr(out, 'parent', out).get()
-
             def gemm(queue):
                 evt_ptr, q_ptr = c_void_p(), c_void_p(int(queue))
 
@@ -82,10 +79,8 @@ class OpenCLCLBlastKernels(OpenCLKernelProvider):
                 return cl.event(evt_ptr)
 
             # Benchmark the kernel and update the cache
-            self._mul_timing[ckey] = dt = self._benchmark(gemm)
-
-            # Restore the output matrix
-            getattr(out, 'parent', out).set(out_np)
+            with self._bench_data(save=[out], rand=[b]):
+                self._mul_timing[ckey] = dt = self._benchmark(gemm)
 
         class MulKernel(OpenCLKernel):
             def run(self, queue, wait_for=None, ret_evt=False):

@@ -1,5 +1,6 @@
 from ctypes import c_int, c_void_p
 from functools import cached_property
+import platform
 import re
 
 import numpy as np
@@ -34,14 +35,15 @@ class OpenMPBackend(BaseBackend):
         # C source compiler
         self.compiler = OpenMPCompiler(cfg)
 
-        from pyfr.backends.openmp import (blasext, packing, provider, types,
-                                          xsmm)
+        from pyfr.backends.openmp import (blasext, packing, linalg,
+                                          provider, types, xsmm)
 
         # Register our data types and meta kernels
         self.const_matrix_cls = types.OpenMPConstMatrix
         self.graph_cls = types.OpenMPGraph
         self.matrix_cls = types.OpenMPMatrix
         self.matrix_slice_cls = types.OpenMPMatrixSlice
+        self.tiled_matrix_cls = types.OpenMPTiledMatrix
         self.view_cls = types.OpenMPView
         self.xchg_matrix_cls = types.OpenMPXchgMatrix
         self.xchg_view_cls = types.OpenMPXchgView
@@ -51,12 +53,21 @@ class OpenMPBackend(BaseBackend):
         # Instantiate mandatory kernel provider classes
         kprovcls = [provider.OpenMPPointwiseKernelProvider,
                     blasext.OpenMPBlasExtKernels,
+                    linalg.OpenMPLinalgKernels,
                     packing.OpenMPPackingKernels,
                     xsmm.OpenMPXSMMKernels]
         self._providers = [k(self) for k in kprovcls]
 
         # Pointwise kernels
         self.pointwise = self._providers[0]
+
+        if cfg.getbool('backend', 'annotate', False):
+            raise ValueError('Annotation is not supported by the '
+                             'OpenMP backend')
+
+    @property
+    def platform_id(self):
+        return platform.processor() or 'cpu'
 
     def run_kernels(self, kernels, wait=False):
         for k in kernels:

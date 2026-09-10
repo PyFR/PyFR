@@ -2,6 +2,8 @@ from collections import defaultdict
 from ctypes import c_int
 from functools import cached_property
 
+import numpy as np
+
 import pyfr.backends.base as base
 from pyfr.backends.openmp.provider import (OpenMPBlockKernelArgs,
                                            OpenMPRegularRunArgs,
@@ -30,8 +32,8 @@ class OpenMPMatrixBase(base.MatrixBase):
         # Remove
         del self._initval
 
-    def _get(self):
-        return self._unpack(self.data)
+    def _get_impl(self, start, end):
+        return self.data.reshape(-1)[start:end]
 
     def _set(self, ary):
         self.data[:] = self._pack(ary)
@@ -59,9 +61,48 @@ class OpenMPXchgView(base.XchgView): pass
 class OpenMPView(base.View): pass
 
 
-class OpenMPGraph(base.Graph):
-    needs_pdeps = False
+class OpenMPTiledMatrix(base.TiledMatrix):
+    def __init__(self, backend, dtype, block_size, nmats, tile_shape, extent,
+                 tags):
+        self.backend = backend
+        self.tags = self._base_tags | tags
 
+        self.dtype = dtype
+        self.itemsize = np.dtype(dtype).itemsize
+
+        self.block_size = block_size
+        self.nmats = nmats
+
+        trows, tcols = tile_shape
+        if trows != tcols:
+            raise ValueError('OpenMP tiled matrices must be square')
+        self.trows = self.tcols = self.tsize = tcols
+        self.ntiles_r = self.ntiles_c = self.ntiles = -(-block_size // tcols)
+
+        self.soasz = backend.soasz
+        self.csubsz = backend.csubsz
+        self.nsoa = self.csubsz // self.soasz
+        self.nblocks = -(-nmats // self.csubsz)
+
+        self.padded_size = self.ntiles*self.tsize
+        self.block_words = self.padded_size*self.padded_size*self.csubsz
+        self.nbytes = self.nblocks*self.block_words*self.itemsize
+
+        backend.malloc(self, extent)
+
+    def onalloc(self, basedata, offset):
+        self.basedata = basedata.ctypes.data
+        self.offset = offset
+
+        self.data = basedata[offset:offset + self.nbytes]
+        self.data = self.data.view(self.dtype)
+        self.data = self.data.reshape(self.nblocks, self.ntiles, self.ntiles,
+                                      self.tsize, self.nsoa, self.tsize, -1)
+
+        self._as_parameter_ = self.data.ctypes.data
+
+
+class OpenMPGraph(base.Graph):
     def __init__(self, backend):
         super().__init__(backend)
 
@@ -81,8 +122,8 @@ class OpenMPGraph(base.Graph):
     def _get_nblocks(self, idxs):
         return max(self.klist[i].runargs.b.nblocks for i in idxs)
 
-    def add_mpi_req(self, req, deps=[]):
-        super().add_mpi_req(req, deps)
+    def _add_mpi_req(self, req, deps=[]):
+        super()._add_mpi_req(req, deps)
 
         rra = OpenMPRegularRunArgs(fun=mpi.funcs.Start, args=mpi.addrof(req))
         kra = OpenMPKRunArgs(ktype=OpenMPKRunArgs.KTYPE_REGULAR, r=rra)
@@ -122,22 +163,27 @@ class OpenMPGraph(base.Graph):
 
         for s in subs:
             for k, aname in s:
-                for j in kranges[k]:
-                    aidx = self.klist[j].arg_idx(aname)
-                    aoff = self.klist[j].arg_off(aidx)
-                    absz = self.klist[j].arg_blocksz(aidx)
-                    suboff = self.klist[j].subs_off(aidx)
+                for kl, j in zip(k.leaves, kranges[k], strict=True):
+                    # Per-block size and offset of the argument
+                    aidx, _, v = kl.args[aname]
+                    absz = v.blocksz*v.itemsize
+                    if isinstance(v, self.backend.matrix_slice_cls):
+                        suboff = v.ra*v.leaddim*v.itemsize
+                    else:
+                        suboff = 0
 
+                    aoff = self.klist[j].arg_off(aidx)
                     argsubs[j].append((aoff, allocsz + suboff))
                     argmasks[j] |= 1 << aidx
+
+                    # Mark the substituted argument as sealed
+                    kl.sealed.add(aidx)
 
             allocsz += absz
 
         return allocsz, argsubs, argmasks
 
-    def group(self, kerns, subs=[]):
-        super().group(kerns, subs)
-
+    def _group(self, kerns, subs):
         kranges = self._get_kranges()
 
         # Handle split kernels
@@ -189,9 +235,7 @@ class OpenMPGraph(base.Graph):
         for k in kerns:
             self.kskip.update(kranges[k])
 
-    def commit(self):
-        super().commit()
-
+    def _commit(self):
         rlist = []
 
         for i, k in enumerate(self.klist):
@@ -200,6 +244,10 @@ class OpenMPGraph(base.Graph):
 
             if i not in self.kskip:
                 rlist.append(k.runargs)
+
+        # Trailing inline actions (MPI starts after the last kernel)
+        if len(self.klist) in self.kins:
+            rlist.extend(self.kins[len(self.klist)])
 
         self._runlist = make_array(rlist)
 

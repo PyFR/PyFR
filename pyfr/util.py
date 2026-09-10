@@ -1,12 +1,25 @@
 from ctypes import c_void_p
+import functools as ft
+import gc
 import hashlib
 import itertools as it
 import os
 import pickle
 import re
 import shutil
+import sys
 
 from pyfr.ctypesutil import get_libc_function
+
+
+class tty:
+    _active = sys.stdout.isatty()
+    bold = '\033[1m' if _active else ''
+    rev = '\033[7m' if _active else ''
+    green = '\033[32m' if _active else ''
+    red = '\033[31m' if _active else ''
+    cyan = '\033[36m' if _active else ''
+    reset = '\033[0m' if _active else ''
 
 
 class silence:
@@ -63,6 +76,21 @@ class silence:
         os.close(self.saved_fds[1])
 
 
+def nogc(fn):
+    @ft.wraps(fn)
+    def newfn(*args, **kwargs):
+        enabled = gc.isenabled()
+        gc.disable()
+
+        try:
+            return fn(*args, **kwargs)
+        finally:
+            if enabled:
+                gc.enable()
+
+    return newfn
+
+
 def merge_intervals(ivals, tol=1e-5):
     ivals = sorted(ivals, reverse=True)
     mivals = [ivals.pop()]
@@ -82,8 +110,27 @@ def merge_intervals(ivals, tol=1e-5):
     return mivals
 
 
-def first(v):
-    return next(iter(v))
+class DisjointSet:
+    def __init__(self):
+        self._parent = {}
+
+    def find(self, i):
+        p = self._parent
+        while (pi := p.get(i)) is not None and pi != i:
+            p[i] = i = p.get(pi, pi)
+
+        return i
+
+    def union(self, i, j):
+        if (ri := self.find(i)) != (rj := self.find(j)):
+            self._parent[rj] = ri
+
+    def merges(self):
+        return {i: r for i in self._parent if (r := self.find(i)) != i}
+
+
+def first(v, *args):
+    return next(iter(v), *args)
 
 
 def subclasses(cls, just_leaf=False):
@@ -126,14 +173,27 @@ def digest(*args, hash='sha256'):
 
 
 def rm(path):
-    if os.path.isfile(path) or os.path.islink(path):
-        os.remove(path)
+    if path.is_file() or path.is_symlink():
+        path.unlink()
     else:
         shutil.rmtree(path)
 
 
 def mv(src, dst):
     shutil.move(src, dst)
+
+
+def pwrite_all(fd, off, buf):
+    # Obtain a byte-wise view of the buffer so partial writes can be resumed
+    view = memoryview(buf).cast('B')
+
+    ix = 0
+    while ix < len(view):
+        nb = os.pwrite(fd, view[ix:], off + ix)
+        if nb == 0:
+            raise OSError('Unable to write data')
+
+        ix += nb
 
 
 def match_paired_paren(delim, n=5):
@@ -147,14 +207,65 @@ def match_paired_paren(delim, n=5):
     return lft*n + mid + rgt*n
 
 
-def file_path_gen(basedir, basename, restore=False):
+def paren_depths(s, opens='([{', closes=')]}'):
+    depth = 0
+    for c in s:
+        depth += (c in opens) - (c in closes)
+        yield c, depth
+
+
+def strip_parens(s):
+    return ''.join(c for c, d in paren_depths(s, '({', '})')
+                   if d == 0 and c not in ')}')
+
+
+def expand_braces(spec):
+    # Expand brace enumerations
+    if not (m := re.search(r'\{([^{}]*)\}', spec)):
+        yield spec
+        return
+
+    parts = [p.strip() for p in m[1].split(',')]
+    if not all(parts) or len(set(parts)) != len(parts):
+        raise ValueError(f'Invalid brace enumeration: {spec}')
+
+    for part in parts:
+        yield from expand_braces(spec[:m.start()] + part + spec[m.end():])
+
+
+class CSVStream:
+    def __init__(self, fname, *, header=None, nflush=100, reset=False):
+        # Append the '.csv' extension
+        if not fname.endswith('.csv'):
+            fname += '.csv'
+
+        # Open file for appending
+        self.outf = open(fname, 'w' if reset else 'a')
+
+        # Output a header if required
+        if self.outf.tell() == 0 and header:
+            print(header, file=self.outf)
+
+        self.nprint = 0
+        self.nflush = nflush
+
+    def __call__(self, *args):
+        print(*args, sep=',', file=self.outf)
+
+        # Check if flush needed
+        self.nprint += 1
+        if self.nprint % self.nflush == 0:
+            self.outf.flush()
+
+
+def file_path_gen(basedir, basename, restore=False, extn=''):
     def g():
         ns = 0
 
         # See if the basename appears to depend on {n}
         if restore and re.search('{n[^}]*}', basename):
-            # Quote and substitute
-            bn = re.escape(basename)
+            # Quote and substitute; extn is added by the consumer at write
+            bn = re.escape(basename + extn)
             bn = re.sub(r'\\{n[^}]*\\}', r'(\\s*\\d+\\s*)', bn)
             bn = re.sub(r'\\{t[^}]*\\}', r'(?:.*?)', bn) + '$'
             for f in os.listdir(basedir):
@@ -164,7 +275,7 @@ def file_path_gen(basedir, basename, restore=False):
         t = yield
 
         for n in it.count(ns):
-            t = yield os.path.join(basedir, basename.format(t=t, n=n))
+            t = yield basedir / basename.format(t=t, n=n)
 
     gen = g()
     next(gen)

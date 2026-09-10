@@ -50,7 +50,10 @@ class OpenCLWrappers(LibWrapper):
     BUFFER_CREATE_TYPE_REGION = 0x1220
     DEVICE_AFFINITY_DOMAIN_NEXT_PARTITIONABLE = 0x20
     DEVICE_EXTENSIONS = 0x1030
+    DEVICE_GLOBAL_MEM_SIZE = 0x101f
     DEVICE_LOCAL_MEM_SIZE = 0x1023
+    DEVICE_MAX_COMPUTE_UNITS = 0x1002
+    DEVICE_MAX_WORK_GROUP_SIZE = 0x1004
     DEVICE_MEM_BASE_ADDR_ALIGN = 0x1019
     DEVICE_NAME = 0x102b
     DEVICE_VENDOR = 0x102c
@@ -60,7 +63,17 @@ class OpenCLWrappers(LibWrapper):
     DEVICE_TYPE_CPU = 0x2
     DEVICE_TYPE_GPU = 0x4
     DEVICE_UUID = 0x106a
+    DEVICE_REGISTERS_PER_BLOCK_NV = 0x4002
+    DEVICE_WARP_SIZE_NV = 0x4003
+    DEVICE_WAVEFRONT_WIDTH_AMD = 0x4043
+    DEVICE_SIMD_PER_COMPUTE_UNIT_AMD = 0x4040
+    DEVICE_NUM_EUS_PER_SUB_SLICE_INTEL = 0x4254
+    DEVICE_NUM_THREADS_PER_EU_INTEL = 0x4255
     DRIVER_VERSION = 0x102d
+    KERNEL_WORK_GROUP_SIZE = 0x11b0
+    KERNEL_LOCAL_MEM_SIZE = 0x11b2
+    KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE = 0x11b3
+    KERNEL_PRIVATE_MEM_SIZE = 0x11b4
     MAP_READ = 0x1
     MAP_WRITE = 0x2
     MEM_READ_WRITE = 0x1
@@ -135,6 +148,8 @@ class OpenCLWrappers(LibWrapper):
         (c_int, 'clGetProgramBuildInfo', c_void_p, c_void_p, c_uint, c_size_t,
          c_void_p, POINTER(c_size_t)),
         (c_void_p, 'clCreateKernel', c_void_p, c_char_p, POINTER(c_int)),
+        (c_int, 'clGetKernelWorkGroupInfo', c_void_p, c_void_p, c_uint,
+         c_size_t, c_void_p, POINTER(c_size_t)),
         (c_void_p, 'clCloneKernel', c_void_p, c_int),
         (c_int, 'clReleaseKernel', c_void_p),
         (c_int, 'clEnqueueNDRangeKernel', c_void_p, c_void_p, c_uint,
@@ -245,8 +260,12 @@ class OpenCLDevice(_OpenCLBase):
         self.name = self._query_str('name')
         self.vendor = self._query_str('vendor')
 
+        self.global_mem_size = self._query_type(c_ulong, 'global_mem_size')
         self.local_mem_size = self._query_type(c_ulong, 'local_mem_size')
         self.mem_align = self._query_type(c_uint, 'mem_base_addr_align') // 8
+        self.max_compute_units = self._query_type(c_uint, 'max_compute_units')
+        self.max_work_group_size = self._query_type(c_size_t,
+                                                    'max_work_group_size')
 
         self.driver_version = self._query_str('version', prefix='driver')
 
@@ -257,6 +276,20 @@ class OpenCLDevice(_OpenCLBase):
             self.uuid = UUID(bytes=self._query_type(c_char*16, 'uuid'))
         else:
             self.uuid = None
+
+    def threads_per_cu(self, sgw):
+        if 'cl_nv_device_attribute_query' in self.extensions:
+            return 64*self._query_type(c_uint, 'warp_size_nv')
+        elif 'cl_amd_device_attribute_query' in self.extensions:
+            wave = self._query_type(c_uint, 'wavefront_width_amd')
+            simd = self._query_type(c_uint, 'simd_per_compute_unit_amd')
+            return 10*wave*simd
+        elif 'cl_intel_device_attribute_query' in self.extensions:
+            eus = self._query_type(c_uint, 'num_eus_per_sub_slice_intel')
+            thr = self._query_type(c_uint, 'num_threads_per_eu_intel')
+            return eus*thr*sgw
+        else:
+            return self.max_work_group_size
 
     def subdevices(self):
         lib = self.lib
@@ -409,6 +442,7 @@ class OpenCLProgram(_OpenCLBase):
     _destroyfn = 'clReleaseProgram'
 
     def __init__(self, lib, ctx, dev, src, flags):
+        self.dev = dev
         devptr = c_void_p(dev._as_parameter_)
 
         match src:
@@ -444,7 +478,7 @@ class OpenCLProgram(_OpenCLBase):
 
     def get_kernel(self, name, argtypes):
         ptr = self.lib.clCreateKernel(self, name.encode())
-        return OpenCLKernel(self.lib, ptr, argtypes)
+        return OpenCLKernel(self.lib, ptr, argtypes, self.dev)
 
     def get_binary(self):
         nbytes = c_size_t()
@@ -465,17 +499,40 @@ class OpenCLKernel(_OpenCLWaitFor, _OpenCLBase):
     typemap = [c_double, c_float, c_int32, c_int64, c_uint64]
     typemap = {k: (k(), sizeof(k)) for k in typemap}
 
-    def __init__(self, lib, ptr, argtypes):
+    def __init__(self, lib, ptr, argtypes, dev):
         super().__init__(lib, ptr)
 
         self.argtypes = argtypes
+        self.dev = dev
 
         # For each argument type fetch the corresponding ctypes instance
         self._argsz = [self.typemap[atype] for atype in argtypes]
 
     def clone(self):
         ptr = self.lib.clCloneKernel(self)
-        return OpenCLKernel(self.lib, ptr, self.argtypes)
+        return OpenCLKernel(self.lib, ptr, self.argtypes, self.dev)
+
+    def resident_workgroups(self, nthreads):
+        d = self.dev
+
+        v = c_ulong()
+        self.lib.clGetKernelWorkGroupInfo(
+            self, d, self.lib.KERNEL_LOCAL_MEM_SIZE, sizeof(v), byref(v), None
+        )
+
+        if v.value > 0:
+            wg = max(1, d.local_mem_size // v.value)
+        else:
+            wg = 64
+
+        s = c_size_t()
+        self.lib.clGetKernelWorkGroupInfo(
+            self, d, self.lib.KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE,
+            sizeof(s), byref(s), None
+        )
+
+        wg = min(wg, max(1, d.threads_per_cu(s.value) // nthreads))
+        return max(1, wg*d.max_compute_units)
 
     def set_arg(self, i, v):
         arg, sz = self._argsz[i]
@@ -548,33 +605,65 @@ class OpenCL(_OpenCLWaitFor):
 
         return np.array(alloc, copy=False)
 
-    def zero(self, dst, off, nbytes):
-        z = c_char(0)
-        self.lib.clEnqueueFillBuffer(self.qdflt, dst, byref(z), 1, off,
-                                     nbytes, 0, None, None)
-        self.qdflt.finish()
+    def _get_zero_kernel(self):
+        try:
+            return self._zero_kernel
+        except AttributeError:
+            src = r'''
+            __kernel void zero_u32(__global uint *buf, ulong nbytes)
+            {
+                ulong gid = get_global_id(0), gsz = get_global_size(0);
+
+                for (ulong i = gid; i < nbytes / 4; i += gsz)
+                    buf[i] = 0;
+            }
+            '''
+
+            self._zero_kernel = kern = self.program(src).get_kernel(
+                'zero_u32', [c_uint64, c_uint64]
+            )
+            return kern
+
+    def zero(self, dst, nbytes, queue=None, wait_for=None, ret_evt=False):
+        ls = 256
+        gs = (min(1 << 20, max(ls, nbytes - nbytes % -ls)),)
+
+        kern = self._get_zero_kernel()
+        kern.set_dims(gs, (ls,))
+        kern.set_args(dst, nbytes)
+
+        queue = queue or self.qdflt
+        evt = kern.exec_async(queue, wait_for, ret_evt)
+        if queue is self.qdflt and not ret_evt:
+            queue.finish()
+        elif ret_evt:
+            return evt
 
     def memcpy(self, queue, dst, src, nbytes, blocking=False, wait_for=None,
-               ret_evt=False):
+               ret_evt=False, srcoff=0, dstoff=0):
         evt_ptr = c_void_p() if ret_evt else None
         wait_for = self._make_wait_for(wait_for)
+        nbytes, srcoff, dstoff = map(int, (nbytes, srcoff, dstoff))
+
+        if min(nbytes, srcoff, dstoff) < 0:
+            raise ValueError('Negative copy size/offset')
 
         # Device to host
         if isinstance(dst, (np.ndarray, np.generic)):
-            dst = dst.ctypes.data
+            dst = dst.ctypes.data + dstoff
 
-            self.lib.clEnqueueReadBuffer(queue, src, blocking, 0, nbytes,
+            self.lib.clEnqueueReadBuffer(queue, src, blocking, srcoff, nbytes,
                                          dst, *wait_for, evt_ptr)
         # Host to device
         elif isinstance(src, (np.ndarray, np.generic)):
-            src = src.ctypes.data
+            src = src.ctypes.data + srcoff
 
-            self.lib.clEnqueueWriteBuffer(queue, dst, blocking, 0, nbytes,
+            self.lib.clEnqueueWriteBuffer(queue, dst, blocking, dstoff, nbytes,
                                           src, *wait_for, evt_ptr)
         # Device to device
         else:
-            self.lib.clEnqueueCopyBuffer(queue, src, dst, 0, 0, nbytes,
-                                         *wait_for, evt_ptr)
+            self.lib.clEnqueueCopyBuffer(queue, src, dst, srcoff, dstoff,
+                                         nbytes, *wait_for, evt_ptr)
 
         if ret_evt:
             return OpenCLEvent(self.lib, evt_ptr)

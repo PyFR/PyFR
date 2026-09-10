@@ -1,3 +1,5 @@
+import numpy as np
+
 from pyfr.backends.base import (BaseKernelProvider, BaseOrderedMetaKernel,
                                 BasePointwiseKernelProvider,
                                 BaseUnorderedMetaKernel, Kernel)
@@ -37,7 +39,10 @@ class OpenCLUnorderedMetaKernel(BaseUnorderedMetaKernel):
 
 class OpenCLKernelProvider(BaseKernelProvider):
     def _benchmark(self, kfunc, nbench=4, nwarmup=1):
-        queue = self.backend.cl.queue(profiling=True)
+        try:
+            queue = self._bench_queue
+        except AttributeError:
+            self._bench_queue = queue = self.backend.cl.queue(profiling=True)
 
         for i in range(nbench + nwarmup):
             if i == nwarmup:
@@ -51,13 +56,30 @@ class OpenCLKernelProvider(BaseKernelProvider):
 
         return (end_evt.end_time - start_evt.start_time) / nbench
 
+    def _bench_save(self, m):
+        buf = np.empty(m.nbytes, dtype=np.uint8)
+        self.backend.cl.memcpy(self.backend.cl.qdflt, buf, m.data, m.nbytes,
+                               blocking=True)
+        return buf
+
+    def _bench_restore(self, m, buf):
+        self.backend.cl.memcpy(self.backend.cl.qdflt, m.data, buf, m.nbytes,
+                               blocking=True)
+
+    def _bench_fill_random(self, m):
+        blk = self._bench_rand_block(m.nbytes)
+        for off in range(0, m.nbytes, blk.nbytes):
+            self.backend.cl.memcpy(self.backend.cl.qdflt, m.data, blk,
+                                   min(blk.nbytes, m.nbytes - off),
+                                   blocking=True, dstoff=off)
+
     @memoize
     def _build_program(self, src):
         flags = ['-cl-fast-relaxed-math', '-cl-std=CL2.0']
 
         return self.backend.compiler.build(src, flags)
 
-    def _build_kernel(self, name, src, argtypes, argn=[]):
+    def _build_kernel(self, name, src, argtypes):
         argtypes = [npdtype_to_ctypestype(arg) for arg in argtypes]
 
         return self._build_program(src).get_kernel(name, argtypes)
@@ -78,9 +100,7 @@ class OpenCLPointwiseKernelProvider(OpenCLKernelProvider,
 
         self.kernel_generator_cls = KernelGenerator
 
-    def _instantiate_kernel(self, dims, fun, arglst, argm, argv):
-        rtargs = []
-
+    def _instantiate_kernel(self, dims, fun, args):
         # Determine the work group sizes
         if len(dims) == 1:
             ls = self._ls1d
@@ -91,21 +111,13 @@ class OpenCLPointwiseKernelProvider(OpenCLKernelProvider,
 
         fun.set_dims(gs, ls)
 
-        # Process the arguments
-        for i, k in enumerate(arglst):
-            if isinstance(k, str):
-                rtargs.append((i, k))
-            else:
-                fun.set_arg(i, k)
+        # Set the iteration dimensions
+        fun.set_args(*dims)
 
         class PointwiseKernel(OpenCLKernel):
-            if rtargs:
-                def bind(self, **kwargs):
-                    for i, k in rtargs:
-                        if k in kwargs:
-                            fun.set_arg(i, kwargs[k])
+            _set_arg = staticmethod(fun.set_arg)
 
             def run(self, queue, wait_for=None, ret_evt=False):
                 return fun.exec_async(queue, wait_for, ret_evt)
 
-        return PointwiseKernel(argm, argv)
+        return PointwiseKernel(args=args)

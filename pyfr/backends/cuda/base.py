@@ -1,5 +1,7 @@
 import re
 
+import numpy as np
+
 from pyfr.backends.base import BaseBackend
 from pyfr.mpiutil import get_local_rank
 
@@ -62,13 +64,14 @@ class CUDABackend(BaseBackend):
             raise ValueError('Invalid CUDA backend MPI type')
 
         from pyfr.backends.cuda import (blasext, cublaslt, gimmik, packing,
-                                        provider, types)
+                                        linalg, provider, types)
 
         # Register our data types and meta kernels
         self.const_matrix_cls = types.CUDAConstMatrix
         self.graph_cls = types.CUDAGraph
         self.matrix_cls = types.CUDAMatrix
         self.matrix_slice_cls = types.CUDAMatrixSlice
+        self.tiled_matrix_cls = types.CUDATiledMatrix
         self.view_cls = types.CUDAView
         self.xchg_matrix_cls = types.CUDAXchgMatrix
         self.xchg_view_cls = types.CUDAXchgView
@@ -80,7 +83,8 @@ class CUDABackend(BaseBackend):
                   blasext.CUDABlasExtKernels,
                   packing.CUDAPackingKernels,
                   gimmik.CUDAGiMMiKKernels,
-                  cublaslt.CUDACUBLASLtKernels]
+                  cublaslt.CUDACUBLASLtKernels,
+                  linalg.CUDALinalgKernels]
         self._providers = [k(self) for k in kprovs]
 
         # Pointwise kernels
@@ -88,6 +92,33 @@ class CUDABackend(BaseBackend):
 
         # Create a stream to run kernels on
         self._stream = self.cuda.create_stream()
+
+        if cfg.getbool('backend', 'annotate', False):
+            from pyfr.backends.cuda.nvtools import NVTXAnnotator
+            self._annotator = NVTXAnnotator()
+
+        # Bounce buffer for host-device transfers
+        self._xfer_buf = None
+
+    def xfer_buf(self, shape, dtype):
+        nbytes = np.prod(shape)*np.dtype(dtype).itemsize
+
+        # Reallocate if the current buffer is too small
+        if self._xfer_buf is None or self._xfer_buf.nbytes < nbytes:
+            self._xfer_buf = self.cuda.pagelocked_empty((nbytes,), np.uint8)
+
+        # Return a view of the correct shape and dtype
+        return self._xfer_buf[:nbytes].view(dtype).reshape(shape)
+
+    def optimal_tile_shape(self, block_size, dtype):
+        if block_size >= 256:
+            return (32, 64 // np.dtype(dtype).itemsize)
+        else:
+            return super().optimal_tile_shape(block_size, dtype)
+
+    @property
+    def platform_id(self):
+        return self.cuda.device_name()
 
     def run_kernels(self, kernels, wait=False):
         # Submit the kernels to the CUDA stream
@@ -105,6 +136,11 @@ class CUDABackend(BaseBackend):
 
     def wait(self):
         self._stream.synchronize()
+
+    def memory_info(self):
+        mi = super().memory_info()
+        free, total = self.cuda.mem_info()
+        return mi._replace(free=free, total=total)
 
     def _malloc_impl(self, nbytes):
         # Allocate

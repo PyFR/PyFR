@@ -6,17 +6,27 @@ import sys
 import time
 
 
-def format_bytes(n, dps=2):
-    labels = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB']
-
-    for l in labels:
-        if n < 1024 - 0.5*10**-dps:
+def _format_scaled(n, prefixes, suffix, scale, dps=2):
+    for p in prefixes:
+        if n < scale - 0.5*10**-dps:
             break
 
-        if l != labels[-1]:
-            n /= 1024
+        if p != prefixes[-1]:
+            n /= scale
 
-    return f'{n:.{dps}f} {l}' if l != 'B' else f'{n} B'
+    if isinstance(n, int) and n < scale:
+        return f'{n} {p}{suffix}'
+    else:
+        return f'{n:.{dps}f} {p}{suffix}'
+
+
+def format_bytes(n, dps=2):
+    return _format_scaled(n, ('', 'Ki', 'Mi', 'Gi', 'Ti', 'Pi'), 'B', 1024,
+                          dps)
+
+
+def format_dofs(n, dps=2):
+    return _format_scaled(n, ('', 'K', 'M', 'G', 'T'), 'DOF/s', 1000, dps)
 
 
 def format_hms(delta):
@@ -37,16 +47,23 @@ def format_s(delta):
 
 
 class ProgressBar:
-    _dispfmt = '{:7.1%} [{}{}>{}] {:.{dps}f}/{:.{dps}f} ela: {} rem: {}'
+    _blocks = ' ▏▎▍▌▋▊▉█'
+    _dispfmt = '{:6.1%} [{}] {:.{dps}f}/{:.{dps}f} ela: {} rem: {}'
+    _pctfmt = '{:6.1%} [{}] ela: {} rem: {}'
 
     # Minimum time in seconds between updates
     _mindelta = 0.1
 
-    def __init__(self, *, prefix='', suffix='\n', dps=2, fmt=format_hms):
+    def __init__(self, *, prefix='', suffix='\n', dps=2, counts=True,
+                 fmt=format_hms):
         self.prefix = prefix
         self.suffix = suffix
         self.dps = dps
+        self.counts = counts
         self.fmt = fmt
+
+        # Registered (fn, hold) pairs for the rotating info display
+        self._fields = []
 
         self._ncol = shutil.get_terminal_size().columns - len(prefix)
 
@@ -55,11 +72,18 @@ class ProgressBar:
         self.strtrt = curr or start
         self.stend = end
 
-        self._wstart = time.time()
-        self._last_len = 0
+        self._wstart = time.monotonic()
         self._last_wallt = 0.0
+        self.info = None
 
-        self._nbarcol = self._ncol - 24 - 2*len(f'{end:.{self.dps}f}')
+        # Seed the sim time so a render may occur before the first call
+        self.stcurr = self.strtrt
+        self.stelap = 0
+
+        if self.counts:
+            self._nbarcol = self._ncol - 24 - 2*len(f'{end:.{self.dps}f}')
+        else:
+            self._nbarcol = self._ncol - 22
 
         sys.stderr.write(self.prefix)
 
@@ -70,12 +94,13 @@ class ProgressBar:
             yield i
             self()
 
-    def __call__(self, t=None):
+    def __call__(self, t=None, info=None):
         if t is None:
             t = getattr(self, 'stcurr', 0) + 1
 
         self.stcurr = min(t, self.stend)
         self.stelap = self.stcurr - self.strtrt
+        self.info = info if info is not None else self._current_info()
 
         self._render()
 
@@ -84,7 +109,51 @@ class ProgressBar:
 
     @property
     def walltime(self):
-        return time.time() - self._wstart
+        return time.monotonic() - self._wstart
+
+    def add_status_field(self, fn, *, hold=10.0):
+        self._fields.append((fn, hold))
+
+    def _current_info(self):
+        active = [(s, hold) for fn, hold in self._fields
+                  if (s := fn()) is not None]
+
+        if active:
+            # Time-multiplex the active fields by their hold durations
+            pos = self.walltime % sum(hold for _, hold in active)
+            for s, hold in active:
+                if pos < hold:
+                    return s
+                else:
+                    pos -= hold
+        else:
+            return None
+
+    @contextlib.contextmanager
+    def task(self, name, total):
+        yield _BarTask(self, name, total)
+
+    def _bar(self, n, rfrac):
+        nfull = int(rfrac*n)
+
+        # When restarting overlay the starting time
+        if self.strtrt != self.ststrt:
+            bar = f'{self.strtrt:.{self.dps}f}'.ljust(n)[:n]
+        else:
+            bar = ' '*n
+
+        # Right-align optional info text in the bar
+        if self.info and len(self.info) + 2 <= n:
+            bar = bar[:n - len(self.info) - 2] + f' {self.info} '
+
+        head, tail = bar[:nfull], bar[nfull:]
+
+        # Partial block edge at fill boundary
+        if tail and tail[0] == ' ':
+            bidx = int(len(self._blocks)*(rfrac*n % 1))
+            tail = self._blocks[bidx] + tail[1:]
+
+        return f'\x1b[7m{head}\x1b[27m{tail}' if head else tail
 
     def _render(self):
         wallt = self.walltime
@@ -97,33 +166,56 @@ class ProgressBar:
         # Starting, current, elapsed, and ending simulation times
         st, cu, el, en = self.ststrt, self.stcurr, self.stelap, self.stend
 
-        # Relative times
-        rcu, ren = cu - st, en - st
-
         # Fraction of the simulation we've completed
-        frac = rcu / ren
+        frac = (cu - st) / (en - st)
 
         # Elapsed and estimated remaining wall time
         wela = self.fmt(wallt)
-        wrem = self.fmt(wallt*(en - cu)/el if self.stelap > 0 else None)
+        wrem = self.fmt(wallt*(en - cu)/el if el > 0 else None)
 
-        # Decide how many '+', '=' and ' ' to output for the progress bar
-        n = self._nbarcol - len(wela) - len(wrem) - 1
-        nps = int(n * (rcu - el)/ren)
-        neq = int(round(n * el/ren))
-        nsp = n - nps - neq
+        # Bar width in display columns
+        n = self._nbarcol - len(wela) - len(wrem)
+
+        # Current-run fraction (strtrt -> stend)
+        rr = en - self.strtrt
+        rfrac = min(el / rr, 1.0) if rr > 0 else 0
+
+        # Build the bar string
+        bar = self._bar(n, rfrac)
 
         # Render the progress bar
-        s = self._dispfmt.format(frac, '+'*nps, '='*neq, ' '*nsp, cu, en, wela,
-                                 wrem, dps=self.dps)
+        if self.counts:
+            s = self._dispfmt.format(frac, bar, cu, en, wela, wrem,
+                                     dps=self.dps)
+        else:
+            s = self._pctfmt.format(frac, bar, wela, wrem)
 
         # Erase any existing bar and write the new bar
-        sys.stderr.write(f'\x1b[{self._last_len}D\x1b[0K{s}')
+        sys.stderr.write(f'\x1b[2K\x1b[G{self.prefix}{s}')
         sys.stderr.flush()
 
-        # Update the last bar length and render time
-        self._last_len = len(s)
+        # Update the last render time
         self._last_wallt = wallt
+
+
+class _BarTask:
+    def __init__(self, bar, name, total):
+        self._bar = bar
+        self._name = name
+        self._total = total
+        self._width = len(str(total))
+        self._done = 0
+
+    def advance(self, n=1):
+        self._done += n
+        done = f'{self._done:>{self._width}}'
+        self._bar.info = f'{self._name} {done}/{self._total}'
+        self._bar._render()
+
+
+class _NullBarTask:
+    def advance(self, n=1):
+        pass
 
 
 class NullProgressBar(ProgressBar):
@@ -133,30 +225,37 @@ class NullProgressBar(ProgressBar):
     def start(self, end, *, start=0, curr=None):
         pass
 
-    def __call__(self, t=None):
+    def __call__(self, t=None, info=None):
         pass
+
+    def add_status_field(self, fn, *, hold=10.0):
+        pass
+
+    @contextlib.contextmanager
+    def task(self, name, total):
+        yield _NullBarTask()
 
 
 class ProgressSpinner:
     # Minimum time in seconds between updates
     _mindelta = 0.08
 
-    def __init__(self, n=8):
+    def __init__(self, n=8, prefix=''):
+        self._prefix = prefix
+
         # Spinner character sequence
         seq = [f'[{" "*i}●{" "*(n - i - 1)}]' for i in range(n)]
         self._schar_cycle = it.cycle(seq + seq[-2:0:-1])
 
         self._last_wallt = 0
-        self._last_nchar = 0
 
         self()
 
     def erase(self):
-        if self._last_nchar:
-            sys.stderr.write(f'\x1b[{self._last_nchar}D\x1b[0K')
+        sys.stderr.write('\x1b[2K\x1b[G')
 
     def __call__(self, v=None):
-        wallt = time.time()
+        wallt = time.monotonic()
 
         # If we have rendered recently then do not do so again
         if wallt - self._last_wallt < self._mindelta:
@@ -170,12 +269,11 @@ class ProgressSpinner:
             c = f'{c} {v}'
 
         self.erase()
-        sys.stderr.write(c)
+        sys.stderr.write(f'{self._prefix}{c}')
         sys.stderr.flush()
 
-        # Update the last render time and output character
+        # Update the last render time
         self._last_wallt = wallt
-        self._last_nchar = len(c)
 
     def wrap_file_lines(self, iter, n):
         nb = 0
@@ -205,10 +303,10 @@ class ProgressSequence:
         self._prefix = prefix
 
     def _start_phase(self, phase):
-        return f'{self._prefix} • {phase} ', time.time()
+        return f'{self._prefix} • {phase} ', time.monotonic()
 
     def _finish_phase(self, phase, prefix, tstart):
-        dt = time.time() - tstart
+        dt = time.monotonic() - tstart
         sys.stderr.write(f'\x1b[2K\x1b[G{prefix}({dt:.2f}s)\n')
 
     @contextlib.contextmanager
@@ -232,10 +330,11 @@ class ProgressSequence:
         yield ProgressSequence(prefix=self._prefix + '  ')
 
     @contextlib.contextmanager
-    def start_with_bar(self, phase):
+    def start_with_bar(self, phase, counts=True):
         prefix, tstart = self._start_phase(phase)
 
-        yield ProgressBar(prefix=prefix, suffix='', dps=0, fmt=format_s)
+        yield ProgressBar(prefix=prefix, suffix='', dps=0, counts=counts,
+                          fmt=format_s)
 
         self._finish_phase(phase, prefix, tstart)
 
@@ -243,9 +342,7 @@ class ProgressSequence:
     def start_with_spinner(self, phase):
         prefix, tstart = self._start_phase(phase)
 
-        sys.stderr.write(prefix)
-
-        yield ProgressSpinner()
+        yield ProgressSpinner(prefix=prefix)
 
         self._finish_phase(phase, prefix, tstart)
 
@@ -270,7 +367,7 @@ class NullProgressSequence(ProgressSequence):
         yield NullProgressSpinner()
 
     @contextlib.contextmanager
-    def start_with_bar(self, phase):
+    def start_with_bar(self, phase, counts=True):
         yield NullProgressBar()
 
 

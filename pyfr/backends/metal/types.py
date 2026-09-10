@@ -23,19 +23,12 @@ class MetalMatrixBase(base.MatrixBase):
         # Remove
         del self._initval
 
-    def _get(self):
-        # Ensure the host buffer is in sync with the device
-        cbuf = self.backend.queue.commandBuffer()
-        blit = cbuf.blitCommandEncoder()
-        blit.synchronizeResource_(self.basedata)
-        blit.endEncoding()
-        cbuf.commit()
-        cbuf.waitUntilCompleted()
+    def _get_impl(self, start, end):
+        # Ensure all GPU work has completed
+        self.backend.wait()
 
-        self.backend.last_cbuf = None
-
-        # Unpack
-        return self._unpack(self.hdata).copy()
+        # Return the requested range of the host mapping
+        return self.hdata[start:end]
 
     def _set(self, ary):
         # Wait for any outstanding work to finish
@@ -43,9 +36,6 @@ class MetalMatrixBase(base.MatrixBase):
 
         # Update the host buffer contents
         self.hdata[:] = self._pack(ary).flat
-
-        # Inform Metal about the update
-        self.basedata.didModifyRange_((self.offset, self.nbytes))
 
 
 class MetalMatrixSlice(base.MatrixSlice):
@@ -61,26 +51,28 @@ class MetalXchgView(base.XchgView): pass
 class MetalXchgMatrix(MetalMatrix, base.XchgMatrix): pass
 
 
-class MetalGraph(base.Graph):
-    needs_pdeps = False
+class MetalTiledMatrix(base.TiledMatrix):
+    def onalloc(self, basedata, offset):
+        self.basedata = basedata
+        self.offset = offset
+        self.data = (self.basedata, self.offset)
 
+
+class MetalGraph(base.Graph):
     def __init__(self, backend):
         super().__init__(backend)
 
         self.klist = []
         self.mpi_idxs = defaultdict(list)
 
-    def add_mpi_req(self, req, deps=[]):
-        super().add_mpi_req(req, deps)
+    def _add_mpi_req(self, req, deps=[]):
+        super()._add_mpi_req(req, deps)
 
         if deps:
             ix = max(self.knodes[d] for d in deps)
-
             self.mpi_idxs[ix].append(req)
 
-    def commit(self):
-        super().commit()
-
+    def _commit(self):
         # Group kernels in runs separated by MPI requests
         self._kerns, self._mreqs, i = [], [], 0
 
@@ -97,7 +89,7 @@ class MetalGraph(base.Graph):
 
         # Submit the kernels to the queue
         for kerns in self._kerns:
-            cbuf = queue.commandBuffer()
+            cbuf = self.backend.new_command_buffer()
             for k in kerns:
                 k.run(cbuf)
 

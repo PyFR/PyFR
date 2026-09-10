@@ -1,4 +1,5 @@
 from pyfr.partitioners.base import BasePartitioner, write_partitioning
+from pyfr.partitioners.baseline import BaselinePartitioner
 from pyfr.partitioners.kahip import KaHIPPartitioner
 from pyfr.partitioners.metis import METISPartitioner
 from pyfr.partitioners.reconstruct import reconstruct_partitioning

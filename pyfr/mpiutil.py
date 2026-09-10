@@ -1,22 +1,20 @@
 import atexit
+import contextlib
 import ctypes
 import math
 import os
 import sys
+import time
 import weakref
 
 import numpy as np
+
+from pyfr.cache import memoize
 
 
 def init_mpi():
     import mpi4py.rc
     from mpi4py import MPI
-
-    # Prefork to allow us to exec processes after MPI is initialised
-    if hasattr(os, 'fork'):
-        from pytools.prefork import enable_prefork
-
-        enable_prefork()
 
     # Manually initialise MPI with thread support
     MPI.Init_thread()
@@ -77,6 +75,10 @@ def get_comm_rank_root():
     return comm, comm.rank, 0
 
 
+def get_node_comm(comm):
+    return autofree(comm.Split_type(mpi.COMM_TYPE_SHARED))
+
+
 def get_local_rank():
     envs = [
         'MPI_LOCALRANKID',
@@ -91,7 +93,7 @@ def get_local_rank():
     else:
         from mpi4py import MPI
 
-        return autofree(MPI.COMM_WORLD.Split_type(MPI.COMM_TYPE_SHARED)).rank
+        return get_node_comm(MPI.COMM_WORLD).rank
 
 
 def scal_coll(colfn, v, *args, **kwargs):
@@ -99,6 +101,11 @@ def scal_coll(colfn, v, *args, **kwargs):
     v = np.array([v], dtype=dtype)
     colfn(mpi.IN_PLACE, v, *args, **kwargs)
     return dtype(v[0])
+
+
+def home_rank(gidxs, size):
+    h = np.uint64(2654435761)*np.asarray(gidxs).view(np.uint64)
+    return (h % size).astype(np.int32)
 
 
 def get_start_end_csize(comm, n):
@@ -111,32 +118,178 @@ def get_start_end_csize(comm, n):
     return min(rank*csize, n), min((rank + 1)*csize, n), csize
 
 
+def shared_ndarrays(comm, shape, dtype):
+    dtype = np.dtype(dtype)
+
+    # Gather the segment shapes
+    shapes = comm.allgather(shape)
+    sizes = [dtype.itemsize*math.prod(s) for s in shapes]
+
+    # Allocate our segment inside of a single shared window
+    win = mpi.Win.Allocate_shared(sizes[comm.rank], dtype.itemsize, comm=comm)
+    win = autofree(win)
+
+    # Wrap each ranks segment with an ndarray view
+    views = [np.frombuffer(win.Shared_query(i)[0], dtype=dtype).reshape(s)
+             for i, s in enumerate(shapes)]
+
+    return win, views
+
+
+class SharedWorkQueue:
+    def __init__(self, comm, n, bsize):
+        self.comm = comm
+        self.bsize = bsize
+
+        # Gather the number of items each rank on our node has
+        self.counts = comm.allgather(n)
+        self.nblocks = [-(-c // bsize) for c in self.counts]
+
+        # Give each rank an atomic block cursor in a shared window
+        self.win = win = mpi.Win.Allocate_shared(8, 8, comm=comm)
+        bufs = [win.Shared_query(i)[0] for i in range(comm.size)]
+        self.cursors = [np.frombuffer(b, dtype=np.int64) for b in bufs]
+        self.cursors[comm.rank][0] = 0
+
+        # Buffers for the atomic fetch-and-add operations
+        self._one = np.ones(1, dtype=np.int64)
+        self._res = np.empty(1, dtype=np.int64)
+
+        # Publish our zeroed cursor before any peer can claim from it
+        comm.barrier()
+
+        # Open a passive access epoch spanning the entire window
+        win.Lock_all()
+
+    def _claim_from(self, r):
+        # Atomically advance the block cursor of rank r
+        self.win.Fetch_and_op(self._one, self._res, r, 0, mpi.SUM)
+        self.win.Flush(r)
+
+        return int(self._res[0])
+
+    def claim(self):
+        rank = self.comm.rank
+
+        # Our own blocks are always claimed first, without any bookkeeping
+        if (b := self._claim_from(rank)) < self.nblocks[rank]:
+            lo = b*self.bsize
+
+            return rank, slice(lo, min(lo + self.bsize, self.counts[rank]))
+
+        # With our own queue drained, estimate what our peers have left
+        rem = [n - int(c[0]) for c, n in zip(self.cursors, self.nblocks)]
+
+        # Steal from the busiest peer first; cursors only ever increase
+        for r in np.argsort(rem)[::-1]:
+            if (b := self._claim_from(r)) < self.nblocks[r]:
+                lo = b*self.bsize
+
+                return int(r), slice(lo, min(lo + self.bsize, self.counts[r]))
+        else:
+            return None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info):
+        self.win.Unlock_all()
+
+        # Ensure all thieves are finished before freeing the window
+        self.comm.barrier()
+        self.win.Free()
+
+
+@contextlib.contextmanager
+def mpi_progress(comm, pbar, n):
+    pcomm = autofree(comm.Dup())
+
+    # Obtain the total number of items and start the progress bar
+    pbar.start(scal_coll(pcomm.Allreduce, n))
+
+    buf = np.zeros(1, dtype=int)
+
+    if pcomm.rank == 0:
+        ndone, npeer = 0, pcomm.size - 1
+
+        def poll():
+            nonlocal ndone, npeer
+
+            # Process any pending messages from peers
+            while pcomm.Iprobe():
+                pcomm.Recv(buf)
+                if buf[0] < 0:
+                    npeer -= 1
+                else:
+                    ndone += int(buf[0])
+
+        def tick(k):
+            nonlocal ndone
+
+            ndone += k
+            poll()
+            pbar(ndone)
+
+        yield tick
+
+        # Wait until all peers have finished
+        while npeer:
+            poll()
+            pbar(ndone)
+
+            if npeer:
+                time.sleep(0.05)
+    else:
+        def tick(k):
+            buf[0] = k
+            pcomm.Send(buf, dest=0)
+
+        yield tick
+
+        # Signal completion to the root rank
+        buf[0] = -1
+        pcomm.Send(buf, dest=0)
+
+
 class AlltoallMixin:
     @staticmethod
     def _count_to_disp(count):
-        return np.concatenate(([0], np.cumsum(count[:-1])))
+        disp = np.empty(len(count), dtype=count.dtype)
+        disp[0] = 0
+        np.cumsum(count[:-1], out=disp[1:])
+        return disp
 
     @staticmethod
     def _disp_to_count(disp, n):
-        return np.concatenate((disp[1:] - disp[:-1], [n - disp[-1]]))
+        return np.diff(disp, append=n)
+
+    @memoize
+    def _get_mpi_dtype(self, np_dtype, shape):
+        if np_dtype.names is None and not shape:
+            return None
+
+        from mpi4py.util.dtlib import from_numpy_dtype
+
+        dtype = np_dtype
+        if shape:
+            dtype = [('', dtype, shape)]
+
+        return autofree(from_numpy_dtype(dtype).Commit())
+
+    def _alltoallv_bufs(self, sbuf, rbuf):
+        svals = sbuf[0]
+        dtype = self._get_mpi_dtype(svals.dtype, svals.shape[1:])
+
+        if dtype is None:
+            return sbuf, rbuf
+        else:
+            return (*sbuf, dtype), (*rbuf, dtype)
 
     def _alltoallv(self, comm, sbuf, rbuf):
-        svals = sbuf[0]
+        return comm.Alltoallv(*self._alltoallv_bufs(sbuf, rbuf))
 
-        # If we are dealing with scalar data then call Alltoallv directly
-        if svals.dtype.names is None and svals.ndim == 1:
-            comm.Alltoallv(sbuf, rbuf)
-        # Else, we need to create a suitable derived datatype
-        else:
-            from mpi4py.util.dtlib import from_numpy_dtype
-
-            dtype = svals.dtype
-
-            if svals.ndim > 1:
-                dtype = [('', dtype, svals.shape[1:])]
-
-            dtype = autofree(from_numpy_dtype(dtype).Commit())
-            comm.Alltoallv((*sbuf, dtype), (*rbuf, dtype))
+    def _alltoallv_init(self, comm, sbuf, rbuf):
+        return comm.Alltoallv_init(*self._alltoallv_bufs(sbuf, rbuf))
 
     def _alltoallcv(self, comm, svals, scount, sdisps=None):
         # Exchange counts
@@ -153,6 +306,99 @@ class AlltoallMixin:
         self._alltoallv(comm, (svals, (scount, sdisps)), rbuf)
 
         return rbuf
+
+
+class DistributedDirectory(AlltoallMixin):
+    def __init__(self, comm, keys):
+        self.comm = comm
+
+        keys = np.asarray(keys, dtype=int)
+
+        # Send each key to its home rank
+        home = home_rank(keys, comm.size)
+        self.sidx = np.argsort(home)
+        scount = np.bincount(home, minlength=comm.size)
+        sdisps = self._count_to_disp(scount)
+        self.scountdisps = (scount, sdisps)
+
+        recv, self.rcountdisps = self._alltoallcv(comm, keys[self.sidx],
+                                                  scount, sdisps)
+
+        # Reconstruct source ranks from receive counts
+        rcount, _ = self.rcountdisps
+        ranks = np.repeat(np.arange(comm.size, dtype=np.int32), rcount)
+
+        # Sort received keys for searchsorted in lookup
+        self.ridx = np.argsort(recv, kind='stable')
+        self.keys = recv[self.ridx]
+        self.ranks = ranks[self.ridx]
+
+        self.ridx_inv = np.empty_like(self.ridx)
+        self.ridx_inv[self.ridx] = np.arange(len(self.ridx))
+
+    def scatter(self, values):
+        rv, _ = self._alltoallcv(self.comm, values[self.sidx],
+                                 *self.scountdisps)
+        return rv[self.ridx]
+
+    def gather(self, values):
+        rv, _ = self._alltoallcv(self.comm, values[self.ridx_inv],
+                                 *self.rcountdisps)
+
+        out = np.empty_like(rv)
+        out[self.sidx] = rv
+        return out
+
+    def lookup(self, keys):
+        comm = self.comm
+
+        keys = np.asarray(keys, dtype=int)
+
+        # Route query keys to their home ranks
+        home = home_rank(keys, comm.size)
+        sord = np.argsort(home)
+        scount = np.bincount(home, minlength=comm.size)
+
+        recv, (rcount, _) = self._alltoallcv(comm, keys[sord], scount)
+
+        # Look up owner ranks in the sorted table
+        ans = self.ranks[np.searchsorted(self.keys, recv)]
+
+        # Send answers back; rcount mirrors the forward counts
+        ret, _ = self._alltoallcv(comm, ans, rcount)
+
+        # Unshuffle from home-rank order back to caller order
+        result = np.empty_like(keys)
+        result[sord] = ret
+        return result
+
+
+class AlltoallFuture:
+    def __init__(self, parent, nsend, nrecv, shape, dtype, scountdisps,
+                 rcountdisps, rinv):
+        self._parent = parent
+        self._rinv = rinv
+
+        # Preallocate send and receive buffers
+        self._svals = np.empty((nsend, *shape), dtype=dtype)
+        self._rvals = np.empty((nrecv, *shape), dtype=dtype)
+
+        # Create persistent request
+        sbuf = (self._svals, scountdisps)
+        rbuf = (self._rvals, rcountdisps)
+        self._req = autofree(parent._alltoallv_init(parent.comm, sbuf, rbuf))
+
+    def start(self, dset):
+        self._parent._prepare_sendbuf(dset, self._svals)
+        self._req.Start()
+        return self
+
+    def test(self):
+        return self._req.Test()
+
+    def wait(self):
+        self._req.Wait()
+        return self._rvals[self._rinv]
 
 
 class BaseGathererScatterer(AlltoallMixin):
@@ -193,19 +439,16 @@ class Scatterer(BaseGathererScatterer):
         # Save the receive count
         self.cnt = len(ridx)
 
-    def __call__(self, dset, didxs=(...,)):
-        # Read the data
-        svals = dset[self.start:self.end, *didxs][self.sidx]
+    def _prepare_sendbuf(self, dset, out):
+        np.take(dset[self.start:self.end], self.sidx, axis=0, out=out,
+                mode='clip')
 
-        # Allocate space for receiving the data
-        rvals = np.empty((self.cnt, *svals.shape[1:]), dtype=svals.dtype)
+    def future(self, shape, dtype):
+        return AlltoallFuture(self, len(self.sidx), self.cnt, shape, dtype,
+                              self.bcountdisps, self.acountdisps, self.rinv)
 
-        # Perform the exchange
-        self._alltoallv(self.comm, (svals, self.bcountdisps),
-                        (rvals, self.acountdisps))
-
-        # Unpack the data
-        return rvals[self.rinv]
+    def __call__(self, dset):
+        return self.future(dset.shape[1:], dset.dtype).start(dset).wait()
 
 
 class Gatherer(BaseGathererScatterer):
@@ -232,19 +475,15 @@ class Gatherer(BaseGathererScatterer):
         self.off = scal_coll(comm.Exscan, cnt, op=mpi.SUM)
         self.off = self.off if comm.rank else 0
 
+    def _prepare_sendbuf(self, dset, out):
+        np.take(dset, self.sinv, axis=0, out=out, mode='clip')
+
+    def future(self, shape, dtype):
+        return AlltoallFuture(self, len(self.sinv), self.cnt, shape, dtype,
+                              self.acountdisps, self.bcountdisps, self.rinv)
+
     def __call__(self, dset):
-        # Sort the data we are going to be sending
-        svals = np.ascontiguousarray(dset[self.sinv])
-
-        # Allocate space for the data we will receive
-        rvals = np.empty((self.cnt, *dset.shape[1:]), dtype=dset.dtype)
-
-        # Perform the exchange
-        self._alltoallv(self.comm, (svals, self.acountdisps),
-                        (rvals, self.bcountdisps))
-
-        # Sort our received data
-        return rvals[self.rinv]
+        return self.future(dset.shape[1:], dset.dtype).start(dset).wait()
 
 
 class SparseScatterer(AlltoallMixin):
@@ -270,12 +509,11 @@ class SparseScatterer(AlltoallMixin):
         comm.Allgather(region, minmax)
 
         # Determine which rank, if any, has each of our desired indices
-        didx = np.split(bidx, np.searchsorted(bidx, minmax))[1::2]
-        dcount = np.array([len(s) for s in didx])
+        sp = np.searchsorted(bidx, minmax)
+        dcount = sp[1::2] - sp[::2]
 
         # Exchange indices
-        eidx, (ecount, edisps) = self._alltoallcv(comm, np.concatenate(didx),
-                                                  dcount)
+        eidx, (_, edisps) = self._alltoallcv(comm, bidx, dcount, sp[::2])
 
         # See which of these indices are present
         mask = np.isin(eidx, cidx, assume_unique=True)
@@ -294,18 +532,16 @@ class SparseScatterer(AlltoallMixin):
         self.ridx = ainv[np.searchsorted(bidx, ridx)]
         self.cnt = self.rcountdisps[0].sum()
 
-    def __call__(self, dset, didxs=(...,)):
-        # Read and appropriately reorder our send data
-        svals = dset[self.start:self.end, *didxs][self.sidx]
+    def _prepare_sendbuf(self, dset, out):
+        np.take(dset[self.start:self.end], self.sidx, axis=0, out=out,
+                mode='clip')
 
-        # Allocate space for receiving the data
-        rvals = np.empty((self.cnt, *svals.shape[1:]), dtype=svals.dtype)
+    def future(self, shape, dtype):
+        return AlltoallFuture(self, len(self.sidx), self.cnt, shape, dtype,
+                              self.scountdisps, self.rcountdisps, ...)
 
-        # Perform the exchange
-        self._alltoallv(self.comm, (svals, self.scountdisps),
-                        (rvals, self.rcountdisps))
-
-        return rvals
+    def __call__(self, dset):
+        return self.future(dset.shape[1:], dset.dtype).start(dset).wait()
 
 
 class Sorter(AlltoallMixin):
@@ -389,7 +625,7 @@ class Sorter(AlltoallMixin):
         q[self.comm.rank] = e
         self.comm.Allgather(mpi.IN_PLACE, q)
 
-        # Count the occurances of each probe in skeys
+        # Count the occurrences of each probe in skeys
         ubnd = np.searchsorted(skeys, q, side='right')
         lbnd = np.searchsorted(skeys, q, side='left')
         ld = ubnd - lbnd

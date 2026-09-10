@@ -1,4 +1,4 @@
-from pyfr.mpiutil import get_comm_rank_root, mpi
+from pyfr.mpiutil import get_comm_rank_root
 
 
 class Serialiser:
@@ -18,9 +18,9 @@ class Serialiser:
             sfn = lambda: comm.send(datafn(), root)
         else:
             sfn = datafn
-        
+
         if sfn:
             self._serialfns[prefix] = sfn
-    
+
     def serialise(self):
         return {k: sfn() for k, sfn in self._serialfns.items()}

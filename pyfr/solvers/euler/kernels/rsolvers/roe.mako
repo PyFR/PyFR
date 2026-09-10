@@ -49,7 +49,7 @@
     fpdtype_t v1 = (dp - roa*a*dv[0])*inv_a2;
     fpdtype_t v2 = dro - dp*2*inv_a2;
     fpdtype_t v3 = (dp + roa*a*dv[0])*inv_a2;
-    nf[0] = 0.5*(fl[0] + fr[0]) - (l1*v1 + l2*v2 + l3*v3);
+    nf[0] = 0.5*(fl[0] + fr[0] - (l1*v1 + l2*v2 + l3*v3));
 
     // Compute the momentum eigenvectors
 % for i in range(ndims):
@@ -62,7 +62,7 @@
     v2 = (dro - dp*2*inv_a2)*va[${i}] + roa*dv[${i}];
     v3 = (dp + roa*a*dv[0])*inv_a2*va[${i}];
 % endif
-    nf[${i + 1}] = 0.5*(fl[${i + 1}] + fr[${i + 1}]) - (l1*v1 + l2*v2 + l3*v3);
+    nf[${i + 1}] = 0.5*(fl[${i + 1}] + fr[${i + 1}] - (l1*v1 + l2*v2 + l3*v3));
 % endfor
 
     // Compute the energy eigenvectors
@@ -70,7 +70,7 @@
     v2 = roa*(${pyfr.dot('va[{i}]', 'dv[{i}]', i=ndims)} - va[0]*dv[0]) +
          (dro - dp*2*inv_a2)*qq*0.5;
     v3 = (dp + roa*a*dv[0])*inv_a2*(ha + a*va[0]);
-    nf[${nvars - 1}] = 0.5*(fl[${nvars - 1}] + fr[${nvars - 1}]) - (l1*v1 + l2*v2 + l3*v3);
+    nf[${nvars - 1}] = 0.5*(fl[${nvars - 1}] + fr[${nvars - 1}] - (l1*v1 + l2*v2 + l3*v3));
 </%pyfr:macro>
 
 <%include file='pyfr.solvers.euler.kernels.rsolvers.rsolve1d'/>

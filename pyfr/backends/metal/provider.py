@@ -1,4 +1,4 @@
-from ctypes import sizeof
+from ctypes import Array, sizeof
 
 import numpy as np
 
@@ -6,7 +6,6 @@ from pyfr.backends.base import (BaseKernelProvider, BaseOrderedMetaKernel,
                                 BasePointwiseKernelProvider,
                                 BaseUnorderedMetaKernel, Kernel)
 from pyfr.backends.metal.generator import MetalKernelGenerator
-from pyfr.backends.metal.util import call_
 from pyfr.cache import memoize
 from pyfr.nputil import npdtype_to_ctypestype
 
@@ -32,8 +31,8 @@ class MetalUnorderedMetaKernel(_MetalMetaKernel, BaseUnorderedMetaKernel): pass
 
 class MetalKernelProvider(BaseKernelProvider):
     def _benchmark(self, kfunc, nbench=40, nwarmup=25):
-        cbuf_warmup = self.backend.queue.commandBuffer()
-        cbuf_bench = self.backend.queue.commandBuffer()
+        cbuf_warmup = self.backend.new_command_buffer()
+        cbuf_bench = self.backend.new_command_buffer()
 
         for i in range(nwarmup):
             kfunc(cbuf_warmup)
@@ -47,43 +46,27 @@ class MetalKernelProvider(BaseKernelProvider):
 
         return (cbuf_bench.GPUEndTime() - cbuf_bench.GPUStartTime()) / nbench
 
+    def _bench_view(self, m):
+        buf = m.basedata.contents().as_buffer(m.offset + m.nbytes)
+        return np.frombuffer(buf, dtype=np.uint8, offset=m.offset)
+
+    def _bench_save(self, m):
+        return self._bench_view(m).copy()
+
+    def _bench_restore(self, m, buf):
+        self._bench_view(m)[:] = buf
+
+    def _bench_fill_random(self, m):
+        v, blk = self._bench_view(m), self._bench_rand_block(m.nbytes)
+        for off in range(0, m.nbytes, blk.nbytes):
+            v[off:off + blk.nbytes] = blk[:m.nbytes - off]
+
     @memoize
-    def _build_program(self, src):
-        from Metal import MTLCompileOptions
+    def _build_kernel(self, name, src, argtypes):
+        from Metal import MTLSizeMake
 
-        # Set the compiler options
-        opts = MTLCompileOptions.new()
-        opts.setFastMathEnabled_(True)
-
-        # Compile the kernel
-        lib, err = call_(self.backend.dev, 'newLibraryWith', source=src,
-                         options=opts, error=None)
-        if err is not None:
-            raise ValueError(f'Compiler error: {err}')
-
-        return lib
-
-    def _build_kernel(self, name, src, argtypes, argn=[]):
-        from Metal import MTLComputePipelineDescriptor, MTLSizeMake
-
-        # Build the program
-        lib = self._build_program(src)
-
-        # Fetch the function
-        func = call_(lib, 'newFunctionWith', name=name)
-        if func is None:
-            raise KeyError(f'Unable to load function {name}')
-
-        # Create the pipeline descriptor
-        desc = MTLComputePipelineDescriptor.alloc().init()
-        desc.setComputeFunction_(func)
-        desc.setThreadGroupSizeIsMultipleOfThreadExecutionWidth_(True)
-
-        # Obtain the corresponding compute pipeline
-        cpsf, err = call_(self.backend.dev, 'newComputePipelineStateWith',
-                          descriptor=desc, error=None)
-        if err is not None:
-            raise ValueError(f'Pipeline creation error: {err}')
+        # Build the pipeline using the compiler (with disk caching)
+        cpsf, func = self.backend.compiler.build_pipeline(src, name)
 
         # Classify the arguments as either pointers or scalars
         pargs, sargs = [], []
@@ -102,7 +85,10 @@ class MetalKernelProvider(BaseKernelProvider):
                 cce.setBuffer_offset_atIndex_(*args[i], i)
 
             for i, val, sz in sargs:
-                val.value = args[i]
+                if isinstance(val, Array):
+                    val[:] = args[i]
+                else:
+                    val.value = args[i]
                 cce.setBytes_length_atIndex_(val, sz, i)
 
             cce.dispatchThreads_threadsPerThreadgroup_(MTLSizeMake(*grid),
@@ -127,9 +113,7 @@ class MetalPointwiseKernelProvider(MetalKernelProvider,
 
         self.kernel_generator_cls = KernelGenerator
 
-    def _instantiate_kernel(self, dims, fun, arglst, argm, argv):
-        kargs, rtargs = [], []
-
+    def _instantiate_kernel(self, dims, fun, args):
         # Determine the thread group and grid sizes
         if len(dims) == 1:
             tgrp = self._tgrp1d
@@ -138,25 +122,28 @@ class MetalPointwiseKernelProvider(MetalKernelProvider,
             tgrp = self._tgrp2d
             grid = (dims[1] - dims[1] % -tgrp[0], tgrp[1], 1)
 
-        # Process the arguments
-        for i, k in enumerate(arglst):
-            if isinstance(k, str):
-                kargs.append(None)
-                rtargs.append((i, k))
-            elif isinstance(k, (int, float)):
-                kargs.append(k)
-            else:
-                k = getattr(k, 'data', k)
-                kargs.append(k if isinstance(k, tuple) else (k, 0))
+        # Argument setting with buffers as (buffer, offset) pairs
+        def set_arg(i, k):
+            match k:
+                case int() | float():
+                    kargs[i] = k
+                case object(data=tuple() as v):
+                    kargs[i] = v
+                case object(data=v) | v:
+                    kargs[i] = (v, 0)
+
+        # Total argument count for the dimensions and named arguments
+        nargs = len(dims) + sum(len(s[1]) for _, s, _ in args.values())
+
+        # Set the iteration dimensions
+        kargs = [None]*nargs
+        for i, d in enumerate(dims):
+            set_arg(i, int(d))
 
         class PointwiseKernel(MetalKernel):
-            if rtargs:
-                def bind(self, **kwargs):
-                    for i, k in rtargs:
-                        if k in kwargs:
-                            kargs[i] = kwargs[k]
+            _set_arg = staticmethod(set_arg)
 
             def run(self, cbuf):
                 fun(cbuf, grid, tgrp, *kargs)
 
-        return PointwiseKernel(argm, argv)
+        return PointwiseKernel(args=args)

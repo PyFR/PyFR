@@ -3,22 +3,9 @@ from pyfr.quadrules.surface import SurfaceIntegrator
 from pyfr.solvers.baseadvec import (BaseAdvectionIntInters,
                                     BaseAdvectionMPIInters,
                                     BaseAdvectionBCInters)
-from pyfr.writers.csv import CSVStream
+from pyfr.util import CSVStream, first
 
 import numpy as np
-
-
-class FluidIntIntersMixin:
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        if self._ef_enabled:
-            self._be.pointwise.register('pyfr.solvers.euler.kernels.intcent')
-
-            self.kernels['comm_entropy'] = lambda: self._be.kernel(
-                'intcent', tplargs={}, dims=[self.ninters],
-                entmin_lhs=self._entmin_lhs, entmin_rhs=self._entmin_rhs
-            )
 
 
 class TplargsMixin:
@@ -26,7 +13,7 @@ class TplargsMixin:
         super().__init__(*args, **kwargs)
 
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
-        if self.cfg.get('solver', 'shock-capturing') == 'entropy-filter':
+        if self.cfg.get('solver', 'shock-capturing', 'none') == 'entropy-filter':
             self.p_min = self.cfg.getfloat('solver-entropy-filter', 'p-min',
                                            1e-6)
         else:
@@ -37,21 +24,7 @@ class TplargsMixin:
                              rsolver=rsolver, c=self.c, p_min=self.p_min)
 
 
-class FluidMPIIntersMixin:
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        if self._ef_enabled:
-            self._be.pointwise.register('pyfr.solvers.euler.kernels.mpicent')
-
-            self.kernels['comm_entropy'] = lambda: self._be.kernel(
-                'mpicent', tplargs={}, dims=[self.ninters],
-                entmin_lhs=self._entmin_lhs, entmin_rhs=self._entmin_rhs
-            )
-
-
-class EulerIntInters(TplargsMixin, FluidIntIntersMixin,
-                     BaseAdvectionIntInters):
+class EulerIntInters(TplargsMixin, BaseAdvectionIntInters):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -59,12 +32,11 @@ class EulerIntInters(TplargsMixin, FluidIntIntersMixin,
 
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'intcflux', tplargs=self._tplargs, dims=[self.ninterfpts],
-            ul=self._scal_lhs, ur=self._scal_rhs, nl=self._pnorm_lhs
+            ul=self.scal_lhs, ur=self.scal_rhs, nl=self._pnorm_lhs
         )
 
 
-class EulerMPIInters(TplargsMixin, FluidMPIIntersMixin,
-                     BaseAdvectionMPIInters):
+class EulerMPIInters(TplargsMixin, BaseAdvectionMPIInters):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -72,7 +44,7 @@ class EulerMPIInters(TplargsMixin, FluidMPIIntersMixin,
 
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'mpicflux', self._tplargs, dims=[self.ninterfpts],
-            ul=self._scal_lhs, ur=self._scal_rhs, nl=self._pnorm_lhs
+            ul=self.scal_lhs, ur=self.scal_rhs, nl=self._pnorm_lhs
         )
 
 
@@ -86,18 +58,19 @@ class EulerBaseBCInters(TplargsMixin, BaseAdvectionBCInters):
 
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'bccflux', tplargs=self._tplargs, dims=[self.ninterfpts],
-            extrns=self._external_args, ul=self._scal_lhs, nl=self._pnorm_lhs,
+            extrns=self._external_args, ul=self.scal_lhs, nl=self._pnorm_lhs,
             **self._external_vals
         )
 
-        if self._ef_enabled:
-            self._be.pointwise.register('pyfr.solvers.euler.kernels.bccent')
+    def comm_entropy_kernel(self, entmin_lhs):
+        # Physics-specific callback for entropy filtering
+        self._be.pointwise.register('pyfr.solvers.euler.kernels.bccent')
 
-            self.kernels['comm_entropy'] = lambda: self._be.kernel(
-                'bccent', tplargs=self._tplargs, dims=[self.ninterfpts],
-                extrns=self._external_args, entmin_lhs=self._entmin_lhs,
-                nl=self._pnorm_lhs, ul=self._scal_lhs, **self._external_vals
-            )
+        return lambda: self._be.kernel(
+            'bccent', tplargs=self._tplargs, dims=[self.ninterfpts],
+            extrns=self._external_args, entmin_lhs=entmin_lhs,
+            nl=self._pnorm_lhs, ul=self.scal_lhs, **self._external_vals
+        )
 
 
 class EulerSupInflowBCInters(EulerBaseBCInters):
@@ -130,8 +103,16 @@ class EulerCharRiemInvBCInters(EulerBaseBCInters):
 class EulerSlpAdiaWallBCInters(EulerBaseBCInters):
     type = 'slp-adia-wall'
 
+    @staticmethod
+    def common_pri_state(pl, nl, c):
+        # Slip wall: remove the normal velocity component
+        vel = np.asarray(pl[1:-1])
+        un = np.linalg.vecdot(vel, nl, axis=0)
 
-class MassFlowBCMixin:
+        return [pl[0], *(vel - un*nl), pl[-1]]
+
+
+class ControlledBCMixin:
     def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
         super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
 
@@ -139,108 +120,202 @@ class MassFlowBCMixin:
             ['rho', 'u', 'v', 'w'][:self.ndims + 1], lhs
         )
 
+        self.con_to_pri = first(elemap.values()).con_to_pri
+
         self.tstart = cfg.getfloat(cfgsect, 'tstart', 0.0)
         self.nsteps = cfg.getint(cfgsect, 'nsteps', 100)
-        opts = self._eval_opts(['mass-flow-rate', 'alpha', 'eta'])
-        self.target_mfr, self.alpha, self.eta = opts
 
-        self._set_external('ic', 'scalar fpdtype_t')
-        self._set_external('im', 'scalar fpdtype_t')
+        opts = self._eval_opts(self._target_opts)
+        self.target, self.alpha, self.eta = opts
 
-        surf_list = [(etype, fidx, eidx) for etype, eidx, fidx in lhs]
-        self.mf_int = SurfaceIntegrator(cfg, cfgsect, elemap, surf_list)
+        self.set_external('ic', 'scalar fpdtype_t')
+        self.set_external('im', 'scalar fpdtype_t')
 
-        if cfg.hasopt(cfgsect, 'file') and bccomm.rank == 0:
+        self.surf_int = SurfaceIntegrator(cfg, cfgsect, elemap, lhs)
+
+        self._init_extra(cfg, cfgsect)
+
+        # Read any CSV options on every rank to keep the config in sync
+        if cfg.hasopt(cfgsect, 'file'):
             fname = cfg.get(cfgsect, 'file')
             nflush = cfg.getint(cfgsect, 'flushsteps', 10)
-            self.csv = CSVStream(fname, header='t,mf,pbc', nflush=nflush)
+
+            if bccomm.rank == 0:
+                self.csv = CSVStream(fname, header=self._csv_header,
+                                     nflush=nflush)
+            else:
+                self.csv = None
         else:
             self.csv = None
 
-    def setup(self, sdata):
-        if sdata is not None and sdata[4] != 0:
-            (self.interp_c, self.interp_m, 
-            self.mf_avg, self.tprev, self.nstep_counter) = sdata
-        else:
-            self.interp_c = self._eval_opts(['p'])[0]
-            self.interp_m = 0.0
-            self.mf_avg = 0.0
-            self.tprev = None
-            self.nstep_counter = 0
+    def _init_extra(self, cfg, cfgsect):
+        pass
 
-    def calculate_mass_flow(self, solns):
-        mf = 0.0
-
-        for etype, fidx in self.mf_int.m0:
-            # Get the interpolation operator
-            m0 = self.mf_int.m0[etype, fidx]
+    def _interp_face(self, solns):
+        for etype, fidx in self.surf_int.m0:
+            m0 = self.surf_int.m0[etype, fidx]
             nfpts, nupts = m0.shape
 
-            # Extract the relevant elements and variables from the solution
-            uupts = solns[etype][:, 1:-1, self.mf_int.eidxs[etype, fidx]]
+            eidxs = self.surf_int.eidxs[etype, fidx]
+            uupts = solns[etype][:, :, eidxs]
 
-            # Interpolate to the face
             ufpts = m0 @ uupts.reshape(nupts, -1)
-            ufpts = ufpts.reshape(nfpts, self.ndims, -1)
+            ufpts = ufpts.reshape(nfpts, self.nvars, -1).swapaxes(0, 1)
 
-            # Get the quadrature weights and normal vectors
-            qwts = self.mf_int.qwts[etype, fidx]
-            norms = self.mf_int.norms[etype, fidx]
+            qwts = self.surf_int.qwts[etype, fidx]
+            norms = self.surf_int.norms[etype, fidx]
 
-            # Do the quadrature
-            mf += np.einsum('i,ihj,jih', qwts, ufpts, norms)
+            yield ufpts, qwts, norms
 
-        return scal_coll(self.bccomm.Allreduce, mf, op=mpi.SUM)
+    def setup(self, sdata, prevcfg):
+        agree = (prevcfg is not None and
+                 self.cfg.sect_agree(prevcfg, self.cfgsect))
+
+        # Ensure all ranks on the boundary reach the same verdict
+        agree = self.bccomm.allreduce(agree, op=mpi.LAND)
+
+        if sdata is not None and sdata[4] != 0 and agree:
+            self.interp_c = sdata[0]
+            self.interp_m = sdata[1]
+            self.meas_avg = sdata[2]
+            self.tprev = sdata[3]
+            self.nupdates = sdata[4]
+        else:
+            self.interp_c = self._default_interp_c()
+            self.interp_m = 0.0
+            self.meas_avg = 0.0
+            self.tprev = None
+            self.nupdates = 0
 
     @classmethod
-    def preparefn(cls, bciface, mesh, elemap):
+    def hookfns(cls, bciface, mesh, elemap):
         if bciface:
-            return bciface.prepare
+            return bciface.bind, bciface.advance
         else:
-            return None
+            return None, None
 
-    def prepare(self, system, ubank, t, kerns):
-        update = self.nstep_counter % self.nsteps == 0
-        if (update or not self.tprev) and t >= self.tstart:
-            solns = dict(zip(system.ele_types, system.ele_scal_upts(ubank)))
-            mf = self.calculate_mass_flow(solns)
-
-            if not self.tprev:
-                self.mf_avg = mf
-                self.tprev = t
-            else:
-                self.mf_avg = self.alpha * mf + (1 - self.alpha) * self.mf_avg
-                dt = (t - self.tprev)
-                self.tprev = t
-
-                # Current p
-                p0 = self.interp_m * t + self.interp_c
-
-                # Next target p
-                p1 = p0 + dt * self.eta * (1 - self.target_mfr / self.mf_avg)
-
-                # Update interpolation
-                self.interp_m = (p1 - p0) / dt
-                self.interp_c = p0 - self.interp_m * t
-
-                # Output mass flow and pressure at BC
-                if self.csv:
-                    self.csv(t, self.mf_avg, p1)
-
+    def bind(self, system, ubank, t, kerns):
         # Bind interpolation to kernels
         for k in kerns.values():
             k.bind(ic=self.interp_c, im=self.interp_m)
 
-        self.nstep_counter += 1
+    def advance(self, intg):
+        t = intg.tcurr
+
+        # Guard against repeat invocations at a given time
+        repeat = self.tprev is not None and t <= self.tprev
+
+        if t < self.tstart or intg.nacptsteps % self.nsteps or repeat:
+            return
+
+        solns = dict(zip(intg.system.ele_types, intg.soln))
+
+        if self.tprev is None:
+            self.meas_avg = self._measure(solns)
+        else:
+            meas = self._measure(solns)
+
+            a = self.alpha
+            self.meas_avg = a*meas + (1 - a)*self.meas_avg
+            dt = t - self.tprev
+
+            # Current Riemann invariant pressure
+            p0 = self.interp_m*t + self.interp_c
+
+            # Compute corrected Riemann pressure
+            p1 = self._correction(p0, dt)
+
+            # Update interpolation coefficients
+            self.interp_m = (p1 - p0) / dt
+            self.interp_c = p0 - self.interp_m*t
+
+            # Log to CSV
+            if self.csv:
+                self.csv(t, self.meas_avg, p1)
+
+        self.tprev = t
+        self.nupdates += 1
 
     @classmethod
     def serialisefn(cls, bciface, prefix, srl):
-        sfn = lambda: np.void((bciface.interp_c, bciface.interp_m,
-                               bciface.mf_avg, bciface.tprev or 0,
-                               bciface.nstep_counter),
-                              dtype='f8,f8,f8,f8,i8')
+        sfn = lambda: np.void(
+            (bciface.interp_c, bciface.interp_m, bciface.meas_avg,
+             bciface.tprev if bciface.tprev is not None else 0,
+             bciface.nupdates),
+            dtype='f8,f8,f8,f8,i8'
+        )
         srl.register(prefix, sfn if bciface else None)
+
+
+class MassFlowBCMixin(ControlledBCMixin):
+    _target_opts = ['mass-flow-rate', 'alpha', 'eta']
+    _csv_header = 't,mf,pbc'
+
+    def _init_extra(self, cfg, cfgsect):
+        self._qwts_norms = []
+
+        for etype, fidx in self.surf_int.m0:
+            qwts = self.surf_int.qwts[etype, fidx]
+            norms = self.surf_int.norms[etype, fidx]
+            self._qwts_norms.append(norms*qwts[:, None])
+
+    def _default_interp_c(self):
+        return self._eval_opts(['init-pressure'])[0]
+
+    def _measure(self, solns):
+        mf = 0.0
+
+        for (u, *_), qn in zip(self._interp_face(solns), self._qwts_norms):
+            mf += np.einsum('hij,hij', u[1:-1], qn)
+
+        return scal_coll(self.bccomm.Allreduce, mf, op=mpi.SUM)
+
+    def _correction(self, p0, dt):
+        return p0 + dt*self.eta*(1 - self.target / self.meas_avg)
 
 
 class EulerCharRiemInvMassFlowBCInters(MassFlowBCMixin, EulerBaseBCInters):
     type = 'char-riem-inv-mass-flow'
+
+
+class PressureBCMixin(ControlledBCMixin):
+    _target_opts = ['pressure', 'alpha', 'eta']
+    _csv_header = 't,p,pbc'
+
+    def _init_extra(self, cfg, cfgsect):
+        area = 0.0
+        self._qwts_nmag = []
+
+        all_qwts = self.surf_int.qwts.values()
+        all_norms = self.surf_int.norms.values()
+        for qwts, norms in zip(all_qwts, all_norms):
+            nmag = np.sqrt(np.einsum('hij,hij->ij', norms, norms))
+            qwts_nmag = nmag*qwts[:, None]
+            self._qwts_nmag.append(qwts_nmag)
+            area += qwts_nmag.sum()
+
+        self.area = scal_coll(self.bccomm.Allreduce, area, op=mpi.SUM)
+
+    def _default_interp_c(self):
+        if self.cfg.hasopt(self.cfgsect, 'init-pressure'):
+            return self._eval_opts(['init-pressure'])[0]
+        else:
+            return self.target
+
+    def _measure(self, solns):
+        p_num = 0.0
+
+        for (u, *_), qnmag in zip(self._interp_face(solns), self._qwts_nmag):
+            p = self.con_to_pri(u, self.cfg)[-1]
+            p_num += np.einsum('ij,ij', p, qnmag)
+
+        p_num = scal_coll(self.bccomm.Allreduce, p_num, op=mpi.SUM)
+
+        return p_num / self.area
+
+    def _correction(self, p0, dt):
+        return p0 + dt*self.eta*(self.target - self.meas_avg)
+
+
+class EulerCharRiemInvPressureBCInters(PressureBCMixin, EulerBaseBCInters):
+    type = 'char-riem-inv-pressure'

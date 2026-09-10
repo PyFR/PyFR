@@ -97,16 +97,16 @@ class LinePolyBasis(BasePolyBasis):
     name = 'line'
 
     def _ortho_basis_at(self, p):
-        jp = jacobi(self.order - 1, 0, 0, p)
+        jp = jacobi(self.order, 0, 0, p)
         return [(i + 0.5)**0.5*p for i, p in enumerate(jp)]
 
     def _jac_ortho_basis_at(self, p):
-        djp = jacobi_diff(self.order - 1, 0, 0, p)
+        djp = jacobi_diff(self.order, 0, 0, p)
         return [((i + 0.5)**0.5*p,) for i, p in enumerate(djp)]
 
     @cached_property
     def degrees(self):
-        return [(i,) for i in range(self.order)]
+        return [(i,) for i in range(self.order + 1)]
 
 
 class TriPolyBasis(BasePolyBasis):
@@ -118,10 +118,10 @@ class TriPolyBasis(BasePolyBasis):
             b = q
 
         ob = []
-        for i, pi in enumerate(jacobi(self.order - 1, 0, 0, a)):
+        for i, pi in enumerate(jacobi(self.order, 0, 0, a)):
             pa = pi*(1 - b)**i
 
-            for j, pj in enumerate(jacobi(self.order - i - 1, 2*i + 1, 0, b)):
+            for j, pj in enumerate(jacobi(self.order - i, 2*i + 1, 0, b)):
                 cij = ((2*i + 1)*(2*i + 2*j + 2))**0.5 / 2**(i + 1)
 
                 ob.append(cij*pa*pj)
@@ -133,13 +133,13 @@ class TriPolyBasis(BasePolyBasis):
             a = np.where(q != 1, 2*(1 + p)/(1 - q) - 1, -1)
             b = q
 
-        f = jacobi(self.order - 1, 0, 0, a)
-        df = jacobi_diff(self.order - 1, 0, 0, a)
+        f = jacobi(self.order, 0, 0, a)
+        df = jacobi_diff(self.order, 0, 0, a)
 
         ob = []
         for i, (fi, dfi) in enumerate(zip(f, df)):
-            g = jacobi(self.order - i - 1, 2*i + 1, 0, b)
-            dg = jacobi_diff(self.order - i - 1, 2*i + 1, 0, b)
+            g = jacobi(self.order - i, 2*i + 1, 0, b)
+            dg = jacobi_diff(self.order - i, 2*i + 1, 0, b)
 
             for j, (gj, dgj) in enumerate(zip(g, dg)):
                 cij = ((2*i + 1)*(2*i + 2*j + 2))**0.5 / 2**(i + 1)
@@ -156,27 +156,27 @@ class TriPolyBasis(BasePolyBasis):
     @cached_property
     def degrees(self):
         return [(i, j)
-                for i in range(self.order)
-                for j in range(self.order - i)]
+                for i in range(self.order + 1)
+                for j in range(self.order - i + 1)]
 
 
 class QuadPolyBasis(BasePolyBasis):
     name = 'quad'
 
     def _ortho_basis_at(self, p, q):
-        sk = [(k + 0.5)**0.5 for k in range(self.order)]
-        pa = [c*jp for c, jp in zip(sk, jacobi(self.order - 1, 0, 0, p))]
-        pb = [c*jp for c, jp in zip(sk, jacobi(self.order - 1, 0, 0, q))]
+        sk = [(k + 0.5)**0.5 for k in range(self.order + 1)]
+        pa = [c*jp for c, jp in zip(sk, jacobi(self.order, 0, 0, p))]
+        pb = [c*jp for c, jp in zip(sk, jacobi(self.order, 0, 0, q))]
 
         return [pi*pj for pi in pa for pj in pb]
 
     def _jac_ortho_basis_at(self, p, q):
-        sk = [(k + 0.5)**0.5 for k in range(self.order)]
-        pa = [c*jp for c, jp in zip(sk, jacobi(self.order - 1, 0, 0, p))]
-        pb = [c*jp for c, jp in zip(sk, jacobi(self.order - 1, 0, 0, q))]
+        sk = [(k + 0.5)**0.5 for k in range(self.order + 1)]
+        pa = [c*jp for c, jp in zip(sk, jacobi(self.order, 0, 0, p))]
+        pb = [c*jp for c, jp in zip(sk, jacobi(self.order, 0, 0, q))]
 
-        dpa = [c*jp for c, jp in zip(sk, jacobi_diff(self.order - 1, 0, 0, p))]
-        dpb = [c*jp for c, jp in zip(sk, jacobi_diff(self.order - 1, 0, 0, q))]
+        dpa = [c*jp for c, jp in zip(sk, jacobi_diff(self.order, 0, 0, p))]
+        dpb = [c*jp for c, jp in zip(sk, jacobi_diff(self.order, 0, 0, q))]
 
         return [[dpi*pj, pi*dpj]
                 for pi, dpi in zip(pa, dpa)
@@ -184,7 +184,9 @@ class QuadPolyBasis(BasePolyBasis):
 
     @cached_property
     def degrees(self):
-        return [(i, j) for i in range(self.order) for j in range(self.order)]
+        return [(i, j)
+                for i in range(self.order + 1)
+                for j in range(self.order + 1)]
 
 
 class TetPolyBasis(BasePolyBasis):
@@ -197,15 +199,15 @@ class TetPolyBasis(BasePolyBasis):
             c = r
 
         ob = []
-        for i, pi in enumerate(jacobi(self.order - 1, 0, 0, a)):
+        for i, pi in enumerate(jacobi(self.order, 0, 0, a)):
             ci = 2**(-2*i - 1)*(2*i + 1)**0.5*(1 - b)**i
 
-            for j, pj in enumerate(jacobi(self.order - i - 1, 2*i + 1, 0, b)):
+            for j, pj in enumerate(jacobi(self.order - i, 2*i + 1, 0, b)):
                 cj = (i + j + 1)**0.5*2**-j*(1 - c)**(i + j)
                 cij = ci*cj
                 pij = pi*pj
 
-                jp = jacobi(self.order - i - j - 1, 2*(i + j + 1), 0, c)
+                jp = jacobi(self.order - i - j, 2*(i + j + 1), 0, c)
                 for k, pk in enumerate(jp):
                     ck = (2*(k + j + i) + 3)**0.5
 
@@ -219,20 +221,20 @@ class TetPolyBasis(BasePolyBasis):
             b = np.where(r != 1, 2*(1 + q)/(1 - r) - 1, -1)
             c = r
 
-        f = jacobi(self.order - 1, 0, 0, a)
-        df = jacobi_diff(self.order - 1, 0, 0, a)
+        f = jacobi(self.order, 0, 0, a)
+        df = jacobi_diff(self.order, 0, 0, a)
 
         ob = []
         for i, (fi, dfi) in enumerate(zip(f, df)):
             ci = 2**(-2*i - 1)*(2*i + 1)**0.5
-            g = jacobi(self.order - i - 1, 2*i + 1, 0, b)
-            dg = jacobi_diff(self.order - i - 1, 2*i + 1, 0, b)
+            g = jacobi(self.order - i, 2*i + 1, 0, b)
+            dg = jacobi_diff(self.order - i, 2*i + 1, 0, b)
 
             for j, (gj, dgj) in enumerate(zip(g, dg)):
                 cj = (i + j + 1)**0.5*2**-j
                 cij = ci*cj
-                h = jacobi(self.order - i - j - 1, 2*(i + j + 1), 0, c)
-                dh = jacobi_diff(self.order - i - j - 1, 2*(i + j + 1), 0, c)
+                h = jacobi(self.order - i - j, 2*(i + j + 1), 0, c)
+                dh = jacobi_diff(self.order - i - j, 2*(i + j + 1), 0, c)
 
                 for k, (hk, dhk) in enumerate(zip(h, dh)):
                     ck = (2*(k + j + i) + 3)**0.5
@@ -259,9 +261,9 @@ class TetPolyBasis(BasePolyBasis):
     @cached_property
     def degrees(self):
         return [(i, j, k)
-                for i in range(self.order)
-                for j in range(self.order - i)
-                for k in range(self.order - i - j)]
+                for i in range(self.order + 1)
+                for j in range(self.order - i + 1)
+                for k in range(self.order - i - j + 1)]
 
 
 class PriPolyBasis(BasePolyBasis):
@@ -274,16 +276,16 @@ class PriPolyBasis(BasePolyBasis):
             c = r
 
         pab = []
-        for i, pi in enumerate(jacobi(self.order - 1, 0, 0, a)):
+        for i, pi in enumerate(jacobi(self.order, 0, 0, a)):
             ci = (1 - b)**i / 2**(i + 1)
 
-            for j, pj in enumerate(jacobi(self.order - i - 1, 2*i + 1, 0, b)):
+            for j, pj in enumerate(jacobi(self.order - i, 2*i + 1, 0, b)):
                 cij = ((2*i + 1)*(2*i + 2*j + 2))**0.5*ci
 
                 pab.append(cij*pi*pj)
 
-        sk = [(k + 0.5)**0.5 for k in range(self.order)]
-        pc = [s*jp for s, jp in zip(sk, jacobi(self.order - 1, 0, 0, c))]
+        sk = [(k + 0.5)**0.5 for k in range(self.order + 1)]
+        pc = [s*jp for s, jp in zip(sk, jacobi(self.order, 0, 0, c))]
 
         return [pij*pk for pij in pab for pk in pc]
 
@@ -293,13 +295,13 @@ class PriPolyBasis(BasePolyBasis):
             b = q
             c = r
 
-        f = jacobi(self.order - 1, 0, 0, a)
-        df = jacobi_diff(self.order - 1, 0, 0, a)
+        f = jacobi(self.order, 0, 0, a)
+        df = jacobi_diff(self.order, 0, 0, a)
 
         pab = []
         for i, (fi, dfi) in enumerate(zip(f, df)):
-            g = jacobi(self.order - i - 1, 2*i + 1, 0, b)
-            dg = jacobi_diff(self.order - i - 1, 2*i + 1, 0, b)
+            g = jacobi(self.order - i, 2*i + 1, 0, b)
+            dg = jacobi_diff(self.order - i, 2*i + 1, 0, b)
 
             for j, (gj, dgj) in enumerate(zip(g, dg)):
                 cij = ((2*i + 1)*(2*i + 2*j + 2))**0.5 / 2**(i + 1)
@@ -312,9 +314,9 @@ class PriPolyBasis(BasePolyBasis):
 
                 pab.append([cij*pij, cij*qij, cij*rij])
 
-        sk = [(k + 0.5)**0.5 for k in range(self.order)]
-        hc = [s*jp for s, jp in zip(sk, jacobi(self.order - 1, 0, 0, c))]
-        dhc = [s*jp for s, jp in zip(sk, jacobi_diff(self.order - 1, 0, 0, c))]
+        sk = [(k + 0.5)**0.5 for k in range(self.order + 1)]
+        hc = [s*jp for s, jp in zip(sk, jacobi(self.order, 0, 0, c))]
+        dhc = [s*jp for s, jp in zip(sk, jacobi_diff(self.order, 0, 0, c))]
 
         return [[pij*hk, qij*hk, rij*dhk]
                 for pij, qij, rij in pab for hk, dhk in zip(hc, dhc)]
@@ -322,9 +324,9 @@ class PriPolyBasis(BasePolyBasis):
     @cached_property
     def degrees(self):
         return [(i, j, k)
-                for i in range(self.order)
-                for j in range(self.order - i)
-                for k in range(self.order)]
+                for i in range(self.order + 1)
+                for j in range(self.order - i + 1)
+                for k in range(self.order + 1)]
 
 
 class PyrPolyBasis(BasePolyBasis):
@@ -336,9 +338,9 @@ class PyrPolyBasis(BasePolyBasis):
             b = np.where(r != 1, 2*q/(1 - r), 0)
             c = r
 
-        sk = [2**(-k - 0.25)*(k + 0.5)**0.5 for k in range(self.order)]
-        pa = [s*jp for s, jp in zip(sk, jacobi(self.order - 1, 0, 0, a))]
-        pb = [s*jp for s, jp in zip(sk, jacobi(self.order - 1, 0, 0, b))]
+        sk = [2**(-k - 0.25)*(k + 0.5)**0.5 for k in range(self.order + 1)]
+        pa = [s*jp for s, jp in zip(sk, jacobi(self.order, 0, 0, a))]
+        pb = [s*jp for s, jp in zip(sk, jacobi(self.order, 0, 0, b))]
 
         ob = []
         for i, pi in enumerate(pa):
@@ -346,7 +348,7 @@ class PyrPolyBasis(BasePolyBasis):
                 cij = (1 - c)**(i + j)
                 pij = pi*pj
 
-                pc = jacobi(self.order - max(i, j) - 1, 2*(i + j + 1), 0, c)
+                pc = jacobi(self.order - max(i, j), 2*(i + j + 1), 0, c)
                 for k, pk in enumerate(pc):
                     ck = (2*(k + j + i) + 3)**0.5
 
@@ -360,19 +362,19 @@ class PyrPolyBasis(BasePolyBasis):
             b = np.where(r != 1, 2*q/(1 - r), 0)
             c = r
 
-        sk = [2**(-k - 0.25)*(k + 0.5)**0.5 for k in range(self.order)]
-        fc = [s*jp for s, jp in zip(sk, jacobi(self.order - 1, 0, 0, a))]
-        gc = [s*jp for s, jp in zip(sk, jacobi(self.order - 1, 0, 0, b))]
+        sk = [2**(-k - 0.25)*(k + 0.5)**0.5 for k in range(self.order + 1)]
+        fc = [s*jp for s, jp in zip(sk, jacobi(self.order, 0, 0, a))]
+        gc = [s*jp for s, jp in zip(sk, jacobi(self.order, 0, 0, b))]
 
-        dfc = [s*jp for s, jp in zip(sk, jacobi_diff(self.order - 1, 0, 0, a))]
-        dgc = [s*jp for s, jp in zip(sk, jacobi_diff(self.order - 1, 0, 0, b))]
+        dfc = [s*jp for s, jp in zip(sk, jacobi_diff(self.order, 0, 0, a))]
+        dgc = [s*jp for s, jp in zip(sk, jacobi_diff(self.order, 0, 0, b))]
 
         ob = []
         for i, (fi, dfi) in enumerate(zip(fc, dfc)):
             for j, (gj, dgj) in enumerate(zip(gc, dgc)):
-                h = jacobi(self.order - max(i, j) - 1, 2*(i + j + 1), 0, c)
+                h = jacobi(self.order - max(i, j), 2*(i + j + 1), 0, c)
                 dh = jacobi_diff(
-                    self.order - max(i, j) - 1, 2*(i + j + 1), 0, c
+                    self.order - max(i, j), 2*(i + j + 1), 0, c
                 )
 
                 for k, (hk, dhk) in enumerate(zip(h, dh)):
@@ -392,31 +394,31 @@ class PyrPolyBasis(BasePolyBasis):
     @cached_property
     def degrees(self):
         return [(i, j, k)
-                for i in range(self.order)
-                for j in range(self.order)
-                for k in range(self.order - max(i, j))]
+                for i in range(self.order + 1)
+                for j in range(self.order + 1)
+                for k in range(self.order - max(i, j) + 1)]
 
 
 class HexPolyBasis(BasePolyBasis):
     name = 'hex'
 
     def _ortho_basis_at(self, p, q, r):
-        sk = [(k + 0.5)**0.5 for k in range(self.order)]
-        pa = [c*jp for c, jp in zip(sk, jacobi(self.order - 1, 0, 0, p))]
-        pb = [c*jp for c, jp in zip(sk, jacobi(self.order - 1, 0, 0, q))]
-        pc = [c*jp for c, jp in zip(sk, jacobi(self.order - 1, 0, 0, r))]
+        sk = [(k + 0.5)**0.5 for k in range(self.order + 1)]
+        pa = [c*jp for c, jp in zip(sk, jacobi(self.order, 0, 0, p))]
+        pb = [c*jp for c, jp in zip(sk, jacobi(self.order, 0, 0, q))]
+        pc = [c*jp for c, jp in zip(sk, jacobi(self.order, 0, 0, r))]
 
         return [pi*pj*pk for pi in pa for pj in pb for pk in pc]
 
     def _jac_ortho_basis_at(self, p, q, r):
-        sk = [(k + 0.5)**0.5 for k in range(self.order)]
-        pa = [c*jp for c, jp in zip(sk, jacobi(self.order - 1, 0, 0, p))]
-        pb = [c*jp for c, jp in zip(sk, jacobi(self.order - 1, 0, 0, q))]
-        pc = [c*jp for c, jp in zip(sk, jacobi(self.order - 1, 0, 0, r))]
+        sk = [(k + 0.5)**0.5 for k in range(self.order + 1)]
+        pa = [c*jp for c, jp in zip(sk, jacobi(self.order, 0, 0, p))]
+        pb = [c*jp for c, jp in zip(sk, jacobi(self.order, 0, 0, q))]
+        pc = [c*jp for c, jp in zip(sk, jacobi(self.order, 0, 0, r))]
 
-        dpa = [c*jp for c, jp in zip(sk, jacobi_diff(self.order - 1, 0, 0, p))]
-        dpb = [c*jp for c, jp in zip(sk, jacobi_diff(self.order - 1, 0, 0, q))]
-        dpc = [c*jp for c, jp in zip(sk, jacobi_diff(self.order - 1, 0, 0, r))]
+        dpa = [c*jp for c, jp in zip(sk, jacobi_diff(self.order, 0, 0, p))]
+        dpb = [c*jp for c, jp in zip(sk, jacobi_diff(self.order, 0, 0, q))]
+        dpc = [c*jp for c, jp in zip(sk, jacobi_diff(self.order, 0, 0, r))]
 
         return [[dpi*pj*pk, pi*dpj*pk, pi*pj*dpk]
                 for pi, dpi in zip(pa, dpa)
@@ -426,6 +428,6 @@ class HexPolyBasis(BasePolyBasis):
     @cached_property
     def degrees(self):
         return [(i, j, k)
-                for i in range(self.order)
-                for j in range(self.order)
-                for k in range(self.order)]
+                for i in range(self.order + 1)
+                for j in range(self.order + 1)
+                for k in range(self.order + 1)]

@@ -12,8 +12,7 @@
               ur='inout mpi fpdtype_t[${str(nvars)}]'
               gradul='in view fpdtype_t[${str(ndims)}][${str(nvars)}]'
               gradur='in mpi fpdtype_t[${str(ndims)}][${str(nvars)}]'
-              artviscl='in view fpdtype_t'
-              artviscr='in mpi fpdtype_t'
+              artvisc='in view fpdtype_t'
               nl='in fpdtype_t[${str(ndims)}]'>
     fpdtype_t mag_nl = sqrt(${pyfr.dot('nl[{i}]', i=ndims)});
     fpdtype_t norm_nl[] = ${pyfr.array('(1 / mag_nl)*nl[{i}]', i=ndims)};
@@ -25,13 +24,13 @@
 % if beta != -0.5:
     fpdtype_t fvl[${ndims}][${nvars}] = {{0}};
     ${pyfr.expand('viscous_flux_add', 'ul', 'gradul', 'fvl')};
-    ${pyfr.expand('artificial_viscosity_add', 'gradul', 'fvl', 'artviscl')};
+    ${pyfr.expand('artificial_viscosity_add', 'gradul', 'fvl', 'artvisc')};
 % endif
 
 % if beta != 0.5:
     fpdtype_t fvr[${ndims}][${nvars}] = {{0}};
     ${pyfr.expand('viscous_flux_add', 'ur', 'gradur', 'fvr')};
-    ${pyfr.expand('artificial_viscosity_add', 'gradur', 'fvr', 'artviscr')};
+    ${pyfr.expand('artificial_viscosity_add', 'gradur', 'fvr', 'artvisc')};
 % endif
 
 % for i in range(nvars):

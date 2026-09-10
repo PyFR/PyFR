@@ -47,8 +47,8 @@
     fpdtype_t abs_ma  = fabs(contraa*rcp_aa) + 1e-15;
 
     // Eigen structure
-    fpdtype_t b1 = max(0.0, max(contraa + aa, contrar + aa));
-    fpdtype_t b2 = min(0.0, min(contraa - aa, contral - aa));
+    fpdtype_t b1 = fmax(0.0, fmax(contraa + aa, contrar + aa));
+    fpdtype_t b2 = fmin(0.0, fmin(contraa - aa, contral - aa));
 
     // Normalized wave speed
     fpdtype_t b1b2 = b1*b2;

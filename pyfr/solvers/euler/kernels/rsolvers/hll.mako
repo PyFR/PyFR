@@ -39,8 +39,8 @@
     fpdtype_t a = sqrt(${c['gamma'] - 1}*(H - 0.5*qq));
 
     // Estimate the left and right wave speed, sl and sr
-    fpdtype_t sl = min(nv - a, nvl - ar);
-    fpdtype_t sr = max(nv + a, nvr + ar);
+    fpdtype_t sl = fmin(nv - a, nvl - ar);
+    fpdtype_t sr = fmax(nv + a, nvr + ar);
     fpdtype_t rcpsrsl = 1/(sr - sl);
 
     // Output

@@ -1,5 +1,7 @@
 from weakref import WeakKeyDictionary
 
+import numpy as np
+
 from pyfr.backends.base import (BaseKernelProvider, BaseOrderedMetaKernel,
                                 BasePointwiseKernelProvider,
                                 BaseUnorderedMetaKernel, Kernel)
@@ -16,7 +18,7 @@ class CUDAKernel(Kernel):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        if hasattr(self, 'bind') and hasattr(self, 'add_to_graph'):
+        if hasattr(self, 'add_to_graph'):
             self.gnodes = WeakKeyDictionary()
 
 
@@ -37,14 +39,20 @@ class CUDAUnorderedMetaKernel(BaseUnorderedMetaKernel):
 
 class CUDAKernelProvider(BaseKernelProvider):
     @memoize
-    def _build_kernel(self, name, src, argtypes, argn=[]):
+    def _build_kernel(self, name, src, argtypes):
         mod = CUDACompilerModule(self.backend, src)
         return mod.get_function(name, argtypes)
 
     def _benchmark(self, kfunc, nbench=4, nwarmup=1):
-        stream = self.backend.cuda.create_stream()
-        start_evt = self.backend.cuda.create_event(timing=True)
-        stop_evt = self.backend.cuda.create_event(timing=True)
+        try:
+            stream = self._bench_stream
+            start_evt = self._bench_start_evt
+            stop_evt = self._bench_stop_evt
+        except AttributeError:
+            cuda = self.backend.cuda
+            self._bench_stream = stream = cuda.create_stream()
+            self._bench_start_evt = start_evt = cuda.create_event(timing=True)
+            self._bench_stop_evt = stop_evt = cuda.create_event(timing=True)
 
         for i in range(nbench + nwarmup):
             if i == nwarmup:
@@ -56,6 +64,20 @@ class CUDAKernelProvider(BaseKernelProvider):
         stream.synchronize()
 
         return stop_evt.elapsed_time(start_evt) / nbench
+
+    def _bench_save(self, m):
+        buf = np.empty(m.nbytes, dtype=np.uint8)
+        self.backend.cuda.memcpy(buf, m.data, m.nbytes)
+        return buf
+
+    def _bench_restore(self, m, buf):
+        self.backend.cuda.memcpy(m.data, buf, m.nbytes)
+
+    def _bench_fill_random(self, m):
+        blk = self._bench_rand_block(m.nbytes)
+        for off in range(0, m.nbytes, blk.nbytes):
+            self.backend.cuda.memcpy(m.data + off, blk,
+                                     min(blk.nbytes, m.nbytes - off))
 
 
 class CUDAPointwiseKernelProvider(CUDAKernelProvider,
@@ -73,8 +95,7 @@ class CUDAPointwiseKernelProvider(CUDAKernelProvider,
 
         self.kernel_generator_cls = KernelGenerator
 
-    def _instantiate_kernel(self, dims, fun, arglst, argm, argv):
-        rtargs = []
+    def _instantiate_kernel(self, dims, fun, args):
         block = self._block1d if len(dims) == 1 else self._block2d
         grid = get_grid_for_block(block, dims[-1])
 
@@ -83,35 +104,28 @@ class CUDAPointwiseKernelProvider(CUDAKernelProvider,
 
         params = fun.make_params(grid, block)
 
-        # Process the arguments
-        for i, k in enumerate(arglst):
-            if isinstance(k, str):
-                rtargs.append((i, k))
-            else:
-                params.set_arg(i, k)
+        # Set the iteration dimensions
+        params.set_args(*dims)
 
         class PointwiseKernel(CUDAKernel):
-            if rtargs:
-                def bind(self, **kwargs):
-                    for i, k in rtargs:
-                        if k in kwargs:
-                            params.set_arg(i, kwargs[k])
+            _set_arg = staticmethod(params.set_arg)
 
-                    # Notify any graphs we're in about our new parameters
-                    for graph, gnode in self.gnodes.items():
-                        graph.stale_kparams[gnode] = params
+            def bind(self, **kwargs):
+                super().bind(**kwargs)
+
+                # Notify any graphs we're in about our new parameters
+                for graph, gnode in self.gnodes.items():
+                    graph.stale_kparams[gnode] = params
 
             def add_to_graph(self, graph, deps):
                 gnode = graph.graph.add_kernel(params, deps)
 
-                # If our parameters can change then we need to keep a
-                # (weak) reference to the graph so we can notify it
-                if rtargs:
-                    self.gnodes[graph] = gnode
+                # Keep a (weak) graph reference so rebinds can notify it
+                self.gnodes[graph] = gnode
 
                 return gnode
 
             def run(self, stream):
                 fun.exec_async(stream, params)
 
-        return PointwiseKernel(argm, argv)
+        return PointwiseKernel(args=args)

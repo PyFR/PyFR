@@ -1,9 +1,12 @@
 #!/usr/bin/env python
-from argparse import ArgumentParser, FileType
+from argparse import ArgumentParser
 import csv
+from functools import partial
 import io
 from pathlib import Path
 import re
+import sys
+import uuid
 
 import h5py
 import mpi4py.rc
@@ -17,9 +20,10 @@ from pyfr.mpiutil import get_comm_rank_root, init_mpi
 from pyfr.partitioners import (BasePartitioner, get_partitioner,
                                reconstruct_partitioning, write_partitioning)
 from pyfr.plugins import BaseCLIPlugin
+from pyfr.plugins.common import get_elementscls
 from pyfr.progress import (NullProgressSequence, ProgressBar,
                            ProgressSequenceAction)
-from pyfr.readers import BaseReader, get_reader_by_name, get_reader_by_extn
+from pyfr.readers import BaseReader, get_reader_by_extn, get_reader_by_name
 from pyfr.readers.native import NativeReader
 from pyfr.readers.stl import read_stl
 from pyfr.resamplers import (BaseInterpolator, NativeCloudResampler,
@@ -28,6 +32,7 @@ from pyfr.solvers import get_solver
 from pyfr.util import first, subclasses
 from pyfr.writers import BaseWriter, get_writer_by_extn, get_writer_by_name
 from pyfr.writers.native import NativeWriter
+from pyfr.writers.upgrade import upgrade
 
 
 def main():
@@ -44,8 +49,7 @@ def main():
 
     # Import command
     ap_import = sp.add_parser('import', help='import --help')
-    ap_import.add_argument('inmesh', type=FileType('r'),
-                           help='input mesh file')
+    ap_import.add_argument('inmesh', help='input mesh file')
     ap_import.add_argument('outmesh', help='output PyFR mesh file')
     types = sorted(cls.name for cls in subclasses(BaseReader))
     ap_import.add_argument('-t', dest='type', choices=types,
@@ -95,6 +99,11 @@ def main():
         metavar='shape:weight', help='element weighting factor or "balanced"'
     )
     ap_partition_add.add_argument(
+        '-r', dest='regwts', action='append', default=[],
+        metavar='tag:weight',
+        help='region tag weighting factor or "balanced"'
+    )
+    ap_partition_add.add_argument(
         '--popt', dest='popts', action='append', default=[],
         metavar='key:value', help='partitioner-specific option'
     )
@@ -126,13 +135,14 @@ def main():
     ap_export = sp.add_parser('export', help='export --help')
     ap_export = ap_export.add_subparsers()
 
-    for etype in ('boundary', 'stl', 'volume'):
+    for etype in ('boundary', 'mesh', 'spanwise', 'stl', 'volume'):
         ap_export_type = ap_export.add_parser(etype,
                                               help=f'export {etype} --help')
 
         ap_export_type.add_argument('meshf', help='input mesh file')
-        ap_export_type.add_argument('solnf', help='input solution file')
-        ap_export_type.add_argument('outf', help='output file')
+        if etype != 'mesh':
+            ap_export_type.add_argument('solnf', help='input solution file')
+        ap_export_type.add_argument('outf', nargs='?', help='output file')
 
         if etype == 'boundary':
             ap_export_type.add_argument('eargs', nargs='+', metavar='boundary',
@@ -141,8 +151,9 @@ def main():
             ap_export_type.add_argument('eargs', nargs='+', metavar='stl',
                                         help='STL region to output')
 
-        ap_export_type.add_argument('-b', '--batchfile', type=FileType('r'),
-                                    default='-', help='batch export file')
+        if etype != 'mesh':
+            ap_export_type.add_argument('-b', '--batchfile', default='-',
+                                        help='batch export file')
 
         ftypes = [c.name for c in subclasses(BaseWriter) if c.type == etype]
         ap_export_type.add_argument(
@@ -150,11 +161,16 @@ def main():
             help='output file type; this is usually inferred from the '
             'extension of outf'
         )
-        ap_export_type.add_argument(
-            '-f', '--field', dest='fields', action='append', metavar='FIELD',
-            help='what fields should be output; may be repeated, by default '
-            'all fields are output'
-        )
+        if etype != 'mesh':
+            ap_export_type.add_argument(
+                '-f', '--field', dest='fields', action='append',
+                metavar='FIELD', help='what fields should be output; may be '
+                'repeated, by default all fields are output'
+            )
+            ap_export_type.add_argument(
+                '-l', '--list-fields', action='store_true',
+                help='list the fields the file provides and exit'
+            )
         ap_export_type.add_argument(
             '-p', '--precision', choices=['single', 'double'],
             default='single', help='output number precision; defaults to '
@@ -164,8 +180,21 @@ def main():
             '--eopt', dest='eopts', action='append', default=[],
             metavar='key:value', help='exporter-specific option'
         )
+        if etype != 'mesh':
+            ap_export_type.add_argument(
+                '--postproc', dest='pp_plugins', action='append', default=[],
+                metavar='PLUGIN', help='postprocessing plugin; may be repeated'
+            )
+            ap_export_type.add_argument('--cfg', dest='pp_cfg',
+                                        help='config file for postproc '
+                                        'plugins')
         ap_export_type.add_argument('-P', '--pname',
                                     help='partitioning to use')
+        if etype in ('boundary', 'spanwise', 'volume'):
+            ap_export_type.add_argument(
+                '--discontinuous', dest='discontinuous', action='store_true',
+                default=False, help='emit discontinuous output'
+            )
         ap_export_type.set_defaults(etype=etype, process=process_export)
 
     # Region subcommand
@@ -175,7 +204,7 @@ def main():
     # Add region
     ap_region_add = ap_region.add_parser('add', help='region add --help')
     ap_region_add.add_argument('mesh', help='input mesh file')
-    ap_region_add.add_argument('stl', type=FileType('rb'), help='STL file')
+    ap_region_add.add_argument('stl', help='STL file')
     ap_region_add.add_argument('name', help='region name')
     ap_region_add.set_defaults(process=process_region_add)
 
@@ -192,6 +221,14 @@ def main():
     ap_region_remove.add_argument('name', help='region name')
     ap_region_remove.set_defaults(process=process_region_remove)
 
+    # Upgrade command
+    ap_upgrade = sp.add_parser('upgrade', help='upgrade --help')
+    ap_upgrade.add_argument('inf', metavar='in', type=Path,
+                            help='input mesh or solution file')
+    ap_upgrade.add_argument('outf', metavar='out', nargs='?', default=None,
+                            type=Path, help='output file (default: in-place)')
+    ap_upgrade.set_defaults(process=process_upgrade)
+
     # Resample command
     ap_resample = sp.add_parser('resample', help='resample --help')
     ap_resample.add_argument('srcmesh', help='source mesh file')
@@ -201,7 +238,7 @@ def main():
     ap_resample.add_argument('tgtsoln', help='target solution file')
     itypes = [i.name for i in subclasses(BaseInterpolator, just_leaf=True)]
     ap_resample.add_argument('-i', '--interpolator', choices=itypes,
-                             required=True, help='interpolator to use')
+                             default='weno', help='interpolator to use')
     ap_resample.add_argument(
         '--iopt', dest='iopts', action='append', default=[],
         metavar='key:value', help='interpolator-specific option'
@@ -212,15 +249,14 @@ def main():
     # Run command
     ap_run = sp.add_parser('run', help='run --help')
     ap_run.add_argument('mesh', help='mesh file')
-    ap_run.add_argument('cfg', type=FileType('r'), help='config file')
+    ap_run.add_argument('cfg', help='config file')
     ap_run.set_defaults(process=process_run)
 
     # Restart command
     ap_restart = sp.add_parser('restart', help='restart --help')
     ap_restart.add_argument('mesh', help='mesh file')
     ap_restart.add_argument('soln', help='solution file')
-    ap_restart.add_argument('cfg', nargs='?', type=FileType('r'),
-                            help='new config file')
+    ap_restart.add_argument('cfg', nargs='?', help='new config file')
     ap_restart.set_defaults(process=process_restart)
 
     # Options common to run and restart
@@ -249,11 +285,26 @@ def process_import(args):
     if args.type:
         reader = get_reader_by_name(args.type, args.inmesh, args.progress)
     else:
-        extn = Path(args.inmesh.name).suffix
+        extn = Path(args.inmesh).suffix
         reader = get_reader_by_extn(extn, args.inmesh, args.progress)
 
     # Write out the mesh
     reader.write(args.outmesh, args.lintol)
+
+
+def process_upgrade(args):
+    outf = args.outf or args.inf
+
+    with h5py.File(args.inf, 'r') as src:
+        tmp = outf.parent / f'pyfr-{uuid.uuid4()}{outf.suffix}'
+        try:
+            with h5py.File(tmp, 'w', libver='latest') as dst:
+                upgrade(src, dst)
+
+            tmp.rename(outf)
+        except:
+            tmp.unlink(missing_ok=True)
+            raise
 
 
 def process_partition_list(args):
@@ -293,17 +344,24 @@ def process_partition_add(args):
 
         # Element weights
         if args.elewts == ['balanced']:
-            ewts = None
+            ewts = 'balanced'
         elif len(etypes) == 1:
             ewts = {etypes[0]: 1}
         else:
             ewts = (ew.split(':') for ew in args.elewts)
             ewts = {e: int(w) for e, w in ewts}
 
-        # Ensure all weights have been provided
-        if ewts is not None and len(ewts) != len(etypes):
-            missing = ', '.join(set(etypes) - set(ewts))
-            raise ValueError(f'Missing element weights for: {missing}')
+            # Ensure all weights have been provided
+            if len(ewts) != len(etypes):
+                missing = ', '.join(set(etypes) - set(ewts))
+                raise ValueError(f'Missing element weights for: {missing}')
+
+        # Region tag weights
+        if args.regwts == ['balanced']:
+            twts = 'balanced'
+        else:
+            twts = (rw.split(':') for rw in args.regwts)
+            twts = {n: int(w) for n, w in twts}
 
         # Get the partitioning name
         pname = args.name or str(len(pwts))
@@ -319,12 +377,13 @@ def process_partition_add(args):
 
         # Create the partitioner
         if args.partitioner:
-            part = get_partitioner(args.partitioner, pwts, ewts, opts=opts)
+            part = get_partitioner(args.partitioner, pwts, ewts, twts,
+                                   opts=opts)
         else:
             parts = sorted(cls.name for cls in subclasses(BasePartitioner))
             for name in parts:
                 try:
-                    part = get_partitioner(name, pwts, ewts)
+                    part = get_partitioner(name, pwts, ewts, twts)
                     break
                 except OSError:
                     pass
@@ -418,18 +477,51 @@ def process_export(args):
 
     # Common arguments
     kargs = [args.eargs] if 'eargs' in args else []
-    kwargs = {'fields': args.fields, 'prec': args.precision,
-              'pname': args.pname}
+    kwargs = {'prec': args.precision, 'pname': args.pname}
+
+    # Solution-specific arguments
+    if args.etype != 'mesh':
+        pp_cfg = Inifile.load(args.pp_cfg) if args.pp_cfg else None
+        kwargs |= {'fields': args.fields, 'pp_plugins': args.pp_plugins,
+                   'pp_cfg': pp_cfg}
+
+    # Discntinuous output
+    if 'discontinuous' in args:
+        kwargs['discontinuous'] = args.discontinuous
 
     # Process any exporter-specific options
     for e in args.eopts:
         k, v = e.split(':', 1)
-        kwargs[k] = int(v) if re.match(r'\d+', v) else v
+        kwargs[k.replace('-', '_')] = int(v) if re.fullmatch(r'\d+', v) else v
 
-    # Obtain files to export from a batch file
-    if args.solnf == '-' and args.outf == '-':
+    # Report the available fields in lieu of exporting
+    if getattr(args, 'list_fields', False):
+        if args.solnf == '-':
+            raise ValueError('Listing fields requires an explicit solution '
+                             'file')
+
+        writer = get_writer_by_name(args.ftype or 'vtk', args.etype,
+                                    args.meshf, *kargs, **kwargs)
+        fields = writer.list_fields(args.solnf)
+
         if rank == root:
-            batch = args.batchfile.read()
+            for f, n in fields.items():
+                print(f, n, sep='\t')
+
+        return
+    elif args.outf is None:
+        raise ValueError('An output file is required when exporting')
+
+    # A mesh export takes no solution files
+    if args.etype == 'mesh':
+        batch = [[args.outf]]
+    # Obtain files to export from a batch file
+    elif args.solnf == '-' and args.outf == '-':
+        if rank == root:
+            if args.batchfile == '-':
+                batch = sys.stdin.read()
+            else:
+                batch = Path(args.batchfile).read_text()
 
             dialect = csv.Sniffer().sniff(batch)
             batch = csv.reader(io.StringIO(batch), dialect=dialect)
@@ -445,15 +537,19 @@ def process_export(args):
         writer = get_writer_by_name(args.ftype, args.etype, args.meshf,
                                     *kargs, **kwargs)
     else:
-        extn = Path(batch[0][1]).suffix
+        extn = Path(batch[0][-1]).suffix
         writer = get_writer_by_extn(extn, args.etype, args.meshf, *kargs,
                                     **kwargs)
 
     # Process the files
     progress = args.progress if rank == root else NullProgressSequence()
-    with progress.start_with_bar('Process solutions') as pbar:
-        for solnf, outf in pbar.start_with_iter(batch):
-            writer.process(solnf, outf)
+    if len(batch) == 1:
+        with progress.start('Export'):
+            writer.process(*batch[0])
+    else:
+        with progress.start_with_bar('Process solutions') as pbar:
+            for b in pbar.start_with_iter(batch):
+                writer.process(*b)
 
 
 def process_resample(args):
@@ -472,9 +568,19 @@ def process_resample(args):
         treader = NativeReader(args.tgtmesh, args.pname, construct_con=False)
         tcfg = Inifile.load(args.tgtcfg)
 
-    # Get the interpolator
+    # Ensure the source is a solution file
+    if ssoln.stats.get('data', 'prefix') != 'soln':
+        raise RuntimeError('Resampling is only supported for solution files')
+
+    # Obtain the target system for admissibility testing
+    elementscls = get_elementscls(tcfg)
+    is_admissible = partial(elementscls.con_is_admissible, cfg=tcfg)
+
+    # Get the interpolator, auto-configuring from source order
+    order = ssoln.config.getint('solver', 'order')
     opts = dict(s.split(':', 1) for s in args.iopts)
-    interp = get_interpolator(args.interpolator, smesh.ndims, opts)
+    interp = get_interpolator(args.interpolator, smesh.ndims, is_admissible,
+                              opts, order=order)
 
     # Perform the resampling
     resampler = NativeCloudResampler(smesh, ssoln, interp, progress)
@@ -485,16 +591,12 @@ def process_resample(args):
     # Get the output file path
     tpath = Path(args.tgtsoln).absolute()
 
-    # Get the data field prefix
-    prefix = ssoln['stats'].get('data', 'prefix')
-
     # Have the root rank prepare a stats record
     if rank == root:
         stats = Inifile()
-        stats.set('data', 'prefix', prefix)
-        stats.set('data', 'fields', ssoln['stats'].get('data', 'fields'))
+        stats.set('data', 'prefix', 'soln')
         stats.set('solver-time-integrator', 'tcurr',
-                  ssoln['stats'].get('solver-time-integrator', 'tcurr'))
+                  ssoln.stats.get('solver-time-integrator', 'tcurr'))
         metadata = {'config': tcfg.tostr(), 'stats': stats.tostr(),
                     'mesh-uuid': treader.mesh.uuid}
     else:
@@ -503,9 +605,11 @@ def process_resample(args):
     with progress.start('Write target solution'):
         # Write out the new solution
         writer = NativeWriter(treader.mesh, tcfg, fpdtype, tpath.parent,
-                              tpath.name, prefix)
-        writer.set_shapes_eidxs(tshapes, treader.mesh.eidxs)
-        writer.write(tsoln, None, metadata)
+                              tpath.name, 'soln')
+        writer.set_shapes_eidxs(tshapes, treader.mesh.eidxs,
+                                {'soln': ssoln.fields})
+        writer.write({k: {'soln': v} for k, v in tsoln.items()},
+                     None, metadata)
 
 
 def _process_common(args, soln, cfg):
@@ -524,11 +628,7 @@ def _process_common(args, soln, cfg):
 
     # If we do not have a config file then take it from the solution
     if cfg is None:
-        cfg = soln['config']
-    # Remove stale serialised data from soln
-    elif soln:
-        soln = {k: v for k, v in soln.items() 
-                if not k.startswith(('plugins', 'bcs', 'intg'))}
+        cfg = soln.config
 
     # Create a backend
     backend = get_backend(args.backend, cfg)
@@ -536,13 +636,9 @@ def _process_common(args, soln, cfg):
     # Construct the solver
     solver = get_solver(backend, mesh, soln, cfg)
 
-    # If we are running interactively then create a progress bar
+    # Retain a progress bar when running interactively
     if args.progress and rank == root:
-        pbar = ProgressBar()
-        pbar.start(solver.tend, start=solver.tstart, curr=solver.tcurr)
-
-        # Register a callback to update the bar after each step
-        solver.plugins.append(lambda intg: pbar(intg.tcurr))
+        solver.progress = ProgressBar()
 
     # Execute!
     solver.run()

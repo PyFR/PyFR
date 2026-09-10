@@ -41,6 +41,10 @@ class GmshReader(BaseReader):
         7: ('pyr', 5), 14: ('pyr', 14), 118: ('pyr', 30), 119: ('pyr', 55)
     }
 
+    # Spatial dimension of each PyFR element type
+    _petype_ndim = {'line': 1, 'tri': 2, 'quad': 2,
+                    'tet': 3, 'hex': 3, 'pri': 3, 'pyr': 3}
+
     # First-order node numbers associated with each element face
     _petype_fnmap = {
         'tri': {'line': [[0, 1], [1, 2], [2, 0]]},
@@ -261,52 +265,58 @@ class GmshReader(BaseReader):
 
     def _read_phys_names(self, mshit):
         # Physical entities can be divided up into:
-        #  - fluid elements ('the mesh')
+        #  - volume elements (one or more named material regions)
         #  - boundary faces
         #  - periodic faces
-        self._felespent = None
+        self._volpents = {}
         self._bfacespents = {}
         self._pfacespents = defaultdict(list)
 
-        # Seen physical names and IDs
+        # Seen physical names and (dim, ID) pairs
         seen_names = set()
-        seen_ids = set()
+        seen = set()
 
-        # Extract the physical names
+        # Collect all physical names with their dimensions
+        pnames = []
         for l in msh_section(mshit, 'PhysicalNames'):
             m = re.match(r'(\d+) (\d+) "((?:[^"\\]|\\.)*)"$', l)
             if not m:
                 raise ValueError('Malformed physical entity')
 
-            pent, name = int(m[2]), m[3].lower()
+            dim, pent, name = int(m[1]), int(m[2]), m[3].lower()
 
             # Ensure we have not seen this name before
             if name in seen_names:
                 raise ValueError(f'Duplicate physical name: {name}')
 
-            # Ensure physical entitiy IDs are unique
-            if pent in seen_ids:
+            # Physical entity IDs are only unique per-dimension
+            if (dim, pent) in seen:
                 raise ValueError(f'Duplicate physical entity ID: {pent}')
 
-            # Fluid elements
-            if name == 'fluid':
-                self._felespent = pent
+            pnames.append((dim, pent, name))
+            seen_names.add(name)
+            seen.add((dim, pent))
+
+        # Classify by dimension
+        self._voldim = max(dim for dim, _, _ in pnames)
+
+        for dim, pent, name in pnames:
             # Periodic boundary faces
-            elif name.startswith('periodic'):
+            if name.startswith('periodic'):
                 p = re.match(r'periodic[ _-]([a-z0-9]+)[ _-](l|r)$', name)
                 if not p:
                     raise ValueError('Invalid periodic boundary condition')
 
-                self._pfacespents[p[1]].append(pent)
+                self._pfacespents[p[1]].append((dim, pent))
+            # Volume elements
+            elif dim == self._voldim:
+                self._volpents[name] = pent
             # Other boundary faces
             else:
-                self._bfacespents[name] = pent
+                self._bfacespents[name] = (dim, pent)
 
-            seen_names.add(name)
-            seen_ids.add(pent)
-
-        if self._felespent is None:
-            raise ValueError('No fluid elements in mesh')
+        if not self._volpents:
+            raise ValueError('No volume elements in mesh')
 
         if any(len(pf) != 2 for pf in self._pfacespents.values()):
             raise ValueError('Unpaired periodic boundary in mesh')
@@ -329,10 +339,9 @@ class GmshReader(BaseReader):
 
                 if enphys == 0:
                     continue
-                elif enphys == 1:
-                    tagpents[ndim, etag] = abs(int(ent[8]))
                 else:
-                    raise ValueError('Invalid physical tag count for entity')
+                    pents = (abs(int(ent[8 + i])) for i in range(enphys))
+                    tagpents[ndim, etag] = tuple(sorted(pents))
 
         if next(mshit) != '$EndEntities\n':
             raise ValueError('Expected $EndEntities')
@@ -383,19 +392,24 @@ class GmshReader(BaseReader):
     def _read_eles_impl_v2(self, mshit):
         elenodes = defaultdict(list)
 
+        # Resolve each gmsh element type to its dimension once, rather than
+        # looking it up (via _etype_map then _petype_ndim) for every element
+        edim_by_etype = {
+            etype: self._petype_ndim[petype]
+            for etype, (petype, *_) in self._etype_map.items()
+        }
+
         for l in msh_section(mshit, 'Elements'):
             # Extract the raw element data
             elei = [int(i) for i in l.split()]
             enum, etype, entags = elei[:3]
             etags, enodes = elei[3:3 + entags], elei[3 + entags:]
 
-            if etype not in self._etype_map:
+            if etype not in edim_by_etype:
                 raise ValueError(f'Unsupported element type {etype}')
 
-            # Physical entity type (used for BCs)
-            epent = etags[0]
-
-            elenodes[etype, epent].append(enodes)
+            # Physical entity type (used for BCs); keyed by its dimension
+            elenodes[etype, (edim_by_etype[etype], (etags[0],))].append(enodes)
 
         self._elenodes = {k: np.array(v) for k, v in elenodes.items()}
 
@@ -414,14 +428,14 @@ class GmshReader(BaseReader):
             # Determine the number of nodes associated with each element
             nnodes = self._etype_map[etype][1]
 
-            # Lookup the physical entity type
-            epent = self._tagpents[edim, etag]
+            # Lookup the physical entity type(s); keyed by their dimension
+            epents = self._tagpents[edim, etag]
 
             # Allocate space for, and read in, these elements
             enodes = np.loadtxt(mshit, dtype=np.int64, max_rows=ecount,
                                 usecols=range(1, nnodes + 1), ndmin=2)
 
-            elenodes[etype, epent].append(enodes)
+            elenodes[etype, (edim, epents)].append(enodes)
 
         if ne != sum(len(vv) for v in elenodes.values() for vv in v):
             raise ValueError('Invalid element count')
@@ -431,10 +445,57 @@ class GmshReader(BaseReader):
 
         self._elenodes = {k: np.vstack(v) for k, v in elenodes.items()}
 
+    def _merge_vol(self):
+        # Map from volume pent ID to bit mask
+        pbits = {p: 1 << i
+                 for i, (_, p) in enumerate(sorted(self._volpents.items()))}
+        volpent = min(self._volpents.values())
+        voldim = self._voldim
+
+        elenodes = {}
+        tagruns, vnodes = defaultdict(list), defaultdict(list)
+
+        for (etype, (edim, pents)), nodes in sorted(self._elenodes.items()):
+            # Compute the combined bitmask for volume pents
+            mask = sum(pbits[p] for p in pents if edim == voldim and p in pbits)
+
+            # Pass through non-volume entries unchanged
+            if not mask:
+                elenodes[etype, (edim, pents[0])] = nodes
+                continue
+
+            petype = self._etype_map[etype][0]
+
+            # Collect nodes and record the tag bitmask
+            vnodes[etype].append(nodes)
+            tagruns[petype].append((mask, len(nodes)))
+
+        # Stack the collected nodes for each volume element type
+        for etype, enodes in vnodes.items():
+            elenodes[etype, volpent] = np.vstack(enodes)
+
+        return elenodes, volpent, tagruns
+
+    @staticmethod
+    def _assign_tags(eles, tagruns):
+        # Set per-element tag bits from precomputed bitmasks
+        for petype, runs in tagruns.items():
+            masks, counts = zip(*runs)
+            eles[petype]['tags'] = np.repeat(masks, counts)
+
     def _to_raw_mesh(self, lintol):
+        # Merge volume groups into a single pent, tracking tags
+        elenodes, volpent, tagruns = self._merge_vol()
+
         # Assemble a nodal mesh
         maps = self._etype_map, self._petype_fnmap, self._nodemaps
-        pents = self._felespent, self._bfacespents, self._pfacespents
-        mesh = NodalMeshAssembler(self._nodepts, self._elenodes, pents, maps)
+        mesh = NodalMeshAssembler(self._nodepts, elenodes, volpent,
+                                  self._bfacespents, self._pfacespents, maps)
 
-        return mesh.get_eles(lintol, self.progress)
+        nodepts, eles, codec, periodic = mesh.get_eles(lintol, self.progress)
+
+        # Append tag entries to the codec and assign per-element values
+        codec.extend(f'tag/{tn}' for tn in sorted(self._volpents))
+        self._assign_tags(eles, tagruns)
+
+        return nodepts, eles, codec, periodic

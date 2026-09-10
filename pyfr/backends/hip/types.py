@@ -1,4 +1,3 @@
-from collections import defaultdict
 from functools import cached_property
 
 import numpy as np
@@ -25,20 +24,22 @@ class HIPMatrixBase(_HIPMatrixCommon, base.MatrixBase):
         # Remove
         del self._initval
 
-    def _get(self):
-        # Allocate an empty buffer
-        buf = np.empty((self.nrow, self.leaddim), dtype=self.dtype)
+    def _get_impl(self, start, end):
+        n = (end or self.nbytes // self.itemsize) - start
 
-        # Copy
-        self.backend.hip.memcpy(buf, self.data, self.nbytes)
+        # Get a pinned bounce buffer from the backend
+        buf = self.backend.xfer_buf((n,), self.dtype)
 
-        # Unpack
-        return self._unpack(buf)
+        # Copy from device
+        self.backend.hip.memcpy(buf, self.data + start*self.itemsize,
+                                n*self.itemsize)
+
+        return buf
 
     def _set(self, ary):
-        buf = self._pack(ary)
-
-        # Copy
+        # Pack into a pinned bounce buffer and copy to device
+        buf = self.backend.xfer_buf((self.nrow, self.leaddim), self.dtype)
+        self._pack(ary, out=buf)
         self.backend.hip.memcpy(self.data, buf, self.nbytes)
 
 
@@ -54,12 +55,17 @@ class HIPView(base.View): pass
 class HIPXchgView(base.XchgView): pass
 
 
+class HIPTiledMatrix(_HIPMatrixCommon, base.TiledMatrix):
+    def onalloc(self, basedata, offset):
+        self.basedata = basedata
+        self.data = int(self.basedata) + offset
+        self.offset = offset
+
+
 class HIPXchgMatrix(HIPMatrix, base.XchgMatrix):
-    def __init__(self, backend, dtype, ioshape, initval, extent, aliases,
-                 tags):
+    def __init__(self, backend, dtype, ioshape, initval, extent, tags):
         # Call the standard matrix constructor
-        super().__init__(backend, dtype, ioshape, initval, extent, aliases,
-                         tags)
+        super().__init__(backend, dtype, ioshape, initval, extent, tags)
 
         # If MPI is HIP-aware then we can elide copies to/from a host buffer
         self.elide_copy = backend.mpitype == 'hip-aware'
@@ -80,8 +86,6 @@ class HIPXchgMatrix(HIPMatrix, base.XchgMatrix):
 
 
 class HIPGraph(base.Graph):
-    needs_pdeps = True
-
     def __init__(self, backend):
         super().__init__(backend)
 
@@ -89,8 +93,8 @@ class HIPGraph(base.Graph):
         self.stale_kparams = {}
         self.mpi_events = []
 
-    def add_mpi_req(self, req, deps=[]):
-        super().add_mpi_req(req, deps)
+    def _add_mpi_req(self, req, deps=[]):
+        super()._add_mpi_req(req, deps)
 
         if deps:
             event = self.backend.hip.create_event()
@@ -98,9 +102,7 @@ class HIPGraph(base.Graph):
 
             self.mpi_events.append((event, req))
 
-    def commit(self):
-        super().commit()
-
+    def _commit(self):
         self.exc_graph = self.graph.instantiate()
 
     def run(self, stream):

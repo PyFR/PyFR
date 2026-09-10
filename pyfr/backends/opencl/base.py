@@ -12,7 +12,7 @@ class OpenCLBackend(BaseBackend):
         super().__init__(cfg)
 
         from pyfr.backends.opencl.compiler import OpenCLCompiler
-        from pyfr.backends.opencl.driver import OpenCL
+        from pyfr.backends.opencl.driver import OpenCL, OpenCLError
 
         # Load and wrap OpenCL
         self.cl = OpenCL()
@@ -41,8 +41,11 @@ class OpenCLBackend(BaseBackend):
         else:
             raise ValueError('No suitable OpenCL device found')
 
-        # Determine if the device supports double precision arithmetic
-        if self.fpdtype == np.float64 and not device.has_fp64:
+        # Record if the device has double precision support
+        self.has_double = device.has_fp64
+
+        # Check that the device supports double precision arithmetic
+        if self.fpdtype == np.float64 and not self.has_double:
             raise ValueError('Device does not support double precision')
 
         # Set the device
@@ -59,13 +62,14 @@ class OpenCLBackend(BaseBackend):
         self.csubsz = self.soasz
 
         from pyfr.backends.opencl import (blasext, clblast, gimmik, packing,
-                                          provider, tinytc, types)
+                                          linalg, provider, tinytc, types)
 
         # Register our data types and meta kernels
         self.const_matrix_cls = types.OpenCLConstMatrix
         self.graph_cls = types.OpenCLGraph
         self.matrix_cls = types.OpenCLMatrix
         self.matrix_slice_cls = types.OpenCLMatrixSlice
+        self.tiled_matrix_cls = types.OpenCLTiledMatrix
         self.view_cls = types.OpenCLView
         self.xchg_matrix_cls = types.OpenCLXchgMatrix
         self.xchg_view_cls = types.OpenCLXchgView
@@ -75,6 +79,7 @@ class OpenCLBackend(BaseBackend):
         # Instantiate the base kernel providers
         kprovs = [provider.OpenCLPointwiseKernelProvider,
                   blasext.OpenCLBlasExtKernels,
+                  linalg.OpenCLLinalgKernels,
                   packing.OpenCLPackingKernels,
                   gimmik.OpenCLGiMMiKKernels]
         self._providers = [k(self) for k in kprovs]
@@ -94,8 +99,32 @@ class OpenCLBackend(BaseBackend):
         # Pointwise kernels
         self.pointwise = self._providers[0]
 
-        # Queues (in and out of order)
-        self.queue = self.cl.queue(out_of_order=True)
+        # Queues (out of order if possible, in order as fallback)
+        try:
+            self.queue = self.cl.queue(out_of_order=True)
+        except OpenCLError:
+            self.queue = self.cl.queue(out_of_order=False)
+
+        # Bounce buffer for device-to-host transfers
+        self._xfer_buf = None
+
+        if cfg.getbool('backend', 'annotate', False):
+            raise ValueError('Annotation is not supported by the '
+                             'OpenCL backend')
+
+    def xfer_buf(self, shape, dtype):
+        nbytes = np.prod(shape)*np.dtype(dtype).itemsize
+
+        # Reallocate if the current buffer is too small
+        if self._xfer_buf is None or self._xfer_buf.nbytes < nbytes:
+            self._xfer_buf = self.cl.pagelocked_empty((nbytes,), np.uint8)
+
+        # Return a view of the correct shape and dtype
+        return self._xfer_buf[:nbytes].view(dtype).reshape(shape)
+
+    @property
+    def platform_id(self):
+        return self.cl.dev.name
 
     def run_kernels(self, kernels, wait=False):
         # Submit the kernels to the command queue
@@ -119,11 +148,16 @@ class OpenCLBackend(BaseBackend):
     def wait(self):
         self.queue.finish()
 
+    def memory_info(self):
+        mi = super().memory_info()
+        total = self.cl.dev.global_mem_size
+        return mi._replace(free=total - mi.current, total=total)
+
     def _malloc_impl(self, nbytes):
         # Allocate the device buffer
         buf = self.cl.mem_alloc(nbytes)
 
         # Zero the buffer
-        self.cl.zero(buf, 0, nbytes)
+        self.cl.zero(buf, nbytes)
 
         return buf

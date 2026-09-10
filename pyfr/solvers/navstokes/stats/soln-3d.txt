@@ -1,0 +1,98 @@
+# Navier-Stokes instantaneous derived quantities, 3D
+
+# Dynamic viscosity
+derived mu
+    mu
+
+# Kinematic viscosity
+derived nu
+    mu/rho
+
+# Wall quantities from the traction; boundary exports only
+
+# Viscous traction t_i = μ (∂ui/∂xj + ∂uj/∂xi) nj
+derived-hidden trac_x
+    mu*(2*grad_u_x*norm_x + (grad_u_y + grad_v_x)*norm_y +
+    (grad_u_z + grad_w_x)*norm_z)
+
+# Viscous traction t_i = μ (∂ui/∂xj + ∂uj/∂xi) nj
+derived-hidden trac_y
+    mu*((grad_v_x + grad_u_y)*norm_x + 2*grad_v_y*norm_y +
+    (grad_v_z + grad_w_y)*norm_z)
+
+# Viscous traction t_i = μ (∂ui/∂xj + ∂uj/∂xi) nj
+derived-hidden trac_z
+    mu*((grad_w_x + grad_u_z)*norm_x + (grad_w_y + grad_v_z)*norm_y +
+    2*grad_w_z*norm_z)
+
+derived-hidden trac_n = trac_x*norm_x + trac_y*norm_y + trac_z*norm_z
+derived-hidden tt_x = trac_x - trac_n*norm_x
+derived-hidden tt_y = trac_y - trac_n*norm_y
+derived-hidden tt_z = trac_z - trac_n*norm_z
+
+# Magnitude of the tangential viscous traction
+derived tau-wall
+    sqrt(tt_x*tt_x + tt_y*tt_y + tt_z*tt_z)
+
+# Skin friction coefficient
+derived cf requires rho-inf u-inf
+    tau-wall/(0.5*rho-inf*u-inf*u-inf)
+
+# Friction velocity
+derived u-tau
+    sqrt(tau-wall/rho)
+
+# y+ of the first interior solution point
+derived yplus
+    boundary_dist*u-tau*rho/mu
+
+# Wall heat flux; positive into the wall
+derived q-wall
+    -((mu/Pr)*(grad_cpT_x*norm_x + grad_cpT_y*norm_y +
+    grad_cpT_z*norm_z))
+
+# Vorticity from the instantaneous velocity gradients
+derived vorticity-x = grad_w_y - grad_v_z
+derived vorticity-y = grad_u_z - grad_w_x
+derived vorticity-z = grad_v_x - grad_u_y
+
+# Velocity-gradient tensor invariants
+
+# Frobenius norm A^2 = A_ij A_ij
+derived-hidden agrad2
+    grad_u_x*grad_u_x + grad_u_y*grad_u_y + grad_u_z*grad_u_z +
+    grad_v_x*grad_v_x + grad_v_y*grad_v_y + grad_v_z*grad_v_z +
+    grad_w_x*grad_w_x + grad_w_y*grad_w_y + grad_w_z*grad_w_z
+
+# First invariant P = -a_kk
+derived invp
+    -(grad_u_x + grad_v_y + grad_w_z)
+
+# Second invariant Q = -A_ij A_ji / 2
+derived invq
+    -0.5*(grad_u_x*grad_u_x + grad_v_y*grad_v_y + grad_w_z*grad_w_z +
+    2*(grad_u_y*grad_v_x + grad_u_z*grad_w_x + grad_v_z*grad_w_y))
+
+# Third invariant R = -det(A)
+derived invr
+    -(grad_u_x*(grad_v_y*grad_w_z - grad_v_z*grad_w_y) -
+    grad_u_y*(grad_v_x*grad_w_z - grad_v_z*grad_w_x) +
+    grad_u_z*(grad_v_x*grad_w_y - grad_v_y*grad_w_x))
+
+# Normalised dilatation a_kk/A, bounded by sqrt(3) in 3D
+derived invpb = -invp/sqrt(agrad2)
+
+# Bounded second invariant q = Q/A^2, bounded by 1/2
+derived invqb = invq/agrad2
+
+# Bounded third invariant r = R/A^3, bounded by 1/(3*sqrt(3))
+derived invrb = invr/pow(agrad2, 1.5)
+
+# Teardrop discriminant; positive marks the focal topologies
+derived invdisc = 27*invr*invr/4 + invq*invq*invq
+
+# Enstrophy
+derived enst
+    (grad_w_y - grad_v_z)*(grad_w_y - grad_v_z) + (grad_u_z -
+    grad_w_x)*(grad_u_z - grad_w_x) + (grad_v_x - grad_u_y)*(grad_v_x -
+    grad_u_y)

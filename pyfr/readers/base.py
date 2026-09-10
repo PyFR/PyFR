@@ -6,9 +6,9 @@ import h5py
 import numpy as np
 
 from pyfr._version import __version__
-from pyfr.nputil import iter_struct, fuzzysort
+from pyfr.nputil import iter_struct, fuzzysort, range_offsets
 from pyfr.polys import get_polybasis
-from pyfr.progress import NullProgressSequence
+from pyfr.progress import NullProgressSequence, NullProgressSpinner
 from pyfr.shapes import BaseShape
 from pyfr.util import digest, first, subclass_where
 
@@ -55,7 +55,7 @@ class BaseReader:
         nnodes['location'] = nodes
 
         # Tally up the valencies
-        for etype, ele in eles.items():
+        for ele in eles.values():
             k, v = np.unique(ele['nodes'], return_counts=True)
             nnodes['valency'][k] += v.astype(np.uint16)
 
@@ -65,11 +65,11 @@ class BaseReader:
         pass
 
     def write(self, fname, lintol):
-        nodes, eles, codec, pmap = mesh = self._to_raw_mesh(lintol)
+        nodes, eles, codec, periodic = self._to_raw_mesh(lintol)
 
         # Compute the UUID
         with self.progress.start('Computing UUID'):
-            uuid = UUID(digest(mesh)[:32])
+            uuid = UUID(digest((nodes, eles, codec, periodic))[:32])
 
         # Write out the file
         with self.progress.start('Writing mesh'):
@@ -81,7 +81,7 @@ class BaseReader:
                 f['codec'] = np.array(codec, dtype='S')
                 f['creator'] = np.array(f'pyfr {__version__}', dtype='S')
                 f['mesh-uuid'] = np.array(str(uuid), dtype='S')
-                f['version'] = 1
+                f['version'] = 2
 
                 # Write out the nodes
                 f['nodes'] = self._get_nodes(nodes, eles)
@@ -96,8 +96,10 @@ class BaseReader:
                     f[f'eles/{etype}'].attrs['pts'] = shape.std_ele(order)
 
                 # Write out the periodic boundary information
-                for pname, pidx in pmap.items():
+                for pname, (pidx, R, T) in periodic.items():
                     f[f'periodic/{pname}'] = pidx
+                    f[f'periodic/{pname}'].attrs['R'] = R
+                    f[f'periodic/{pname}'].attrs['T'] = T
 
                 # Write out the partitioning
                 f['partitionings/1/eles'] = parts
@@ -123,10 +125,13 @@ class NodalMeshAssembler:
     _petype_focount = {'line': 2, 'tri': 3, 'quad': 4,
                        'tet': 4, 'pyr': 5, 'pri': 6, 'hex': 8}
 
-    def __init__(self, nodepts, elenodes, pents, maps):
+    def __init__(self, nodepts, elenodes, volpent, bfacespents, pfacespents,
+                 maps):
         self._nodepts = nodepts
         self._elenodes = elenodes
-        self._felespent, self._bfacespents, self._pfacespents = pents
+        self._volpent = volpent
+        self._bfacespents = bfacespents
+        self._pfacespents = pfacespents
         self._etype_map, self._petype_fnmap, self._nodemaps = maps
 
     def _check_pyr_parallelogram(self, foeles):
@@ -159,20 +164,21 @@ class NodalMeshAssembler:
 
         return foelemap
 
-    def _split_fluid(self, elemap):
+    def _split_volume(self, elemap):
         selemap = defaultdict(dict)
 
         for (petype, epent), eles in elemap.items():
             selemap[epent][petype] = eles
 
-        return selemap.pop(self._felespent), selemap
+        return selemap.pop(self._volpent), selemap
 
     def _foface_info(self, petype, pftype, codec, foeles):
         # Face numbers of faces of this type on this element
         fnums = np.array(self._petype_fnums[petype][pftype])
 
         # Lookup these faces in the codec
-        cidx = np.array([codec.index(f'eles/{petype}/{f}') for f in fnums])
+        fprefix = f'eles/{petype}/face/'
+        cidx = np.array([codec.index(f'{fprefix}{f}') for f in fnums])
 
         # First-order nodes associated with this face type
         fnmap = self._petype_fnmap[petype][pftype]
@@ -197,7 +203,7 @@ class NodalMeshAssembler:
         cconn = [None]*len(codec)
         for petype, einfo in eles.items():
             for i, fcon in enumerate(einfo['faces'].T):
-                cconn[codec.index(f'eles/{petype}/{i}')] = fcon
+                cconn[codec.index(f'eles/{petype}/face/{i}')] = fcon
 
         return cconn
 
@@ -211,13 +217,13 @@ class NodalMeshAssembler:
 
         return fofaces
 
-    def _pair_fluid_faces(self, ffofaces, codec, eles):
+    def _pair_volume_faces(self, vfofaces, codec, eles):
         # Map from codec numbers to per-element face connectivity arrays
         cconn = self._codec_conn(eles, codec)
 
         resid = {}
 
-        for pftype, faces in ffofaces.items():
+        for faces in vfofaces.values():
             for petype, (cidx, fidx, eidx), nodes in faces:
                 # Pair adjacent elements
                 padj = nodes[:-1] == nodes[1:]
@@ -256,8 +262,22 @@ class NodalMeshAssembler:
 
         return resid, cconn
 
-    def _pair_periodic_fluid_faces(self, bpart, cconn, resid):
-        pmap = {}
+    @staticmethod
+    def _pair_translational(lpts, rpts):
+        lfidx = fuzzysort(lpts.T, range(len(lpts)))
+        rfidx = fuzzysort(rpts.T, range(len(rpts)))
+
+        dT = rpts[rfidx] - lpts[lfidx]
+        T = dT.mean(axis=0)
+        if not np.allclose(dT, T):
+            raise ValueError('Periodic pairing is not a rigid translation')
+
+        # Pure translation: rotation/reflection block is the identity
+        R = np.eye(lpts.shape[1])
+        return lfidx, rfidx, R, T
+
+    def _pair_periodic_volume_faces(self, bpart, cconn, resid):
+        periodic = {}
         pdtype = [('cidx', np.int16), ('off', np.int64)]
 
         for k, (lpent, rpent) in self._pfacespents.items():
@@ -270,8 +290,9 @@ class NodalMeshAssembler:
                 lfpts = self._nodepts[lfnodes]
                 rfpts = self._nodepts[rfnodes]
 
-                lfidx = fuzzysort(lfpts.mean(axis=1).T, range(len(lfnodes)))
-                rfidx = fuzzysort(rfpts.mean(axis=1).T, range(len(rfnodes)))
+                lfidx, rfidx, R, T = self._pair_translational(
+                    lfpts.mean(axis=1), rfpts.mean(axis=1)
+                )
 
                 for lfn, rfn in zip(lfnodes[lfidx], rfnodes[rfidx]):
                     lf = lcidx, loff = resid.pop(tuple(sorted(lfn)))
@@ -282,9 +303,9 @@ class NodalMeshAssembler:
 
                     plist.append([lf, rf])
 
-            pmap[k] = np.array(plist, dtype=pdtype)
+            periodic[k] = (np.array(plist, dtype=pdtype), R, T)
 
-        return pmap
+        return periodic
 
     def _ident_boundary_faces(self, bpart, cconn, codec, resid):
         # Create a map from boundary entities to names
@@ -301,12 +322,65 @@ class NodalMeshAssembler:
 
                     cconn[lcidx][loff] = cidx, -1
 
+    @staticmethod
+    def compute_element_colouring(eles, codec, spinner=NullProgressSpinner()):
+        # Maximum number of colours
+        max_colours = max(ei['faces'].shape[-1] for ei in eles.values()) + 1
+
+        # Build element type displacements
+        edisps, disp = range_offsets(eles.items())
+
+        # Create a map from cidx element types to their displacements
+        cdisps = [None]*len(codec)
+        for etype, edisp in edisps.items():
+            efaces = eles[etype]['faces']
+            for i in range(efaces.shape[-1]):
+                cdisps[codec.index(f'eles/{etype}/face/{i}')] = edisp
+
+        spinner()
+
+        # Allocate the colours and counts arrays
+        colours, counts = [None]*disp, [0]*max_colours
+
+        # Iterate through element types
+        for etype, edata in eles.items():
+            einfo, edisp = edata['faces'], edisps[etype]
+
+            # Iterate through elements
+            for gidx, eface in enumerate(iter_struct(einfo), start=edisp):
+                avail = [True]*max_colours
+
+                # Iterate through faces and see what colours are taken
+                for cidx, off in eface:
+                    if off >= 0 and (ngidx := cdisps[cidx] + off) < gidx:
+                        avail[colours[ngidx]] = False
+
+                # Start by assigning the smallest available colour
+                colour = avail.index(True)
+                min_n = counts[colour]
+
+                # Then, see if we can find a less-used colour
+                for c, (a, n) in enumerate(zip(avail, counts)):
+                    if a and n and n < min_n:
+                        colour, min_n = c, n
+
+                # Assign the colour and update the counts
+                colours[gidx] = colour
+                counts[colour] += 1
+
+            spinner()
+
+        # Store colours back into element arrays
+        for etype in eles:
+            n = len(eles[etype])
+            eles[etype]['colour'] = colours[edisps[etype]:edisps[etype] + n]
+
     def get_eles(self, lintol, progress=NullProgressSequence()):
         eles, codec = {}, []
 
         with progress.start('Creating elements'):
             for etype, pent in sorted(self._elenodes):
-                if pent != self._felespent:
+                if pent != self._volpent:
                     continue
 
                 # Elements and type information
@@ -321,12 +395,13 @@ class NodalMeshAssembler:
                 codec.append(f'eles/{petype}')
 
                 # Add the face info to the codec
-                codec.extend(f'eles/{petype}/{i}' for i in range(nfaces))
+                codec.extend(f'eles/{petype}/face/{i}' for i in range(nfaces))
 
                 # Elements array data type
                 fdtype = [('cidx', np.int16), ('off', np.int64)]
                 edtype = [('nodes', np.int64, nnodes), ('curved', bool),
-                          ('faces', fdtype, nfaces)]
+                          ('faces', fdtype, nfaces), ('colour', np.uint8),
+                          ('tags', np.uint64)]
 
                 # Allocate the elements array
                 eles[petype] = einfo = np.empty(len(enodes), dtype=edtype)
@@ -339,33 +414,37 @@ class NodalMeshAssembler:
 
         # Add in connectivity information
         with progress.start_with_spinner('Connecting elements') as spinner:
-            pmap = self._connect_eles(eles, codec, spinner)
+            periodic = self._connect_eles(eles, codec, spinner)
+
+        # Compute element colouring
+        with progress.start_with_spinner('Colouring elements') as spinner:
+            self.compute_element_colouring(eles, codec, spinner)
 
         # Apply linearisation
         with progress.start_with_spinner('Linearising elements') as spinner:
             nodepts = self._linearise_eles(eles, lintol, spinner)
 
-        return nodepts, eles, codec, pmap
+        return nodepts, eles, codec, periodic
 
     def _connect_eles(self, eles, codec, spinner):
         # For connectivity a first-order representation is sufficient
         foeles = self._to_first_order(self._elenodes)
         spinner()
 
-        # Split into fluid and boundary parts
-        fpart, bpart = self._split_fluid(foeles)
+        # Split into volume and boundary parts
+        vpart, bpart = self._split_volume(foeles)
         spinner()
 
-        # Extract the faces of the first-order fluid elements
-        ffofaces = self._extract_faces(fpart, codec)
+        # Extract the faces of the first-order volume elements
+        vfofaces = self._extract_faces(vpart, codec)
         spinner()
 
-        # Pair the fluid-fluid faces
-        resid, cconn = self._pair_fluid_faces(ffofaces, codec, eles)
+        # Pair the volume-volume faces
+        resid, cconn = self._pair_volume_faces(vfofaces, codec, eles)
         spinner()
 
         # Tag and pair periodic boundary faces
-        pmap = self._pair_periodic_fluid_faces(bpart, cconn, resid)
+        periodic = self._pair_periodic_volume_faces(bpart, cconn, resid)
         spinner()
 
         # Identify the fixed boundary faces
@@ -375,7 +454,7 @@ class NodalMeshAssembler:
         if any(resid.values()):
             raise ValueError('Unpaired faces in mesh')
 
-        return pmap
+        return periodic
 
     def _linearise_eles(self, emap, lintol, spinner):
         # Create a copy of the node points
@@ -392,8 +471,8 @@ class NodalMeshAssembler:
             # Generate the associated polynomial bases
             shape = subclass_where(BaseShape, name=petype)
             order = shape.order_from_npts(nnodes)
-            hbasis = get_polybasis(petype, order + 1, shape.std_ele(order))
-            lbasis = get_polybasis(petype, 2, shape.std_ele(1))
+            hbasis = get_polybasis(petype, order, shape.std_ele(order))
+            lbasis = get_polybasis(petype, 1, shape.std_ele(1))
 
             htol = hbasis.nodal_basis_at(lbasis.pts)
             ltoh = lbasis.nodal_basis_at(hbasis.pts)

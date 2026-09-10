@@ -1,0 +1,317 @@
+# Euler statistics, 3D
+
+# Mean primitive fields
+field rho = rho
+field u = u
+field v = v
+field w = w
+field p = p
+
+set mean
+    rho u v w p
+
+# Wall-loading quantities from the mean field
+derived cp requires rho-inf u-inf p-inf
+    (p - p-inf)/(0.5*rho-inf*u-inf*u-inf)
+
+# Local Mach number of the mean field
+derived mach
+    sqrt((u*u + v*v + w*w)*rho/(gamma*p))
+
+# Isentropic Mach number from the mean surface pressure
+derived isen-mach requires p-total
+    sqrt((2/(gamma - 1))*(pow(p-total/p, (gamma - 1)/gamma) - 1))
+
+set loading
+    cp mach isen-mach
+
+# Second moments and centred fluctuation statistics
+field uu = u*u
+field uv = u*v
+field uw = u*w
+field vv = v*v
+field vw = v*w
+field ww = w*w
+field pp = p*p
+derived upup = max(uu - u*u, 0)
+derived vpvp = max(vv - v*v, 0)
+derived wpwp = max(ww - w*w, 0)
+derived urms = sqrt(max(uu - u*u, 0))
+derived vrms = sqrt(max(vv - v*v, 0))
+derived wrms = sqrt(max(ww - w*w, 0))
+derived prms = sqrt(max(pp - p*p, 0))
+derived upvp = uv - u*v
+derived upwp = uw - u*w
+derived vpwp = vw - v*w
+
+set moments-2-u
+    upup urms
+
+set moments-2-v
+    vpvp vrms
+
+set moments-2-w
+    wpwp wrms
+
+set moments-2-p
+    prms
+
+set moments-2-uv
+    upvp
+
+set moments-2-uw
+    upwp
+
+set moments-2-vw
+    vpwp
+
+set moments-2
+    moments-2-u moments-2-v moments-2-w moments-2-p moments-2-uv
+    moments-2-uw moments-2-vw
+
+# Third and fourth moments; skewness and flatness
+field uuu = u*u*u
+field vvv = v*v*v
+field www = w*w*w
+field ppp = p*p*p
+field uuuu = u*u*u*u
+field vvvv = v*v*v*v
+field wwww = w*w*w*w
+field pppp = p*p*p*p
+derived skew-u = (uuu - 3*u*uu + 2*u*u*u)/pow(max(uu - u*u, 0), 1.5)
+derived skew-v = (vvv - 3*v*vv + 2*v*v*v)/pow(max(vv - v*v, 0), 1.5)
+derived skew-w = (www - 3*w*ww + 2*w*w*w)/pow(max(ww - w*w, 0), 1.5)
+derived skew-p = (ppp - 3*p*pp + 2*p*p*p)/pow(max(pp - p*p, 0), 1.5)
+
+derived flat-u
+    (uuuu - 4*u*uuu + 6*u*u*uu - 3*u*u*u*u)/pow(max(uu - u*u, 0), 2)
+
+derived flat-v
+    (vvvv - 4*v*vvv + 6*v*v*vv - 3*v*v*v*v)/pow(max(vv - v*v, 0), 2)
+
+derived flat-w
+    (wwww - 4*w*www + 6*w*w*ww - 3*w*w*w*w)/pow(max(ww - w*w, 0), 2)
+
+derived flat-p
+    (pppp - 4*p*ppp + 6*p*p*pp - 3*p*p*p*p)/pow(max(pp - p*p, 0), 2)
+
+set moments-3-u
+    moments-2-u skew-u
+
+set moments-4-u
+    moments-3-u flat-u
+
+set moments-3-v
+    moments-2-v skew-v
+
+set moments-4-v
+    moments-3-v flat-v
+
+set moments-3-w
+    moments-2-w skew-w
+
+set moments-4-w
+    moments-3-w flat-w
+
+set moments-3-p
+    moments-2-p skew-p
+
+set moments-4-p
+    moments-3-p flat-p
+
+set moments-3
+    moments-2 moments-3-u moments-3-v moments-3-w moments-3-p
+
+set moments-4
+    moments-3 moments-4-u moments-4-v moments-4-w moments-4-p
+
+# Turbulent kinetic energy
+derived tke = 0.5*(max(uu - u*u, 0) + max(vv - v*v, 0) + max(ww - w*w, 0))
+
+set tke
+    tke
+
+# Anisotropy tensor and its invariants
+
+# b_ij = ⟨ui'uj'⟩/(2k) - δij/3
+derived buu
+    max(uu - u*u, 0)/(2*tke) - 1/3
+
+# b_ij = ⟨ui'uj'⟩/(2k) - δij/3
+derived buv
+    (uv - u*v)/(2*tke)
+
+# b_ij = ⟨ui'uj'⟩/(2k) - δij/3
+derived buw
+    (uw - u*w)/(2*tke)
+
+# b_ij = ⟨ui'uj'⟩/(2k) - δij/3
+derived bvv
+    max(vv - v*v, 0)/(2*tke) - 1/3
+
+# b_ij = ⟨ui'uj'⟩/(2k) - δij/3
+derived bvw
+    (vw - v*w)/(2*tke)
+
+# b_ij = ⟨ui'uj'⟩/(2k) - δij/3
+derived bww
+    max(ww - w*w, 0)/(2*tke) - 1/3
+
+# Second invariant II = b_ij b_ij
+derived aniso-ii
+    buu*buu + bvv*bvv + bww*bww + 2*(buv*buv + buw*buw + bvw*bvw)
+
+# Third invariant III = 3 det(b)
+derived aniso-iii
+    3*(buu*(bvv*bww - bvw*bvw) - buv*(buv*bww - bvw*buw) +
+    buw*(buv*bvw - bvv*buw))
+
+# Lumley triangle coordinate; 6ξ³ = III
+derived lumley-xi
+    cbrt(aniso-iii/6)
+
+# Lumley triangle coordinate; 6η² = II
+derived lumley-eta
+    sqrt(aniso-ii/6)
+
+set tke-anisotropy
+    tke buu buv buw bvv bvw bww aniso-ii aniso-iii lumley-xi lumley-eta
+
+# Acoustic intensity and energy density
+field pu = p*u
+field pv = p*v
+field pw = p*w
+
+# Acoustic intensity ⟨p'u'⟩
+derived iac-x
+    pu - p*u
+
+# Acoustic intensity ⟨p'v'⟩
+derived iac-y
+    pv - p*v
+
+# Acoustic intensity ⟨p'w'⟩
+derived iac-z
+    pw - p*w
+
+# Acoustic intensity magnitude
+derived iac
+    sqrt(iac-x*iac-x + iac-y*iac-y + iac-z*iac-z)
+
+# Acoustic energy density; c² = γp/ρ
+derived eac
+    (max(pp - p*p, 0))/(2*gamma*p) + 0.5*rho*(max(uu - u*u, 0) +
+    max(vv - v*v, 0) + max(ww - w*w, 0))
+
+set acoustic
+    iac-x iac-y iac-z iac eac
+
+# Temperature statistics and turbulent heat fluxes
+field T requires cpTw = T
+field TT requires cpTw = T*T
+field Tu requires cpTw = T*u
+field Tv requires cpTw = T*v
+field Tw requires cpTw = T*w
+derived Trms = sqrt(max(TT - T*T, 0))
+derived upTp = Tu - u*T
+derived vpTp = Tv - v*T
+derived wpTp = Tw - w*T
+
+set heat-flux
+    Trms upTp vpTp wpTp
+
+# Density-weighted moments for Favre statistics
+field ru = rho*u
+field rv = rho*v
+field rw = rho*w
+field ruu = rho*u*u
+field ruv = rho*u*v
+field ruw = rho*u*w
+field rvv = rho*v*v
+field rvw = rho*v*w
+field rww = rho*w*w
+# Favre means and turbulent mass fluxes
+
+# Favre mean u = ⟨ρu⟩/⟨ρ⟩
+derived fu
+    ru/rho
+
+# Turbulent mass flux ⟨ρ'u'⟩
+derived mfu
+    ru - rho*u
+
+# Favre mean v = ⟨ρv⟩/⟨ρ⟩
+derived fv
+    rv/rho
+
+# Turbulent mass flux ⟨ρ'v'⟩
+derived mfv
+    rv - rho*v
+
+# Favre mean w = ⟨ρw⟩/⟨ρ⟩
+derived fw
+    rw/rho
+
+# Turbulent mass flux ⟨ρ'w'⟩
+derived mfw
+    rw - rho*w
+
+set favre
+    fu fv fw mfu mfv mfw
+
+# Favre stresses and turbulent kinetic energy
+
+# R_ij = ⟨ρ ui''uj''⟩/⟨ρ⟩
+derived fupup
+    max(ruu/rho - (ru/rho)*(ru/rho), 0)
+
+# R_ij = ⟨ρ ui''uj''⟩/⟨ρ⟩
+derived fupvp
+    ruv/rho - (ru/rho)*(rv/rho)
+
+# R_ij = ⟨ρ ui''uj''⟩/⟨ρ⟩
+derived fupwp
+    ruw/rho - (ru/rho)*(rw/rho)
+
+# R_ij = ⟨ρ ui''uj''⟩/⟨ρ⟩
+derived fvpvp
+    max(rvv/rho - (rv/rho)*(rv/rho), 0)
+
+# R_ij = ⟨ρ ui''uj''⟩/⟨ρ⟩
+derived fvpwp
+    rvw/rho - (rv/rho)*(rw/rho)
+
+# R_ij = ⟨ρ ui''uj''⟩/⟨ρ⟩
+derived fwpwp
+    max(rww/rho - (rw/rho)*(rw/rho), 0)
+
+derived ftke
+    0.5*(max(ruu/rho - (ru/rho)*(ru/rho), 0) + max(rvv/rho -
+    (rv/rho)*(rv/rho), 0) + max(rww/rho - (rw/rho)*(rw/rho), 0))
+
+set favre-2
+    favre fupup fupvp fupwp fvpvp fvpwp fwpwp ftke
+
+# Favre temperature statistics and heat fluxes
+field rT requires cpTw = rho*T
+field rTT requires cpTw = rho*T*T
+field rTu requires cpTw = rho*T*u
+field rTv requires cpTw = rho*T*v
+field rTw requires cpTw = rho*T*w
+derived fT = rT/rho
+derived fTrms = sqrt(max(rTT/rho - (rT/rho)*(rT/rho), 0))
+
+# Favre heat flux ⟨ρ ui''T''⟩/⟨ρ⟩
+derived fupTp
+    rTu/rho - (rT/rho)*(ru/rho)
+
+# Favre heat flux ⟨ρ ui''T''⟩/⟨ρ⟩
+derived fvpTp
+    rTv/rho - (rT/rho)*(rv/rho)
+
+# Favre heat flux ⟨ρ ui''T''⟩/⟨ρ⟩
+derived fwpTp
+    rTw/rho - (rT/rho)*(rw/rho)
+
+set favre-heat-flux
+    favre fT fTrms fupTp fvpTp fwpTp

@@ -125,11 +125,15 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
 
         # Build
         batch_gemm = self._build_kernel(
-            'batch_gemm', src, [np.uintp]*3 + [np.uintp, ixdtype]*2,
-            ['exec', 'blkptr', 'blkptr_nt', 'b', 'bsz', 'out', 'outsz']
+            'batch_gemm', src, [np.uintp]*3 + [np.uintp, ixdtype]*2
         )
         batch_gemm.set_args(self._exec_ptr, blkptr, blkptr_nt, b, b.blocksz,
                             out, out.blocksz)
         batch_gemm.set_nblocks(b.nblocks)
 
-        return OpenMPKernel(mats=[a, b, out], misc=[self], kernel=batch_gemm)
+        # Expose the operand matrices as named arguments
+        args = {'b': (3, ('m', [np.uintp]), b),
+                'out': (5, ('m', [np.uintp]), out)}
+
+        return OpenMPKernel(args=args, mats=[a], misc=[self],
+                            kernel=batch_gemm)

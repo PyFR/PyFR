@@ -44,9 +44,16 @@ def memoize(origfn=None, maxsize=None):
             res = cache[key] = meth(self, *args, **kwargs)
             return res
 
+        newmeth.clear = lambda self: vars(self).pop(cattr, None)
         return newmeth
 
     return memoizefn(origfn) if origfn else memoizefn
+
+
+def clear_memoize(obj):
+    for k in list(vars(obj)):
+        if k.startswith('_memoize_cache@'):
+            delattr(obj, k)
 
 
 class ObjectCache:

@@ -1,5 +1,7 @@
 import re
 
+import numpy as np
+
 from pyfr.backends.base import BaseBackend
 from pyfr.mpiutil import get_local_rank
 
@@ -57,14 +59,15 @@ class HIPBackend(BaseBackend):
         if self.mpitype not in {'standard', 'hip-aware'}:
             raise ValueError('Invalid HIP backend MPI type')
 
-        from pyfr.backends.hip import (blasext, gimmik, packing, provider,
-                                       rocblas, types)
+        from pyfr.backends.hip import (blasext, gimmik, packing, linalg,
+                                       provider, rocblas, types)
 
         # Register our data types and meta kernels
         self.const_matrix_cls = types.HIPConstMatrix
         self.graph_cls = types.HIPGraph
         self.matrix_cls = types.HIPMatrix
         self.matrix_slice_cls = types.HIPMatrixSlice
+        self.tiled_matrix_cls = types.HIPTiledMatrix
         self.view_cls = types.HIPView
         self.xchg_matrix_cls = types.HIPXchgMatrix
         self.xchg_view_cls = types.HIPXchgView
@@ -74,6 +77,7 @@ class HIPBackend(BaseBackend):
         # Instantiate the base kernel providers
         kprovs = [provider.HIPPointwiseKernelProvider,
                   blasext.HIPBlasExtKernels,
+                  linalg.HIPLinalgKernels,
                   packing.HIPPackingKernels,
                   gimmik.HIPGiMMiKKernels,
                   rocblas.HIPRocBLASKernels]
@@ -84,6 +88,27 @@ class HIPBackend(BaseBackend):
 
         # Create a stream to run kernels on
         self._stream = self.hip.create_stream()
+
+        if cfg.getbool('backend', 'annotate', False):
+            from pyfr.backends.hip.roctx import ROCTXAnnotator
+            self._annotator = ROCTXAnnotator()
+
+        # Bounce buffer for device-to-host transfers
+        self._xfer_buf = None
+
+    def xfer_buf(self, shape, dtype):
+        nbytes = np.prod(shape)*np.dtype(dtype).itemsize
+
+        # Reallocate if the current buffer is too small
+        if self._xfer_buf is None or self._xfer_buf.nbytes < nbytes:
+            self._xfer_buf = self.hip.pagelocked_empty((nbytes,), np.uint8)
+
+        # Return a view of the correct shape and dtype
+        return self._xfer_buf[:nbytes].view(dtype).reshape(shape)
+
+    @property
+    def platform_id(self):
+        return self.props['name']
 
     def run_kernels(self, kernels, wait=False):
         # Submit the kernels to the HIP stream
@@ -102,6 +127,11 @@ class HIPBackend(BaseBackend):
     def wait(self):
         self._stream.synchronize()
 
+    def memory_info(self):
+        mi = super().memory_info()
+        free, total = self.hip.mem_info()
+        return mi._replace(free=free, total=total)
+
     def _malloc_impl(self, nbytes):
         # Allocate
         data = self.hip.mem_alloc(nbytes)
@@ -110,3 +140,12 @@ class HIPBackend(BaseBackend):
         self.hip.memset(data, 0, nbytes)
 
         return data
+
+    def optimal_tile_shape(self, block_size, dtype):
+        tcols = 16 if np.dtype(dtype).itemsize == 2 else 8
+
+        # large blocks: wavefront-tall tile coalesces apply reads; else square
+        if block_size >= 256:
+            return (self.props['warp_size'], tcols)
+        else:
+            return (tcols, tcols)

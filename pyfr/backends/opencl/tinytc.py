@@ -130,9 +130,6 @@ class OpenCLTinyTCKernels(OpenCLKernelProvider):
             try:
                 dt = self._mul_timing[ckey]
             except KeyError:
-                # Save a copy of the contents of the output matrix
-                out_np = getattr(out, 'parent', out).get()
-
                 def gemm(queue):
                     evt_ptr = c_void_p()
 
@@ -142,10 +139,8 @@ class OpenCLTinyTCKernels(OpenCLKernelProvider):
                     return cl.event(evt_ptr)
 
                 # Benchmark the kernel and update the cache
-                self._mul_timing[ckey] = dt = self._benchmark(gemm)
-
-                # Restore the output matrix
-                getattr(out, 'parent', out).set(out_np)
+                with self._bench_data(save=[out], rand=[b]):
+                    self._mul_timing[ckey] = dt = self._benchmark(gemm)
         except:
             w.tinytc_recipe_handler_release(handler)
             raise

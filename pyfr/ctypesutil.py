@@ -9,28 +9,38 @@ class LibWrapper:
     _libname = None
     _statuses = None
     _status_noerr = 0
-    _functions = None
+    _functions = []
+    _weak_functions = []
     _errtype = ctypes.c_int
     _mode = ctypes.DEFAULT_MODE
 
     def __init__(self):
-        self._lib = lib = self._load_library()
+        self._lib = self._load_library()
 
         for fret, fname, *fargs in self._functions:
-            fn = getattr(lib, fname)
-            fn.restype = fret
-            fn.argtypes = fargs
+            self._wrap_function(fname, fret, fargs)
 
-            if fret == self._errtype:
-                fn.errcheck = self._errcheck
-
-            setattr(self, self._transname(fname), fn)
+        for fret, fname, *fargs in self._weak_functions:
+            try:
+                self._wrap_function(fname, fret, fargs)
+            except AttributeError:
+                pass
 
     def _load_library(self):
         return load_library(self._libname, self._mode)
 
     def _transname(self, fname):
         return fname
+
+    def _wrap_function(self, fname, fret, fargs):
+        fn = getattr(self._lib, fname)
+        fn.restype = fret
+        fn.argtypes = fargs
+
+        if self._statuses is not None and fret == self._errtype:
+            fn.errcheck = self._errcheck
+
+        setattr(self, self._transname(fname), fn)
 
     def _errcheck(self, status, fn, args):
         if status != self._status_noerr:

@@ -8,7 +8,7 @@ from pyfr.partitioners.base import BasePartitioner
 from pyfr.progress import NullProgressSequence
 
 
-def reconstruct_partitioning(mesh, soln, progress=NullProgressSequence):
+def reconstruct_partitioning(mesh, soln, progress=NullProgressSequence()):
     if mesh['mesh-uuid'][()] != soln['mesh-uuid'][()]:
         raise ValueError('Invalid solution for mesh')
 
@@ -36,7 +36,7 @@ def reconstruct_partitioning(mesh, soln, progress=NullProgressSequence):
 
     # Construct the global connectivity array
     with progress.start('Construct global connectivity array'):
-        con, ecurved, edisps, _ = BasePartitioner.construct_global_con(mesh)
+        con, ecurved, _, edisps, _ = BasePartitioner.construct_global_con(mesh)
 
     # Ensure that the solution has not been subset
     if len(vparts) != len(ecurved):

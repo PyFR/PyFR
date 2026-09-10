@@ -1,0 +1,168 @@
+from pyfr.inifile import Inifile
+from pyfr.mpiutil import get_comm_rank_root
+from pyfr.plugins.mixins import PostactionMixin, RegionMixin
+from pyfr.plugins.soln.base import BaseSolnPlugin
+from pyfr.writers.native import NativeWriter
+from pyfr.util import first
+
+
+class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
+    name = 'writer'
+    systems = '.*'
+    dimensions = '2|3'
+
+    def __init__(self, intg, cfgsect, suffix=None):
+        super().__init__(intg, cfgsect, suffix)
+
+        # Base output directory and file name
+        basedir = self.cfg.getpath(cfgsect, 'basedir', '.', abs=True)
+        basename = self.cfg.get(cfgsect, 'basename')
+
+        # Get the element map and region data
+        emap, erdata = intg.system.ele_map, self._ele_region_data
+
+        # Decide if gradients should be written or not
+        self._write_grads = self.cfg.getbool(cfgsect, 'write-gradients', False)
+
+        if self._write_grads and not intg.system.elementscls.has_grad_soln:
+            raise ValueError('Gradients are not defined for this system')
+
+        # Decide if the residual du/dt should be written or not
+        self._write_resid = self.cfg.getbool(cfgsect, 'write-resid', False)
+
+        # Output field names
+        self.fields = list(first(emap.values()).convars)
+
+        # Build the field groups for the nested dtype
+        field_groups = {'soln': list(self.fields)}
+        if self._write_grads:
+            field_groups['grad'] = list(self.fields)
+        if self._write_resid:
+            field_groups['resid'] = list(self.fields)
+
+        # Extract auxiliary field info and getters from elements
+        self._aux_fields, self._aux_getters = {}, {}
+        for etype, eles in emap.items():
+            if eles.export_fields:
+                self._aux_fields[etype] = [(ef.name, ef.shape, ef.dtype)
+                                           for ef in eles.export_fields]
+                if etype in erdata:
+                    self._aux_getters[etype] = [(ef.name, ef.getter)
+                                                for ef in eles.export_fields]
+
+        # Figure out the shape of each element type in our region
+        ershapes = {etype: (self.nvars, emap[etype].nupts) for etype in erdata}
+
+        # Construct the solution writer
+        self._writer = NativeWriter.from_integrator(intg, basedir, basename,
+                                                    'soln')
+        self._writer.set_shapes_eidxs(ershapes, erdata, field_groups,
+                                      self._aux_fields)
+
+        # Asynchronous output options
+        self._async_timeout = self.cfg.getfloat(cfgsect, 'async-timeout', 60)
+
+        # Output data type
+        self.fpdtype = intg.backend.fpdtype
+
+        # Trigger-only mode: no dt-out when gated by a trigger
+        self._trigger_only = (self.trigger is not None and
+                              self.trigger_action == 'gate' and
+                              not self.cfg.hasopt(cfgsect, 'dt-out'))
+
+        if self._trigger_only:
+            self.dt_out = None
+            self.tout_last = None
+        else:
+            # Output time step and last output time
+            self.dt_out = self.cfg.getfloat(cfgsect, 'dt-out')
+            self.tout_last = intg.tcurr
+
+            # Register our output times with the integrator
+            intg.call_plugin_dt(intg.tcurr, self.dt_out)
+
+            # If we're not restarting then make sure we write out the
+            # initial solution when we are called for the first time
+            if not intg.isrestart:
+                self.tout_last -= self.dt_out
+
+    def _prepare_metadata(self, intg):
+        comm, rank, root = get_comm_rank_root()
+
+        stats = Inifile()
+        stats.set('data', 'prefix', 'soln')
+        intg.collect_stats(stats)
+
+        # If we are the root rank then prepare the metadata
+        if rank == root:
+            metadata = {**intg.cfgmeta, 'stats': stats.tostr(),
+                        'mesh-uuid': intg.mesh_uuid}
+        else:
+            metadata = None
+
+        # Fetch serialised data from plugins and other components to add to metadata
+        sdata = intg.serialiser.serialise()
+        if rank == root:
+            metadata |= sdata
+
+        return metadata
+
+    def _prepare_data(self, intg):
+        data, aux = {}, {}
+
+        soln = intg.soln
+        grad_soln = intg.grad_soln if self._write_grads else None
+        dt_soln = intg.dt_soln if self._write_resid else None
+
+        for idx, etype, rgn in self._ele_regions:
+            # Solution data (neles, nvars, nupts)
+            d = {'soln': soln[idx][..., rgn].T.astype(self.fpdtype)}
+
+            # Gradient data (neles, nvars, ndims, nupts)
+            if self._write_grads:
+                g = grad_soln[idx][..., rgn].transpose(3, 2, 0, 1)
+                d['grad'] = g.astype(self.fpdtype)
+
+            # Residual data (neles, nvars, nupts)
+            if self._write_resid:
+                d['resid'] = dt_soln[idx][..., rgn].T.astype(self.fpdtype)
+
+            data[etype] = d
+
+            # Extract auxiliary field data
+            if etype in self._aux_getters:
+                aux[etype] = {name: getter()[rgn]
+                              for name, getter in self._aux_getters[etype]}
+
+        return data, aux
+
+    def _do_write(self, intg):
+        data, aux = self._prepare_data(intg)
+        metadata = self._prepare_metadata(intg)
+
+        # Prepare a callback to kick off any postactions
+        callback = lambda fname, t=intg.tcurr: self._invoke_postaction(
+                intg=intg, mesh=intg.system.mesh.fname, soln=fname, t=t
+        )
+
+        self._writer.write(data, intg.tcurr, metadata, self._async_timeout,
+                           callback, aux)
+
+    def __call__(self, intg):
+        self._writer.probe()
+
+        if self._trigger_only:
+            self._do_write(intg)
+        elif intg.tcurr - self.tout_last < self.dt_out - self.tol:
+            return
+        else:
+            self._do_write(intg)
+            self.tout_last = intg.tcurr
+
+    def trigger_write(self, intg):
+        self._do_write(intg)
+
+    def finalise(self, intg):
+        self._writer.flush()
+
+        super().finalise(intg)

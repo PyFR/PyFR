@@ -4,9 +4,8 @@ import os
 from pathlib import Path
 import platform
 import shlex
+from subprocess import PIPE, STDOUT, run
 import tempfile
-
-from pytools.prefork import call_capture_output
 
 from pyfr.cache import ObjectCache
 from pyfr.ctypesutil import platform_libname
@@ -18,7 +17,7 @@ class OpenMPCompiler:
 
     def __init__(self, cfg):
         # Find GCC (or a compatible alternative)
-        self.cc = cfg.getpath('backend-openmp', 'cc', 'cc')
+        self.cc = str(cfg.getpath('backend-openmp', 'cc', 'cc'))
 
         # User specified compiler flags
         self.cflags = shlex.split(cfg.get('backend-openmp', 'cflags', ''))
@@ -27,7 +26,10 @@ class OpenMPCompiler:
         self.proc = platform.processor()
 
         # Get the compiler version string
-        self.version = call_capture_output([self.cc, '-v'])[1]
+        self.version = run([self.cc, '-v'], stdout=PIPE, stderr=STDOUT).stdout
+
+        # Auto-detect the architecture-specific tuning flag
+        self.marchflag = self.cc_option(['-march=native', '-mcpu=native'])
 
         # Get the base compiler command string
         self.cmd = self.cc_cmd(None, None)
@@ -35,7 +37,7 @@ class OpenMPCompiler:
         # Get the cache
         self.cache = ObjectCache('omp')
 
-    def build(self, src):
+    def build(self, src, *, fast_math=True):
         # Compute a digest of the current processor, compiler, and source
         ckey = digest(self.proc, self.version, self.cmd, src)
 
@@ -56,7 +58,8 @@ class OpenMPCompiler:
                 (tmpdir / cname).write_bytes(src.encode())
 
                 # Invoke the compiler
-                call_capture_output(self.cc_cmd(cname, lname), cwd=tmpdir)
+                run(self.cc_cmd(cname, lname, fast_math=fast_math),
+                    cwd=tmpdir, check=True)
 
                 # Add it to the cache and load it
                 mod = self._cache_set_and_loadlib(ckey, tmpdir / lname)
@@ -67,21 +70,48 @@ class OpenMPCompiler:
 
         return OpenMPCompilerModule(mod)
 
-    def cc_cmd(self, srcname, libname):
+    def cc_cmd(self, srcname, libname, *, fast_math=True):
         cmd = [
             self.cc,                # Compiler name
             '-shared',              # Create a shared library
             '-std=c11',             # Enable C11 support
-            '-Ofast',               # Optimise, incl. -ffast-math
-            '-march=native',        # Use CPU-specific instructions
+            '-O3',                  # Optimise
             '-fopenmp',             # Enable OpenMP support
             '-fPIC',                # Generate position-independent code
             '-o', libname, srcname, # Library and source file names
             '-lm'                   # Link against libm
         ]
 
+        # Use CPU-specific instructions where available
+        if self.marchflag:
+            cmd.append(self.marchflag)
+
+        if fast_math:
+            cmd.append('-ffast-math')
+
         # Append any user-provided arguments and return
         return cmd + self.cflags
+
+    def cc_option(self, opts):
+        with tempfile.TemporaryDirectory() as tdir:
+            # Write out a dummy C program
+            sp = Path(tdir, 'probe.c')
+            sp.write_text('int main() { return 0; }\n')
+
+            # Base compiler argments
+            args = [self.cc, '-Werror', '-c', str(sp), '-o', os.devnull]
+
+            # Iterate over the provided options
+            for opt in opts:
+                # Attempt to compile the program
+                ret = run(args + [opt], capture_output=True)
+
+                # If status is 0 and stdout/stderr are empty then return
+                if not (ret.returncode or ret.stdout or ret.stderr):
+                    return opt
+
+        # All options failed
+        return None
 
     def _cache_loadlib(self, ckey):
         if path := self.cache.get_path(platform_libname(ckey)):

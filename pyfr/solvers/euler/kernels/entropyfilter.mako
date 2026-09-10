@@ -87,11 +87,13 @@
 <%pyfr:kernel name='entropyfilter' ndim='1'
               u='inout fpdtype_t[${str(nupts)}][${str(nvars)}]'
               entmin_int='inout fpdtype_t[${str(nfaces)}]'
+              ef_filter='out fpdtype_t[1]'
               vdm='in broadcast fpdtype_t[${str(nefpts)}][${str(nupts)}]'
               invvdm='in broadcast fpdtype_t[${str(nupts)}][${str(nupts)}]'
               m0='in broadcast fpdtype_t[${str(nfpts)}][${str(nupts)}]'
               mean_wts='in fpdtype_t[${str(nupts)}]'>
     fpdtype_t dmin, pmin, emin;
+    fpdtype_t f = 1.0;
 
     // Compute minimum entropy from current and adjacent elements
     fpdtype_t entmin = ${fpdtype_max};
@@ -100,7 +102,7 @@
     // Check if solution is within bounds
     ${pyfr.expand('get_minima', 'u', 'm0', 'dmin', 'pmin', 'emin')};
 
-    // Compute mean quantities
+    // Compute mean quantities using per-element weights
     fpdtype_t uavg[${nvars}];
     % for vidx in range(nvars):
     uavg[${vidx}] = ${pyfr.dot('mean_wts[{k}]', f'u[{{k}}][{vidx}]', k=nupts)};
@@ -121,7 +123,6 @@
         }
 
         // Setup filter (solve for f = exp(-zeta))
-        fpdtype_t f = 1.0;
         fpdtype_t f_low, f_high, fnew;
 
         fpdtype_t d, p, e;
@@ -186,7 +187,7 @@
     }
     % endif
 
-    // Apply linearised limiting (also needed for non-linear formulation to account for mass defect correction)
+    // Apply linearised limiting
     if (dmin < ${d_min} || pmin < ${p_min} || emin < entmin - ${e_tol})
     {
         fpdtype_t davg, pavg, eavg;
@@ -195,10 +196,11 @@
         // Apply density, pressure, and entropy limiting sequentially
         fpdtype_t alpha;
         % for (fvar, bound) in [('d', d_min), ('p', p_min), ('e', f'entmin - {e_tol}')]:
-        if (${fvar}min < ${bound}) 
+        if (${fvar}min < ${bound})
         {
             alpha = (${fvar}min - (${bound}))/(${fvar}min - ${fvar}avg);
             alpha = fmin(fmax(alpha, 0.0), 1.0);
+            f = fmin(f, 1.0 - alpha);
 
             % for uidx, vidx in pyfr.ndrange(nupts, 1 if fvar == 'd' else nvars):
             u[${uidx}][${vidx}] += alpha*(uavg[${vidx}] - u[${uidx}][${vidx}]);
@@ -213,4 +215,7 @@
 % for fidx in range(nfaces):
     entmin_int[${fidx}] = emin;
 % endfor
+
+    // Output the filter strength
+    ef_filter[0] = f;
 </%pyfr:kernel>

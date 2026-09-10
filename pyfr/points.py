@@ -1,7 +1,8 @@
 from collections import defaultdict
+from functools import partial
 
+from boostree import RTree
 import numpy as np
-from rtree.index import Index, Property
 
 from pyfr.cache import memoize
 from pyfr.mpiutil import autofree, get_comm_rank_root, get_start_end_csize, mpi
@@ -15,28 +16,35 @@ class PointLocator:
         self.mesh = mesh
         self.fine_order = fine_order
 
+        self.dtype = np.dtype([('dist', float), ('cidx', np.int16),
+                               ('eidx', np.int64), ('rank', np.int32),
+                               ('tloc', float, mesh.ndims)])
+
     def _reduce_elocs(self, npts, elocator):
-        comm, rank, root = get_comm_rank_root()
+        comm, rank, _ = get_comm_rank_root()
 
         # Allocate the location buffer
-        dtype = [('dist', float), ('cidx', np.int16), ('eidx', np.int64),
-                 ('tloc', float, self.mesh.ndims)]
-        locs = np.zeros(npts, dtype=dtype)
+        locs = np.zeros(npts, dtype=self.dtype)
         locs['dist'] = np.inf
+        locs['rank'] = rank
 
         # Reduce over each of our element types
-        for etype, eidxs in self.mesh.eidxs.items():
+        for etype in self.mesh.eidxs:
             cidx = self.mesh.codec.index(f'eles/{etype}')
+            pi, di, gi, tl = elocator(etype)
+            if not len(pi):
+                continue
 
-            for i, (dist, eidx, tloc) in elocator(etype).items():
-                l = locs[i]
+            # Build new candidate records and compare
+            new = locs[pi]
+            new['dist'], new['cidx'] = di, cidx
+            new['eidx'], new['tloc'] = gi, tl
 
-                if dist < l['dist']:
-                    l['dist'], l['tloc'] = dist, tloc
-                    l['cidx'], l['eidx'] = cidx, eidxs[eidx]
+            if (m := self._minloc_mask(new, locs[pi], ndim=3)).any():
+                locs[pi[m]] = new[m]
 
         # Reduce over all ranks
-        self._minloc(comm.Allreduce, mpi.IN_PLACE, locs, ndim=3)
+        self._minloc(comm.Allreduce, mpi.IN_PLACE, locs, ndim=4)
 
         return locs
 
@@ -73,47 +81,87 @@ class PointLocator:
 
         return locs
 
+    def locate_disjoint(self, pts):
+        comm, rank, _ = get_comm_rank_root()
+
+        # Determine how many points each rank has to locate
+        npts = np.empty(comm.size, dtype=int)
+        npts[rank] = len(pts)
+        comm.Allgather(mpi.IN_PLACE, npts)
+
+        # Iterate through each rank with points
+        result = np.empty(0, dtype=self.dtype)
+        for r in np.flatnonzero(npts):
+            # Broadcast the points from rank r
+            if rank == r:
+                buf = np.ascontiguousarray(pts, dtype=float)
+            else:
+                buf = np.empty((npts[r], self.mesh.ndims), dtype=float)
+            comm.Bcast(buf, root=r)
+
+            # Perform the location
+            locs = self.locate(buf)
+
+            if rank == r:
+                result = locs
+
+        return result
+
     @memoize
     def _get_shape_basis(self, etype, nspts):
         shape = subclass_where(BaseShape, name=etype)
         order = shape.order_from_npts(nspts)
-        basis = get_polybasis(etype, order + 1, shape.std_ele(order))
 
-        return shape, basis
+        hpts = shape.std_ele(order)
+        lpts = shape.std_ele(1)
 
-    def _minloc(self, coll, x, y, ndim=None):
-        dtype = y.dtype
-        fields = list(dtype.fields)[:ndim]
+        sbasis = get_polybasis(etype, order, hpts)
+        lbasis = get_polybasis(etype, 1, lpts)
 
+        lidx = np.argmin(np.linalg.norm(hpts[:, None] - lpts[None], axis=-1),
+                         axis=0)
+
+        return shape, sbasis, lbasis, lidx, lpts.mean(axis=0)
+
+    @staticmethod
+    def _minloc_mask(src, dst, ndim=None):
+        fields = list(src.dtype.fields)[:ndim]
+
+        lmask = src[fields[0]] < dst[fields[0]]
+        emask = src[fields[0]] == dst[fields[0]]
+
+        for f in fields[1:]:
+            lmask |= emask & (src[f] < dst[f])
+            emask &= src[f] == dst[f]
+
+        return lmask
+
+    @memoize
+    def _get_minloc_op(self, dtype, ndim):
         def op(pmem, qmem, dt):
             p = np.frombuffer(pmem, dtype=dtype)
             q = np.frombuffer(qmem, dtype=dtype)
+            m = self._minloc_mask(p, q, ndim)
+            q[m] = p[m]
 
-            lmask = p[fields[0]] < q[fields[0]]
-            emask = p[fields[0]] == q[fields[0]]
+        return autofree(mpi.Op.Create(op, commute=False))
 
-            for f in fields[1:]:
-                lmask |= emask & (p[f] < q[f])
-                emask &= p[f] == q[f]
-
-            q[lmask] = p[lmask]
-
+    def _minloc(self, coll, x, y, ndim=None):
         sbuf = (x, mpi.BYTE) if x is not mpi.IN_PLACE else x
         rbuf = (y, mpi.BYTE)
 
-        coll(sbuf, rbuf, op=autofree(mpi.Op.Create(op, commute=False)))
+        coll(sbuf, rbuf, op=self._get_minloc_op(y.dtype, ndim))
 
     @memoize
     def _get_nodes_off_tree(self):
-        comm, rank, root = get_comm_rank_root()
+        comm, _, _ = get_comm_rank_root()
 
         # Read our portion of the nodes table
         start, end, _ = get_start_end_csize(comm, len(self.mesh.raw['nodes']))
         nodes = self.mesh.raw['nodes'][start:end]['location']
 
         # Insert these points into a spatial index
-        tree = Index((np.arange(len(nodes)), nodes, nodes),
-                     properties=Property(dimension=self.mesh.ndims))
+        tree = RTree.from_points(nodes, storage='point')
 
         return nodes, start, tree
 
@@ -130,15 +178,14 @@ class PointLocator:
         smax += expand
 
         # Insert these boxes into a spatial index
-        return Index((np.arange(len(smin)), smin, smax),
-                     properties=Property(dimension=self.mesh.ndims))
+        return RTree.from_boxes(smin, smax)
 
     def _find_closest_node(self, pts):
-        comm, rank, root = get_comm_rank_root()
+        comm, _, _ = get_comm_rank_root()
 
         # Query the node index to find our closest node
         nodes, off, tree = self._get_nodes_off_tree()
-        nearest = tree.nearest_v(pts, pts, strict=True)[0]
+        nearest = tree.knn(pts, k=1)[0][:, 0]
 
         buf = np.empty(len(pts), dtype=[('dist', float), ('idx', int)])
         buf['dist'] = np.linalg.norm(pts - nodes[nearest], axis=1)
@@ -161,108 +208,131 @@ class PointLocator:
 
         # Use this to form the set of candidate elements for each point
         pidx, sidx = [], []
-        for i, (di, ni) in enumerate(nearest):
+        for i, (_, ni) in enumerate(nearest):
             for ei in neles.get(ni, []):
                 pidx.append(i)
                 sidx.append(ei)
 
-        return self._find_closest_element(etype, pts, pidx, sidx)
+        return self._find_closest_element(etype, pts, np.array(pidx),
+                                          np.array(sidx))
 
     def _find_closest_element_bbox(self, etype, pts):
         # Query the index to find intersecting elements
         tree = self._get_bbox_tree(etype)
-        sidx, icounts = tree.intersection_v(pts, pts)
+        sidx, icounts = tree.intersect(pts, pts)
 
-        pidx = np.repeat(np.arange(len(pts)), icounts.astype(int)).tolist()
-
-        return self._find_closest_element(etype, pts, pidx, sidx.tolist())
+        pidx = np.repeat(np.arange(len(pts)), icounts.astype(int))
+        return self._find_closest_element(etype, pts, pidx, sidx)
 
     def _find_closest_element(self, etype, pts, pidx, sidx):
         spts = self.mesh.spts[etype]
+        curved = self.mesh.spts_curved[etype][sidx]
+        eidxs = self.mesh.eidxs[etype]
 
         # Obtain the closest location inside each of these elements
-        dists, tlocs = self._compute_tlocs(etype, spts[:, sidx], pts[pidx])
+        dists, tlocs = self._compute_tlocs(etype, spts[:, sidx], pts[pidx],
+                                           curved)
 
-        # For each query point identify the most promising element
-        closest = {}
-        for i, (pi, dist, tloc) in enumerate(zip(pidx, dists, tlocs)):
-            if pi not in closest or dist < closest[pi][0]:
-                closest[pi] = (dist, i)
-
-        pidx = list(closest)
-        tidx = [i for d, i in closest.values()]
-        sidx = [sidx[i] for i in tidx]
-
-        return dict(zip(pidx, zip(dists[tidx], sidx, tlocs[tidx])))
+        # Group distances by their query point index and reduce
+        gidxs = eidxs[sidx]
+        order = np.lexsort((gidxs, dists, pidx))
+        idx = order[np.unique(pidx[order], return_index=True)[1]]
+        return pidx[idx], dists[idx], gidxs[idx], tlocs[idx]
 
     def _initial_tlocs(self, etype, spts, plocs):
-        shape, basis = self._get_shape_basis(etype, len(spts))
-        tpts = np.array(shape.std_ele(self.fine_order))
-
-        # Obtain a fine sampling of points inside each element
+        shape, basis, *_ = self._get_shape_basis(etype, len(spts))
+        tpts = shape.std_ele(self.fine_order)
         fop = basis.nodal_basis_at(tpts)
-        fpts = fop @ spts.reshape(len(spts), -1)
-        fpts = fpts.reshape(len(fop), *spts.shape[1:])
 
-        # Find the closest fine sample point to each query point
-        dists = np.linalg.norm(fpts - plocs, axis=2)
+        # Chunk through the query points in batches of 200
+        tlocs = np.empty_like(plocs)
+        for s in range(0, spts.shape[1], 200):
+            e = s + 200
 
-        # Return this sample point in transformed space
-        return tpts[dists.argmin(axis=0)]
+            iplocs = fop @ spts[:, s:e].reshape(len(spts), -1)
+            iplocs = iplocs.reshape(len(fop), -1, self.mesh.ndims)
 
-    def _compute_tlocs(self, etype, spts, plocs):
-        shape, basis = self._get_shape_basis(etype, len(spts))
+            dists = np.linalg.norm(iplocs - plocs[s:e], axis=2)
+            tlocs[s:e] = tpts[dists.argmin(axis=0)]
 
-        # Evaluate the initial guesses
-        ktlocs = self._initial_tlocs(etype, spts, plocs)
-        kplocs = np.einsum('ij,jik->ik',
-                           basis.nodal_basis_at(ktlocs, clean=False), spts)
+        return tlocs
 
-        # Apply three iterations of Newton's method
-        for k in range(3):
-            jac_ops = basis.jac_nodal_basis_at(ktlocs, clean=False)
+    def _compute_tlocs(self, etype, spts, plocs, curved):
+        shape, sbasis, lbasis, lidx, cent = self._get_shape_basis(etype,
+                                                                  len(spts))
 
-            A = np.einsum('ijk,jkl->kli', jac_ops, spts)
-            b = kplocs - plocs
-            ktlocs -= np.linalg.solve(A, b[..., None]).squeeze()
+        dists = np.empty(len(plocs))
+        tlocs = np.empty_like(plocs)
 
-            ops = basis.nodal_basis_at(ktlocs, clean=False)
-            np.einsum('ij,jik->ik', ops, spts, out=kplocs)
+        # Process linear elements
+        if (lin := ~curved).any():
+            p, s = plocs[lin], spts[np.ix_(lidx, lin)]
+            dists[lin], tlocs[lin] = self._newton_tlocs(
+                lbasis, s, p, np.tile(cent, (lin.sum(), 1))
+            )
 
-        # Compute the final distances
-        dists = np.linalg.norm(kplocs - plocs, axis=1)
+        # Process curved elements
+        if curved.any():
+            p, s = plocs[curved], spts[:, curved]
+            dists[curved], tlocs[curved] = self._newton_tlocs(
+                sbasis, s, p, self._initial_tlocs(etype, s, p)
+            )
 
         # Prune invalid points
-        for i, t in enumerate(ktlocs):
-            if not shape.valid_spt(t):
-                dists[i] = np.inf
+        dists[~shape.valid_spt(tlocs, tol=1e-4)] = np.inf
 
-        return dists, ktlocs
+        return dists, tlocs
+
+    def _newton_tlocs(self, basis, spts, plocs, ktlocs, niters=20, rtol=1e-10):
+        # Helpers for obtaining the nodal basis operators
+        nb_op = partial(basis.nodal_basis_at, clean=False)
+        jac_nb_op = partial(basis.jac_nodal_basis_at, clean=False)
+
+        # Convergence tolerance criteria
+        tol = rtol*np.linalg.norm(np.ptp(spts, axis=0), axis=-1)
+
+        tlocs, dists = ktlocs.copy(), np.empty(len(plocs))
+        active = np.arange(len(plocs))
+        s, p, k = spts, plocs, ktlocs
+
+        # Evaluate the initial locations in physical space
+        kp = np.einsum('ij,jik->ik', nb_op(k), s)
+
+        for _ in range(niters):
+            # Take a Newton step
+            A = np.einsum('ijk,jkl->kli', jac_nb_op(k), s)
+            k -= np.linalg.solve(A, (kp - p)[..., None]).squeeze(axis=-1)
+
+            # Evaluate the physical locations at the new Newton iterate
+            kp = np.einsum('ij,jik->ik', nb_op(k), s)
+
+            # Compute the residual and check for convergence
+            d = np.linalg.norm(kp - p, axis=1)
+            if (done := d < tol).any():
+                tlocs[active[done]] = k[done]
+                dists[active[done]] = d[done]
+
+                if done.all():
+                    return dists, tlocs
+                else:
+                    keep = ~done
+                    active, s = active[keep], s[:, keep]
+                    p, k, tol, kp = p[keep], k[keep], tol[keep], kp[keep]
+
+        tlocs[active] = k
+        dists[active] = np.linalg.norm(kp - p, axis=1)
+        return dists, tlocs
 
 
 class PointSampler:
     def __init__(self, mesh, spts, slocs=None):
         locf = ['cidx', 'eidx', 'tloc']
         self.mesh = mesh
+        self.pts = np.asanyarray(spts, dtype=float)
 
-        # Named point set
-        if isinstance(spts, str):
-            comm, rank, root = get_comm_rank_root()
-
-            if rank == root:
-                sinfo = mesh.raw[f'plugins/sampler/{spts}'][:]
-            else:
-                sinfo = None
-
-            sinfo = comm.bcast(sinfo, root=root)
-
-            self.pts, self.locs = sinfo['ploc'], sinfo[locf]
-        # Points with location data
-        elif slocs is not None:
-            self.pts, self.locs = spts, slocs[locf]
-        # Points without location data
+        if slocs is not None:
+            self.locs = slocs[locf]
         else:
-            self.pts = np.array(spts)
             self.locs = PointLocator(mesh).locate(self.pts)[locf]
 
     def configure_with_intg_nvars(self, intg, nvars):
@@ -334,9 +404,29 @@ class PointSampler:
             # Form the reordering list
             self._ptsinv = np.argsort([i for pr in ptsrank for i in pr])
 
-    def sample(self, solns, process=None):
+    def gather(self, samples):
         comm, rank, root = get_comm_rank_root()
 
+        if rank == root:
+            comm.Gatherv(samples, self._ptsrecv, root=root)
+            return self._ptsbuf[self._ptsinv]
+        else:
+            comm.Gatherv(samples, None, root=root)
+            return None
+
+    def etype_pinfo(self):
+        etype_flat = defaultdict(list)
+        for et, ei, idxs, ops in self.pinfo:
+            if np.ndim(idxs) == 0:
+                etype_flat[et].append((ei, ops[0], idxs))
+            else:
+                for idx, op in zip(idxs, ops):
+                    etype_flat[et].append((ei, op, idx))
+
+        return {et: tuple(map(np.array, zip(*recs)))
+                for et, recs in etype_flat.items()}
+
+    def sample(self, solns, process=None):
         # Perform the sampling
         samples = np.empty((self.pcount, self.nvars))
         for et, ei, idxs, ops in self.pinfo:
@@ -344,12 +434,7 @@ class PointSampler:
 
         # Post-process the samples
         if process:
-            samples = np.ascontiguousarray(process(samples))
+            samples = np.ascontiguousarray(process(samples.T).T)
 
         # Gather to the root rank and return
-        if rank == root:
-            comm.Gatherv(samples, self._ptsrecv, root=root)
-            return self._ptsbuf[self._ptsinv]
-        else:
-            comm.Gatherv(samples, None, root=root)
-            return None
+        return self.gather(samples)

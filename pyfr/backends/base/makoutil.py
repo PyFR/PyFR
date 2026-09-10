@@ -11,6 +11,10 @@ import pyfr.nputil as nputil
 import pyfr.util as util
 
 
+def carray(context, vals):
+    return '{ ' + ', '.join(map(str, vals)) + ' }'
+
+
 def ndrange(context, *args):
     return util.ndrange(*args)
 
@@ -23,6 +27,20 @@ def npdtype_to_ctype(context, dtype):
     return nputil.npdtype_to_ctype(dtype)
 
 
+def fpcast(context, expr, src, dst):
+    if src == dst:
+        return expr
+
+    # Route conversions through float: decode a bf16 source, then encode
+    if src == 'bf16':
+        expr = f'bf16_to_f32({expr})'
+
+    if dst == 'bf16':
+        return f'f32_to_bf16({expr})'
+    else:
+        return f'({dst})({expr})'
+
+
 def dot(context, a_, b_=None, /, **kwargs):
     ix, nd = util.first(kwargs.items())
     ab = '({})*({})'.format(a_, b_ or a_)
@@ -31,6 +49,23 @@ def dot(context, a_, b_=None, /, **kwargs):
     nd = nd if isinstance(nd, Iterable) else [nd]
 
     return '(' + ' + '.join(ab.format(**{ix: i}) for i in range(*nd)) + ')'
+
+
+def axnpby_expr(context, k, idx, start=0, *, nv, in_scale_idxs=(),
+                out_scale=None, in_name='_in', out_name='_out'):
+    terms = []
+    for l in range(start, nv):
+        coef, val = f'a{l}', f'x{l}[{idx}]'
+        if l in in_scale_idxs:
+            terms.append(f'({coef})*{in_name}[{k}]*({val})')
+        else:
+            terms.append(f'({coef})*({val})')
+
+    if terms:
+        expr = '(' + ' + '.join(terms) + ')'
+        return f'{out_name}[{k}]*({expr})' if out_scale else expr
+    else:
+        return '0'
 
 
 def array(context, expr_, vals_={}, /, **kwargs):
@@ -58,18 +93,6 @@ def polyfit(context, f, a, b, n, var, nqpts=500):
     return f'({pfexpr})'
 
 
-def _strip_parens(s):
-    out, depth = [], 0
-
-    for c in s:
-        depth += (c in '{(') - (c in ')}')
-
-        if depth == 0 and c not in ')}':
-            out.append(c)
-
-    return ''.join(out)
-
-
 def _locals(body):
     # First, strip away any comments
     body = re.sub(r'//.*?\n', '', body)
@@ -81,7 +104,7 @@ def _locals(body):
     decls = re.findall(r'(?:[A-Za-z_]\w*)\s+([A-Za-z_]\w*[^;]*?);', body)
 
     # Strip anything inside () or {}
-    decls = [_strip_parens(d) for d in decls]
+    decls = [util.strip_parens(d) for d in decls]
 
     # A statement can define multiple variables, so split by ','
     decls = it.chain.from_iterable(d.split(',') for d in decls)
@@ -130,7 +153,8 @@ def macro(context, name, params, externs='', id=''):
     if name in context['_macros']:
         # Check for multiple definitions of macro name
         if context['_macros'][name].id != id:
-            raise ValueError(f'Attempt to redefine macro "{name}"')
+            raise ValueError(f'Attempt to redefine macro {name!r}')
+
         # Already registered, just return (allow multiple includes)
         return ''
 
@@ -141,7 +165,7 @@ def macro(context, name, params, externs='', id=''):
     # Ensure no invalid characters in params/extern variables
     for p in it.chain(params, externs):
         if not re.match(r'[A-Za-z_]\w*$', p):
-            raise ValueError(f'Invalid param "{p}" in macro "{name}"')
+            raise ValueError(f'Invalid param {p!r} in macro {name!r}')
 
     # Extract signature from callable for Python variables
     argsig = signature(context['caller'].body)
@@ -153,11 +177,11 @@ def macro(context, name, params, externs='', id=''):
 
 
 def _parse_expand_args(name, mparams, margsig, args, kwargs):
-    margs = list(margsig.parameters.keys())
+    margs = list(margsig.parameters)
 
     # Separate kwargs into params and Python data params
     if unknown := set(kwargs) - set(mparams) - set(margs):
-        errs = [ValueError(f'Unknown parameter "{u}"') for u in unknown]
+        errs = [ValueError(f'Unknown parameter {u!r}') for u in unknown]
         raise ExceptionGroup(f'In macro: {name}', errs)
 
     paramskw = {k: v for k, v in kwargs.items() if k in mparams}
@@ -208,13 +232,46 @@ def expand(context, name, /, *args, **kwargs):
         if (extrn not in context['_extrns'] and
             re.search(rf'\b{extrn}\b', body)):
             raise ExceptionGroup(f'In macro: {name}',
-                                 [ValueError(f'Missing external "{extrn}"')])
+                                 [ValueError(f'Missing external {extrn!r}')])
 
     # Rename local parameters
     for lname, subst in params.items():
         body = re.sub(rf'\b{lname}\b', str(subst), body)
 
     return f'{{\n{body}\n}}'
+
+
+@supports_caller
+def fp_precise(context):
+    body = capture(context, context['caller'].body)
+
+    return '{\nPYFR_FP_PRECISE_BEGIN\n' + body + '\n}'
+
+
+@supports_caller
+def gpukernel(context, name, bounds=None, kargs=None, **kwargs):
+    body = capture(context, context['caller'].body)
+
+    if kargs:
+        specs = [s.strip().rsplit(None, 1) for s in kargs.split(',')]
+        args = [(n, *s.split(None, 1)) for s, n in specs]
+    else:
+        args = [(n, *s.split(None, 1)) for n, s in kwargs.items()]
+
+    ns = context['local']
+    pctx = ns.context
+
+    decl = capture(pctx, ns._kdecl, name, bounds).strip()
+    decls = [capture(pctx, ns._karg, intent, dtype, argname).strip()
+             for argname, intent, dtype in args]
+
+    if hasattr(ns, '_kextra'):
+        extra = capture(pctx, ns._kextra, body).strip()
+        if extra:
+            decls.append(extra)
+
+    astr = ',\n    '.join(decls)
+    return f'{decl}(\n    {astr})\n{{\n{body}\n}}'
 
 
 @supports_caller
@@ -252,3 +309,11 @@ def kernel(context, name, ndim, **kwargs):
 def alias(context, name, func):
     context['_macros'][name] = context['_macros'][func]
     return ''
+
+
+def tiled_idx(context, e, r, c, trows, tcols, padr, padc):
+    telem = trows*tcols
+    rowblk = (padc // tcols)*telem
+    return (f'(ixdtype_t){e}*{padr*padc} + ({r} / {trows})*{rowblk}'
+            f' + ({c} / {tcols})*{telem} + ({r} % {trows})*{tcols}'
+            f' + ({c} % {tcols})')

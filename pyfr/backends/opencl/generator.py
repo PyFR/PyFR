@@ -5,7 +5,7 @@ class OpenCLKernelGenerator(BaseGPUKernelGenerator):
     _lid = ('get_local_id(0)', 'get_local_id(1)')
     _gid = 'get_global_id(0)'
     _shared_prfx = '__local'
-    _shared_sync = 'work_group_barrier(CLK_GLOBAL_MEM_FENCE)'
+    _shared_sync = 'work_group_barrier(CLK_LOCAL_MEM_FENCE)'
 
     def _render_spec(self):
         g, c, r = '__global', 'const', 'restrict'
@@ -27,7 +27,9 @@ class OpenCLKernelGenerator(BaseGPUKernelGenerator):
             if va.isview:
                 kargs.append(f'{g} {c} ixdtype_t* {r} {va.name}_vix')
 
-                if va.ncdim == 2:
+                if self.ndim == 2 and not va.isbroadcastc:
+                    kargs.append(f'ixdtype_t {va.name}_vrstri')
+                elif va.ncdim == 2 and va.cdims[0] > 1:
                     kargs.append(f'{g} {c} ixdtype_t* {r} {va.name}_vrstri')
             # Arrays
             elif self.needs_ldim(va):
