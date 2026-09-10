@@ -1,6 +1,7 @@
 import numpy as np
 
 from pyfr.exprs import npeval
+from pyfr.profile import ProfileBCMixin
 from pyfr.solvers.baseadvecdiff import (BaseAdvectionDiffusionBCInters,
                                         BaseAdvectionDiffusionIntInters,
                                         BaseAdvectionDiffusionMPIInters)
@@ -250,3 +251,28 @@ class NavierStokesCharRiemInvPressureBCInters(PressureBCMixin,
                                               NavierStokesBaseBCInters):
     type = 'char-riem-inv-pressure'
     cflux_state = 'ghost'
+
+
+class NavierStokesSubInflowProfileBCInters(ProfileBCMixin,
+                                           NavierStokesBaseBCInters):
+    type = 'sub-in-profile'
+    cflux_state = 'ghost'
+
+    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
+        super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
+
+        # 加载 CSV profile 并插值到面通量点，注册为内核外部数据
+        self._setup_profile(lhs)
+
+
+class NavierStokesSupInflowProfileBCInters(ProfileBCMixin,
+                                           NavierStokesBaseBCInters):
+    type = 'sup-in-profile'
+    cflux_state = 'ghost'
+
+    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
+        super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
+
+        # 超声速入口: profile 状态即唯一上游态，所有特征波均流入域内
+        self._setup_profile(lhs)
+

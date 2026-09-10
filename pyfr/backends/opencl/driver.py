@@ -63,6 +63,7 @@ class OpenCLWrappers(LibWrapper):
     DEVICE_TYPE_CPU = 0x2
     DEVICE_TYPE_GPU = 0x4
     DEVICE_UUID = 0x106a
+    DEVICE_VERSION = 0x102f
     DEVICE_REGISTERS_PER_BLOCK_NV = 0x4002
     DEVICE_WARP_SIZE_NV = 0x4003
     DEVICE_WAVEFRONT_WIDTH_AMD = 0x4043
@@ -268,9 +269,19 @@ class OpenCLDevice(_OpenCLBase):
                                                     'max_work_group_size')
 
         self.driver_version = self._query_str('version', prefix='driver')
+        self.version = self._query_str('version')
 
         self.extensions = set(self._query_str('extensions').split())
         self.has_fp64 = 'cl_khr_fp64' in self.extensions
+
+        # clCloneKernel requires OpenCL 2.1; older implementations,
+        # e.g. PoCL 1.8, do not provide it and calling it would crash
+        try:
+            vmaj, vmin = (int(x) for x in
+                          self.version.split()[1].split('.')[:2])
+            self.has_cl21_kernels = (vmaj, vmin) >= (2, 1)
+        except (IndexError, ValueError):
+            self.has_cl21_kernels = False
 
         if 'cl_khr_device_uuid' in self.extensions:
             self.uuid = UUID(bytes=self._query_type(c_char*16, 'uuid'))
@@ -478,7 +489,8 @@ class OpenCLProgram(_OpenCLBase):
 
     def get_kernel(self, name, argtypes):
         ptr = self.lib.clCreateKernel(self, name.encode())
-        return OpenCLKernel(self.lib, ptr, argtypes, self.dev)
+        return OpenCLKernel(self.lib, ptr, argtypes, self.dev,
+                            prog=self, name=name)
 
     def get_binary(self):
         nbytes = c_size_t()
@@ -499,16 +511,27 @@ class OpenCLKernel(_OpenCLWaitFor, _OpenCLBase):
     typemap = [c_double, c_float, c_int32, c_int64, c_uint64]
     typemap = {k: (k(), sizeof(k)) for k in typemap}
 
-    def __init__(self, lib, ptr, argtypes, dev):
+    def __init__(self, lib, ptr, argtypes, dev, prog=None, name=None):
         super().__init__(lib, ptr)
 
         self.argtypes = argtypes
         self.dev = dev
 
+        # Provenance, required to emulate clCloneKernel on runtimes
+        # which predate OpenCL 2.1
+        self.prog = prog
+        self.name = name
+
         # For each argument type fetch the corresponding ctypes instance
         self._argsz = [self.typemap[atype] for atype in argtypes]
 
     def clone(self):
+        # clCloneKernel is OpenCL 2.1+; emulate it via CreateKernel from
+        # the parent program's source info on older implementations
+        if not self.dev.has_cl21_kernels:
+            ptr = self.lib.clCreateKernel(self.prog, self.name.encode())
+            return OpenCLKernel(self.lib, ptr, self.argtypes, self.dev)
+
         ptr = self.lib.clCloneKernel(self)
         return OpenCLKernel(self.lib, ptr, self.argtypes, self.dev)
 

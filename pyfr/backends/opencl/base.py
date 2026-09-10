@@ -61,6 +61,18 @@ class OpenCLBackend(BaseBackend):
         self.soasz = 2*self.alignb // np.dtype(self.fpdtype).itemsize
         self.csubsz = self.soasz
 
+        # Determine whether the runtime implements the OpenCL 2.0
+        # work-group reduction builtins; where it does not, such as
+        # PoCL 1.8, fallback implementations are injected into
+        # generated kernels instead
+        mode = cfg.get('backend-opencl', 'wg-reduce-compat', 'auto').lower()
+        if mode == 'auto':
+            compat = not self._probe_wg_reduce_builtins()
+        else:
+            compat = mode in {'1', 'true', 'yes', 'on'}
+
+        self.lookup.dfltargs['wg_reduce_compat'] = compat
+
         from pyfr.backends.opencl import (blasext, clblast, gimmik, packing,
                                           linalg, provider, tinytc, types)
 
@@ -111,6 +123,30 @@ class OpenCLBackend(BaseBackend):
         if cfg.getbool('backend', 'annotate', False):
             raise ValueError('Annotation is not supported by the '
                              'OpenCL backend')
+
+    def _probe_wg_reduce_builtins(self):
+        # Compile a trivial kernel which calls work_group_reduce_add;
+        # failure indicates the runtime lacks the OpenCL 2.0 builtins
+        src = r'''
+        __kernel void wg_probe(__global double *out, double v)
+        {
+            out[0] = work_group_reduce_add(v);
+        }
+        '''
+
+        try:
+            prog = self.cl.program(src)
+            kern = prog.get_kernel('wg_probe', [np.uintp, np.double])
+
+            buf = self.cl.mem_alloc(np.dtype(np.double).itemsize)
+            kern.set_dims((64,), (64,))
+            kern.set_args(buf, 1.0)
+            kern.exec_async(self.cl.qdflt)
+            self.cl.qdflt.finish()
+        except Exception:
+            return False
+
+        return True
 
     def xfer_buf(self, shape, dtype):
         nbytes = np.prod(shape)*np.dtype(dtype).itemsize

@@ -383,21 +383,42 @@ class AlltoallFuture:
         self._svals = np.empty((nsend, *shape), dtype=dtype)
         self._rvals = np.empty((nrecv, *shape), dtype=dtype)
 
-        # Create persistent request
         sbuf = (self._svals, scountdisps)
         rbuf = (self._rvals, rcountdisps)
-        self._req = autofree(parent._alltoallv_init(parent.comm, sbuf, rbuf))
+
+        # Create a persistent request where the MPI library supports it;
+        # otherwise fall back to a blocking exchange issued by start()
+        try:
+            self._req = autofree(parent._alltoallv_init(parent.comm,
+                                                        sbuf, rbuf))
+        except NotImplementedError:
+            self._req = None
+            self._sbuf, self._rbuf = sbuf, rbuf
+            self._done = False
 
     def start(self, dset):
         self._parent._prepare_sendbuf(dset, self._svals)
-        self._req.Start()
+
+        if self._req is not None:
+            self._req.Start()
+        else:
+            self._parent._alltoallv(self._parent.comm, self._sbuf,
+                                    self._rbuf)
+            self._done = True
+
         return self
 
     def test(self):
-        return self._req.Test()
+        return True if self._req is None else self._req.Test()
 
     def wait(self):
-        self._req.Wait()
+        if self._req is not None:
+            self._req.Wait()
+        elif not self._done:
+            self._parent._alltoallv(self._parent.comm, self._sbuf,
+                                    self._rbuf)
+            self._done = True
+
         return self._rvals[self._rinv]
 
 

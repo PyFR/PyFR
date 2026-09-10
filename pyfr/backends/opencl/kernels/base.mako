@@ -76,6 +76,50 @@ void atomic_sum_fpdtype(${aspace} fpdtype_t *addr, fpdtype_t val)
 #define PYFR_GLOBAL_ID_X get_global_id(0)
 #define PYFR_GLOBAL_ID_Y get_global_id(1)
 
+% if wg_reduce_compat:
+// OpenCL 2.0 work-group reductions are unavailable on some runtimes
+// (e.g. PoCL 1.8); emulate them through shared-memory tree reductions.
+// Declared as macros so the __local scratch array lives in the kernel
+// function itself, as required by OpenCL C.
+#define PYFR_WG_REDUCE_DECLARE(t, name, expr)                           \
+    __local t pyfr_wg_##name##_smem[PYFR_WG_LSIZE_MAX];                 \
+    __attribute__((overloadable))                                       \
+    t work_group_reduce_##name(t v)                                     \
+    {                                                                   \
+        int lid = (int)get_local_id(0), lsz = (int)get_local_size(0);   \
+        smem_next: ;                                                    \
+        pyfr_wg_##name##_smem[lid] = v;                                 \
+        work_group_barrier(CLK_LOCAL_MEM_FENCE);                        \
+        for (int off = 1; off < lsz; off <<= 1)                         \
+        {                                                               \
+            if (lid % (off << 1) == 0 && lid + off < lsz)               \
+                pyfr_wg_##name##_smem[lid] = expr;                      \
+            work_group_barrier(CLK_LOCAL_MEM_FENCE);                    \
+        }                                                               \
+        return pyfr_wg_##name##_smem[0];                                \
+    }
+
+#define PYFR_WG_LSIZE_MAX 1024
+
+<%
+    wg_reduces = [('double', 'add', 'pyfr_wg_add_smem[lid] + pyfr_wg_add_smem[lid + off]'),
+                  ('double', 'min', 'min(pyfr_wg_min_smem[lid], pyfr_wg_min_smem[lid + off])'),
+                  ('double', 'max', 'max(pyfr_wg_max_smem[lid], pyfr_wg_max_smem[lid + off])'),
+                  ('float', 'add', 'pyfr_wg_add_smem[lid] + pyfr_wg_add_smem[lid + off]'),
+                  ('float', 'min', 'min(pyfr_wg_min_smem[lid], pyfr_wg_min_smem[lid + off])'),
+                  ('float', 'max', 'max(pyfr_wg_max_smem[lid], pyfr_wg_max_smem[lid + off])'),
+                  ('int', 'min', 'min(pyfr_wg_min_smem[lid], pyfr_wg_min_smem[lid + off])'),
+                  ('int', 'max', 'max(pyfr_wg_max_smem[lid], pyfr_wg_max_smem[lid + off])')]
+%>
+#define PYFR_WG_REDUCE_IMPL()                                           \
+do                                                                      \
+{                                                                       \
+% for t, name, expr in wg_reduces:
+    PYFR_WG_REDUCE_DECLARE(${t}, ${name}, ${expr})                      \
+% endfor
+} while (0)
+% endif
+
 <%def name="argmax_storage(ftype)"></%def>
 
 <%def name="argmax_reduce(ftype, val, idx, dst)">

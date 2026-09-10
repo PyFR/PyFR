@@ -612,6 +612,68 @@ def process_resample(args):
                      None, metadata)
 
 
+def _print_run_info(comm, mesh, cfg, backend):
+    # Global element counts, summed over all ranks
+    ntypes = {
+        etype: comm.allreduce(len(mesh.eidxs.get(etype, [])))
+        for etype in mesh.etypes
+    }
+
+    # Global boundary face counts
+    bnames = sorted(n.removeprefix('bc/')
+                    for n in mesh.codec if n.startswith('bc/'))
+    nfaces = {
+        b: comm.allreduce(len(mesh.bcon[b]) if b in mesh.bcon else 0)
+        for b in bnames
+    }
+
+    # Map each boundary onto its governing config section
+    try:
+        bcsects = mesh.bc_sections(cfg)
+    except ValueError:
+        bcsects = {}
+
+    # Only the root rank prints
+    if comm.rank != 0:
+        return
+
+    print()
+    print('PyFR 运行信息')
+    print('=============')
+    print(f'计算后端        : {backend.name}')
+    print(f'MPI 进程数      : {comm.size}')
+    print(f'网格维度        : {mesh.ndims}D')
+
+    print('网格统计')
+    print(f'  单元总数      : {sum(ntypes.values())}')
+    for etype in sorted(ntypes):
+        print(f'    {etype:<12}: {ntypes[etype]} 个')
+    print(f'  边界面总数    : {sum(nfaces.values())}')
+
+    print('边界条件')
+    for b in bnames:
+        sect = bcsects.get(b, f'soln-bcs-{b}')
+        btype = cfg.get(sect, 'type', default='?')
+        extra = ''
+        if btype == 'sub-in-profile':
+            from pyfr.profile import Profile
+            pf = Profile.from_csv(cfg.getpath(sect, 'file'), mesh.ndims)
+            extra = f' [{pf.summary()}]'
+        print(f'  {b:<16}: {btype} ({nfaces[b]} 个面){extra}')
+
+    print('初始化设置')
+    for sect in ['solver', 'solver-time-integrator', 'solver-time-march',
+                 'constants', 'soln-ics']:
+        if sect not in cfg.sections():
+            continue
+        print(f'  [{sect}]')
+        for k, v in cfg.items(sect).items():
+            print(f'    {k} = {v}')
+
+    print()
+    sys.stdout.flush()
+
+
 def _process_common(args, soln, cfg):
     # Manually initialise MPI
     init_mpi()
@@ -635,6 +697,9 @@ def _process_common(args, soln, cfg):
 
     # Construct the solver
     solver = get_solver(backend, mesh, soln, cfg)
+
+    # Print a summary of the mesh, boundary conditions and settings
+    _print_run_info(comm, mesh, cfg, backend)
 
     # Retain a progress bar when running interactively
     if args.progress and rank == root:

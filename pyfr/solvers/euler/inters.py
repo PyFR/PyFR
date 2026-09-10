@@ -3,6 +3,7 @@ from pyfr.quadrules.surface import SurfaceIntegrator
 from pyfr.solvers.baseadvec import (BaseAdvectionIntInters,
                                     BaseAdvectionMPIInters,
                                     BaseAdvectionBCInters)
+from pyfr.profile import ProfileBCMixin
 from pyfr.util import CSVStream, first
 
 import numpy as np
@@ -319,3 +320,24 @@ class PressureBCMixin(ControlledBCMixin):
 
 class EulerCharRiemInvPressureBCInters(PressureBCMixin, EulerBaseBCInters):
     type = 'char-riem-inv-pressure'
+
+
+class EulerSubInflowProfileBCInters(ProfileBCMixin, EulerBaseBCInters):
+    type = 'sub-in-profile'
+
+    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
+        super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
+
+        # 加载 CSV profile 并插值到面通量点，注册为内核外部数据
+        self._setup_profile(lhs)
+
+
+class EulerSupInflowProfileBCInters(ProfileBCMixin, EulerBaseBCInters):
+    type = 'sup-in-profile'
+
+    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
+        super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
+
+        # 超声速入口: profile 状态即唯一上游态，所有特征波均流入域内
+        self._setup_profile(lhs)
+
