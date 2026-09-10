@@ -18,6 +18,7 @@ class PostProcData:
         self.grad_pris = grad_pris
         self.ploc = ploc
         self.fields = {}
+        self.soln = None
 
     @classmethod
     def from_soln(cls, soln, samples, ploc, *args):
@@ -25,7 +26,9 @@ class PostProcData:
         nv, ng = len(soln.fields), len(soln.fields)*(1 + len(ploc))
         grads = np.split(samples[nv:ng], nv) if len(samples) >= ng else None
 
-        return cls(soln.config, samples[:nv], ploc, grads, *args)
+        obj = cls(soln.config, samples[:nv], ploc, grads, *args)
+        obj.soln = soln
+        return obj
 
     @property
     def nvars(self):
