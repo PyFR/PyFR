@@ -1,6 +1,6 @@
 from weakref import finalize
 
-from gimmik import MetalMatMul, OPERAND_BUFFER, SIG_ABC, SIG_BC
+from gimmik import MetalMatMul, SIG_ABC, SIG_BC
 import numpy as np
 
 from pyfr.backends.base import NotSuitableError
@@ -58,6 +58,9 @@ class MetalGiMMiKKernels(MetalKernelProvider):
         else:
             aligne = None
 
+        # Values of the arguments a kernel can ask to be passed
+        vals = {'n': n, 'b': b.data, 'ldb': ldb, 'c': out.data, 'ldc': ldc}
+
         # Cache key
         ckey = (a.mid, alpha, beta, aligne, ldb, ldc)
 
@@ -83,14 +86,10 @@ class MetalGiMMiKKernels(MetalKernelProvider):
                         src, meta = kgen.send(sdata)
 
                         bufs = self._operand_bufs(mm, meta, n, ldb, ldc)
-                        if bufs is None:
-                            continue
-
                         argt = [self.argtypes[k] for k in meta['args']]
                         kern = self._build_kernel(kname, src, argt)
 
-                        kargs = self._kernel_args(meta, bufs, n, b, ldb,
-                                                  out, ldc)
+                        kargs = self._kernel_args(meta, vals, bufs)
                         lcfg = mm.launch_config(meta, n)
                         grid, tgrp = lcfg['grid'], lcfg['threadgroup']
 
@@ -116,7 +115,7 @@ class MetalGiMMiKKernels(MetalKernelProvider):
             finalize(a, lambda: self._mul_kerns.pop(ckey))
 
         # Set the parameters, rebinding the operands to these matrices
-        kargs = self._kernel_args(kmeta, bufs, n, b, ldb, out, ldc)
+        kargs = self._kernel_args(kmeta, vals, bufs)
         lcfg = mm.launch_config(kmeta, n)
         grid, tgrp = lcfg['grid'], lcfg['threadgroup']
 
@@ -127,24 +126,21 @@ class MetalGiMMiKKernels(MetalKernelProvider):
         return MulKernel(mats=[a, b, out], dt=dt)
 
     def _operand_bufs(self, mm, meta, n, ldb, ldc):
-        # Buffers for the operands GiMMiK asks us to prepare, else None
-        bufs = {}
+        # The only operand GiMMiK asks us to prepare is a packed copy of A
+        spec = mm.operands(meta, n, ldb, ldc).get('a')
 
-        for name, spec in mm.operands(meta, n, ldb, ldc).items():
-            if name != 'a' or spec['kind'] != OPERAND_BUFFER:
-                return None
-
-            buf = self.backend.mem_alloc(spec['nbytes'])
-            view = buf.contents().as_buffer(spec['nbytes'])
+        if spec is None:
+            return {}
+        else:
+            nbytes = spec['nbytes']
+            buf = self.backend.mem_alloc(nbytes)
+            view = buf.contents().as_buffer(nbytes)
             np.frombuffer(view, dtype=spec['dtype'])[:] = mm.pack_a(meta)
 
-            bufs[name] = (buf, 0)
-
-        return bufs
+            return {'a': (buf, 0)}
 
     @staticmethod
-    def _kernel_args(meta, bufs, n, b, ldb, out, ldc):
-        vals = {'n': n, 'b': b.data, 'ldb': ldb, 'c': out.data,
-                'ldc': ldc} | bufs
+    def _kernel_args(meta, vals, bufs):
+        kvals = vals | bufs
 
-        return [vals[name] for name in meta['args']]
+        return [kvals[name] for name in meta['args']]

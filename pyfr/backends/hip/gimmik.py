@@ -1,6 +1,6 @@
 from weakref import finalize
 
-from gimmik import HIPMatMul, OPERAND_BUFFER, SIG_ABC, SIG_BC
+from gimmik import HIPMatMul, SIG_ABC, SIG_BC
 
 from pyfr.backends.base import NotSuitableError
 from pyfr.backends.hip.provider import HIPKernel, HIPKernelProvider
@@ -48,6 +48,9 @@ class HIPGiMMiKKernels(HIPKernelProvider):
         else:
             aligne = None
 
+        # Values of the arguments a kernel can ask to be passed
+        vals = {'n': n, 'b': b, 'ldb': ldb, 'c': out, 'ldc': ldc}
+
         # Cache key
         ckey = (a.mid, alpha, beta, aligne)
 
@@ -72,14 +75,10 @@ class HIPGiMMiKKernels(HIPKernelProvider):
                         src, meta = kgen.send(kdata)
 
                         bufs = self._operand_bufs(mm, meta, n, ldb, ldc)
-                        if bufs is None:
-                            continue
-
                         argt = [self.argtypes[k] for k in meta['args']]
                         kern = self._build_kernel(kname, src, argt)
 
-                        kargs = self._kernel_args(meta, bufs, n, b, ldb,
-                                                  out, ldc)
+                        kargs = self._kernel_args(meta, vals, bufs)
                         lcfg = mm.launch_config(meta, n)
                         params = kern.make_params(lcfg['grid'],
                                                   lcfg['block'])
@@ -111,7 +110,7 @@ class HIPGiMMiKKernels(HIPKernelProvider):
             finalize(a, lambda: self._mul_kerns.pop(ckey))
 
         # Set the parameters, rebinding the operands to these matrices
-        kargs = self._kernel_args(kmeta, bufs, n, b, ldb, out, ldc)
+        kargs = self._kernel_args(kmeta, vals, bufs)
         lcfg = mm.launch_config(kmeta, n)
         params = kern.make_params(lcfg['grid'], lcfg['block'])
         params.set_args(*kargs)
@@ -126,22 +125,20 @@ class HIPGiMMiKKernels(HIPKernelProvider):
         return MulKernel(mats=[a, b, out], dt=dt)
 
     def _operand_bufs(self, mm, meta, n, ldb, ldc):
-        # Buffers for the operands GiMMiK asks us to prepare, else None
-        bufs = {}
+        # The only operand GiMMiK asks us to prepare is a packed copy of A
+        spec = mm.operands(meta, n, ldb, ldc).get('a')
 
-        for name, spec in mm.operands(meta, n, ldb, ldc).items():
-            if name != 'a' or spec['kind'] != OPERAND_BUFFER:
-                return None
+        if spec is None:
+            return {}
+        else:
+            nbytes = spec['nbytes']
+            buf = self.backend.hip.mem_alloc(nbytes)
+            self.backend.hip.memcpy(buf, mm.pack_a(meta), nbytes)
 
-            buf = self.backend.hip.mem_alloc(spec['nbytes'])
-            self.backend.hip.memcpy(buf, mm.pack_a(meta), spec['nbytes'])
-
-            bufs[name] = buf
-
-        return bufs
+            return {'a': buf}
 
     @staticmethod
-    def _kernel_args(meta, bufs, n, b, ldb, out, ldc):
-        vals = {'n': n, 'b': b, 'ldb': ldb, 'c': out, 'ldc': ldc} | bufs
+    def _kernel_args(meta, vals, bufs):
+        kvals = vals | bufs
 
-        return [vals[name] for name in meta['args']]
+        return [kvals[name] for name in meta['args']]

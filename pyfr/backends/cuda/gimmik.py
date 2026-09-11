@@ -1,7 +1,6 @@
 from weakref import finalize
 
-from gimmik import (CUDAMatMul, OPERAND_TENSORMAP, PTXMatMul, SIG_BC,
-                    SIG_BDESC_C, SIG_BDESC_CDESC)
+import gimmik
 
 from pyfr.backends.base import NotSuitableError
 from pyfr.backends.cuda.provider import CUDAKernel, CUDAKernelProvider
@@ -9,14 +8,15 @@ from pyfr.backends.cuda.provider import CUDAKernel, CUDAKernelProvider
 
 class CUDAGiMMiKKernels(CUDAKernelProvider):
     # Generators to consult, in order of preference
-    matmuls = [PTXMatMul, CUDAMatMul]
+    matmuls = [gimmik.PTXMatMul, gimmik.CUDAMatMul]
 
     # Call signatures we are able to marshal arguments for
-    sigs = frozenset({SIG_BC, SIG_BDESC_C, SIG_BDESC_CDESC})
+    sigs = frozenset({gimmik.SIG_BC, gimmik.SIG_ABC, gimmik.SIG_BDESC_C,
+                      gimmik.SIG_BDESC_CDESC})
 
     # Types of the arguments a kernel can ask to be passed
-    argtypes = {'n': 'i', 'b': 'P', 'ldb': 'i', 'c': 'P', 'ldc': 'i',
-                'b_desc': 'P', 'c_desc': 'P'}
+    argtypes = {'a': 'P', 'n': 'i', 'b': 'P', 'ldb': 'i', 'c': 'P',
+                'ldc': 'i', 'b_desc': 'P', 'c_desc': 'P'}
 
     def __init__(self, backend):
         super().__init__(backend)
@@ -52,11 +52,14 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
         else:
             aligne = None
 
+        # Values of the arguments a kernel can ask to be passed
+        vals = {'n': n, 'b': b, 'ldb': ldb, 'c': out, 'ldc': ldc}
+
         # Cache key
         ckey = (a.mid, alpha, beta, aligne, ldb, ldc)
 
         try:
-            kern, mm, kmeta, dt = self._mul_kerns[ckey]
+            kern, mm, kmeta, bufs, dt = self._mul_kerns[ckey]
         except KeyError:
             # Fetch the matrix and premultiply
             arr = alpha*a.get()
@@ -68,13 +71,14 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
             if best_kern is None:
                 raise NotSuitableError('Matrix is inappropriate for GiMMiK')
 
-            self._mul_kerns[ckey] = kern, mm, kmeta, dt = best_kern
+            self._mul_kerns[ckey] = kern, mm, kmeta, bufs, dt = best_kern
             finalize(a, lambda: self._mul_kerns.pop(ckey))
 
         # Set the parameters, rebinding the operands to these matrices
+        kargs = self._kernel_args(mm, kmeta, vals, bufs, n, ldb, ldc)
         lcfg = mm.launch_config(kmeta, n)
         params = kern.make_params(lcfg['grid'], lcfg['block'], 0)
-        params.set_args(*self._kernel_args(mm, kmeta, n, b, ldb, out, ldc))
+        params.set_args(*kargs)
 
         class MulKernel(CUDAKernel):
             def add_to_graph(self, graph, deps):
@@ -107,6 +111,7 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
     def _mul(self, kname, mm, kgen, n, b, out):
         ifac = self.backend.autotune_ifac
         ldb, ldc = b.leaddim, out.leaddim
+        vals = {'n': n, 'b': b, 'ldb': ldb, 'c': out, 'ldc': ldc}
         kdata = None
         best_kern = None
 
@@ -115,10 +120,8 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
             for i in range(self.nkerns):
                 src, meta = kgen.send(kdata)
 
-                kargs = self._kernel_args(mm, meta, n, b, ldb, out, ldc)
-                if kargs is None:
-                    continue
-
+                bufs = self._operand_bufs(mm, meta, n, ldb, ldc)
+                kargs = self._kernel_args(mm, meta, vals, bufs, n, ldb, ldc)
                 argt = [self.argtypes[k] for k in meta['args']]
                 kern = self._build_kernel(kname, src, argt)
 
@@ -138,7 +141,7 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
                 )
 
                 if best_kern is None or dt < ifac*best_kern[-1]:
-                    best_kern = (kern, mm, meta, dt)
+                    best_kern = (kern, mm, meta, bufs, dt)
 
                 kdata = {
                     'runtime': dt,
@@ -151,22 +154,37 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
 
         return best_kern
 
-    def _kernel_args(self, mm, meta, n, b, ldb, out, ldc):
+    def _operand_bufs(self, mm, meta, n, ldb, ldc):
+        # The only operand GiMMiK asks us to pack is a copy of A
+        spec = mm.operands(meta, n, ldb, ldc).get('a')
+
+        if spec is None:
+            return {}
+        else:
+            nbytes = spec['nbytes']
+            buf = self.backend.cuda.mem_alloc(nbytes)
+            self.backend.cuda.memcpy(buf, mm.pack_a(meta), nbytes)
+
+            return {'a': buf}
+
+    def _kernel_args(self, mm, meta, vals, bufs, n, ldb, ldc):
         # Operands describe any argument the caller has to prepare itself
-        mats = {'b': b, 'c': out}
-        vals = mats | {'n': n, 'ldb': ldb, 'ldc': ldc}
         operands = mm.operands(meta, n, ldb, ldc)
         kargs = []
 
         for name in meta['args']:
             spec = operands.get(name)
 
-            if spec is None:
-                kargs.append(vals[name])
-            elif spec['kind'] == OPERAND_TENSORMAP:
-                tm = mats[spec['operand']].tensormap(spec)
-                kargs.append(tm.ctypes.data)
-            else:
-                return None
+            match spec:
+                # A matrix or dimension we are holding already
+                case None:
+                    kargs.append(vals[name])
+                # An operand we packed ahead of time
+                case {'kind': gimmik.OPERAND_BUFFER}:
+                    kargs.append(bufs[name])
+                # A tensor map over one of the matrices
+                case {'kind': gimmik.OPERAND_TENSORMAP, 'operand': operand}:
+                    tm = vals[operand].tensormap(spec)
+                    kargs.append(tm.ctypes.data)
 
         return kargs
