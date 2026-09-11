@@ -443,21 +443,22 @@ class CUDAGraph(_CUDABase):
         return ptr.value
 
     def add_memcpy(self, dst, src, nbytes, deps=None):
+        # Take the pointers separately, keeping any arrays referenced
         if isinstance(dst, (np.ndarray, np.generic)):
-            dst = dst.ctypes.data
+            dptr = dst.ctypes.data
         else:
-            dst = getattr(dst, '_as_parameter_', dst)
+            dptr = getattr(dst, '_as_parameter_', dst)
 
         if isinstance(src, (np.ndarray, np.generic)):
-            src = src.ctypes.data
+            sptr = src.ctypes.data
         else:
-            src = getattr(src, '_as_parameter_', src)
+            sptr = getattr(src, '_as_parameter_', src)
 
         params = CUDAMemcpy3D()
         params.src_memory_type = self.cuda.lib.MEMORYTYPE_UNIFIED
-        params.src_device = int(src)
+        params.src_device = int(sptr)
         params.dst_memory_type = self.cuda.lib.MEMORYTYPE_UNIFIED
-        params.dst_device = int(dst)
+        params.dst_device = int(dptr)
         params.width_in_bytes = nbytes
         params.height = 1
         params.depth = 1
@@ -600,16 +601,21 @@ class CUDA:
         return np.array(alloc, copy=False)
 
     def memcpy(self, dst, src, nbytes, stream=None):
+        # Take the pointers separately, keeping any arrays referenced
         if isinstance(dst, (np.ndarray, np.generic)):
-            dst = dst.ctypes.data
+            dptr = dst.ctypes.data
+        else:
+            dptr = dst
 
         if isinstance(src, (np.ndarray, np.generic)):
-            src = src.ctypes.data
+            sptr = src.ctypes.data
+        else:
+            sptr = src
 
         if stream is None:
-            self.lib.cuMemcpy(dst, src, nbytes)
+            self.lib.cuMemcpy(dptr, sptr, nbytes)
         else:
-            self.lib.cuMemcpyAsync(dst, src, nbytes, stream)
+            self.lib.cuMemcpyAsync(dptr, sptr, nbytes, stream)
 
     def memset(self, dst, val, nbytes, stream=None):
         if stream is None:

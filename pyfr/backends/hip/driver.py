@@ -361,15 +361,20 @@ class HIPGraph(_HIPBase):
     def add_memcpy(self, dst, src, nbytes, deps=None):
         kind = self.hip.lib.MEMCPY_DEFAULT
 
+        # Take the pointers separately, keeping any arrays referenced
         if isinstance(dst, (np.ndarray, np.generic)):
-            dst = dst.ctypes.data
+            dptr = dst.ctypes.data
+        else:
+            dptr = dst
 
         if isinstance(src, (np.ndarray, np.generic)):
-            src = src.ctypes.data
+            sptr = src.ctypes.data
+        else:
+            sptr = src
 
         ptr = c_void_p()
         self.hip.lib.hipGraphAddMemcpyNode1D(ptr, self, *self._make_deps(deps),
-                                             dst, src, nbytes, kind)
+                                             dptr, sptr, nbytes, kind)
 
         return ptr.value
 
@@ -475,16 +480,21 @@ class HIP:
     def memcpy(self, dst, src, nbytes, stream=None):
         kind = self.lib.MEMCPY_DEFAULT
 
+        # Take the pointers separately, keeping any arrays referenced
         if isinstance(dst, (np.ndarray, np.generic)):
-            dst = dst.ctypes.data
+            dptr = dst.ctypes.data
+        else:
+            dptr = dst
 
         if isinstance(src, (np.ndarray, np.generic)):
-            src = src.ctypes.data
+            sptr = src.ctypes.data
+        else:
+            sptr = src
 
         if stream is None:
-            self.lib.hipMemcpy(dst, src, nbytes, kind)
+            self.lib.hipMemcpy(dptr, sptr, nbytes, kind)
         else:
-            self.lib.hipMemcpyAsync(dst, src, nbytes, kind, stream)
+            self.lib.hipMemcpyAsync(dptr, sptr, nbytes, kind, stream)
 
     def memset(self, dst, val, nbytes, stream=None):
         if stream is None:

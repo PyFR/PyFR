@@ -650,16 +650,16 @@ class OpenCL(_OpenCLWaitFor):
 
         # Device to host
         if isinstance(dst, (np.ndarray, np.generic)):
-            dst = dst.ctypes.data + dstoff
+            dptr = dst.ctypes.data + dstoff
 
             self.lib.clEnqueueReadBuffer(queue, src, blocking, srcoff, nbytes,
-                                         dst, *wait_for, evt_ptr)
+                                         dptr, *wait_for, evt_ptr)
         # Host to device
         elif isinstance(src, (np.ndarray, np.generic)):
-            src = src.ctypes.data + srcoff
+            sptr = src.ctypes.data + srcoff
 
             self.lib.clEnqueueWriteBuffer(queue, dst, blocking, dstoff, nbytes,
-                                          src, *wait_for, evt_ptr)
+                                          sptr, *wait_for, evt_ptr)
         # Device to device
         else:
             self.lib.clEnqueueCopyBuffer(queue, src, dst, srcoff, dstoff,
