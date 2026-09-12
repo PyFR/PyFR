@@ -1,24 +1,23 @@
-import struct
-
 import numpy as np
 
 
 def read_stl(f):
     if isinstance(f, str):
         with open(f, 'rb') as fh:
-            return read_stl(fh)
-
-    data = f.read()
+            data = fh.read()
+    else:
+        data = f.read()
 
     # Binary files are exactly 84 + 50*ntri bytes; the 80-byte header may
     # contain the word 'solid', so it alone cannot tell the formats apart.
-    if data[:5] != b'solid':
+    is_bin = (data[:5] != b'solid'
+              or (len(data) >= 84
+                  and 84 + 50*int.from_bytes(data[80:84], 'little') == len(data)))
+
+    if is_bin:
         return read_stl_bin(data)
-    elif len(data) >= 84 and \
-            84 + 50*struct.unpack('<I', data[80:84])[0] == len(data):
-        return read_stl_bin(data)
-    else:
-        return read_stl_ascii(data)
+
+    return read_stl_ascii(data)
 
 
 def read_stl_bin(data):
