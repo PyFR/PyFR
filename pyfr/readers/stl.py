@@ -8,31 +8,28 @@ def read_stl(f):
         with open(f, 'rb') as fh:
             return read_stl(fh)
 
-    # Read the 80-byte header plus the 4-byte triangle count. The STL spec
-    # permits the binary header to contain arbitrary bytes, including the
-    # word 'solid', so the leading bytes alone cannot be used to
-    # distinguish binary from ASCII files. Instead, valid binary files are
-    # exactly 84 + 50*ntri bytes long; use this invariant to disambiguate.
-    head = f.read(84)
+    data = f.read()
 
-    binary = head[:5] != b'solid'
-    if not binary and len(head) == 84:
-        f.seek(0, 2)
-        binary = 84 + 50*struct.unpack('<I', head[80:84])[0] == f.tell()
+    # Binary files are exactly 84 + 50*ntri bytes; the 80-byte header may
+    # contain the word 'solid', so it alone cannot tell the formats apart.
+    if data[:5] != b'solid':
+        return read_stl_bin(data)
+    elif len(data) >= 84 and \
+            84 + 50*struct.unpack('<I', data[80:84])[0] == len(data):
+        return read_stl_bin(data)
+    else:
+        return read_stl_ascii(data)
 
-    f.seek(0)
 
-    # Binary
-    if binary:
-        f.seek(80)
-        ntri = np.fromfile(f, dtype='<i4', count=1)[0]
-        tris = np.fromfile(f, dtype='(4,3)<f4, <i2', count=ntri)
+def read_stl_bin(data):
+    ntri = np.frombuffer(data, dtype='<i4', count=1, offset=80)[0]
+    tris = np.frombuffer(data, dtype='(4,3)<f4, <i2', count=ntri, offset=84)
 
-        return np.ascontiguousarray(tris['f0'])
+    return np.ascontiguousarray(tris['f0'])
 
-    # ASCII
-    stlf = f.read().replace(b'\r\n', b'\n')
-    stlit = (l.split() for l in stlf.split(b'\n')[1:])
+
+def read_stl_ascii(data):
+    stlit = (l.split() for l in data.replace(b'\r\n', b'\n').split(b'\n')[1:])
     tris = []
 
     while (l := next(stlit, None)):
