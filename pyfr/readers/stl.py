@@ -15,19 +15,19 @@ def read_stl(f):
                   and 84 + 50*int.from_bytes(data[80:84], 'little') == len(data)))
 
     if is_bin:
-        return read_stl_bin(data)
+        return _read_stl_bin(data)
 
-    return read_stl_ascii(data)
+    return _read_stl_ascii(data)
 
 
-def read_stl_bin(data):
+def _read_stl_bin(data):
     ntri = np.frombuffer(data, dtype='<i4', count=1, offset=80)[0]
     tris = np.frombuffer(data, dtype='(4,3)<f4, <i2', count=ntri, offset=84)
 
     return np.ascontiguousarray(tris['f0'])
 
 
-def read_stl_ascii(data):
+def _read_stl_ascii(data):
     stlit = (l.split() for l in data.replace(b'\r\n', b'\n').split(b'\n')[1:])
     tris = []
 
