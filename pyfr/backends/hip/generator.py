@@ -17,6 +17,7 @@ class HIPKernelGenerator(BaseGPUKernelGenerator):
     _gid = 'ixdtype_t(blockIdx.x)*blockDim.x + threadIdx.x'
     _shared_prfx = '__shared__'
     _shared_sync = '__syncthreads()'
+    _function_qual = '__device__ '
 
     def _render_spec(self):
         res = '__restrict__'

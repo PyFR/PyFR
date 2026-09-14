@@ -14,6 +14,12 @@
 // Typedefs
 typedef ${pyfr.npdtype_to_ctype(fpdtype)} fpdtype_t;
 typedef ${pyfr.npdtype_to_ctype(ixdtype)} ixdtype_t;
+// Unsigned integer matching fpdtype_t's width (for bit tricks)
+% if pyfr.npdtype_to_ctype(fpdtype) == 'double':
+typedef uint64_t fp_uint_t;
+% else:
+typedef uint32_t fp_uint_t;
+% endif
 typedef _Float16 half;
 typedef unsigned short bf16;
 

@@ -296,7 +296,13 @@ class Parser:
                 return String(tok.value)
             case 'IDENT':
                 if self.accept('('):
-                    return Call(Var(tok.value), self._parse_call_args())
+                    args = self._parse_call_args()
+
+                    # Canonicalise pow
+                    if tok.value == 'pow':
+                        return Binary('**', *args)
+                    else:
+                        return Call(Var(tok.value), args)
                 else:
                     return Var(tok.value)
             case 'DSL':

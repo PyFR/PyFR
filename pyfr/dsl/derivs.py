@@ -160,9 +160,6 @@ class Differentiator:
                 dfa, dfb = self.func_derivs2[func]
                 return Binary('+', Binary('*', dfa(a, b), D(a)),
                               Binary('*', dfb(a, b), D(b)))
-            # Rewrite pow as **
-            case Call(Var('pow'), [base, exp]):
-                return D(Binary('**', base, exp))
             # Unary operators
             case Unary('-', operand):
                 return Unary('-', D(operand))

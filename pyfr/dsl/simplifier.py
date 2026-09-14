@@ -20,6 +20,38 @@ def expand_power(base, n):
         return Binary('*', base, expand_power(base, n - 1))
 
 
+def reduce_pow(base, v):
+    twov = round(2*v)
+    n = abs(int(twov))
+    ipart, has_sqrt = divmod(n, 2)
+
+    # Leave exponents which are not half integers or need many multiplies
+    if abs(2*v - twov) > 1e-12 or n > 17:
+        result = None
+    # Anything to the power of zero is one
+    elif n == 0:
+        result = Int(1)
+    # Repeating a large base at every factor costs more than it saves
+    elif ipart > 0 and expr_size(base) > 3:
+        result = None
+    # Expand the integer part and attach the sqrt for the half
+    else:
+        if ipart == 0:
+            result = call('sqrt', [base])
+        elif ipart == 1:
+            result = base
+        else:
+            result = expand_power(base, ipart)
+
+        if has_sqrt and ipart > 0:
+            result = Binary('*', result, call('sqrt', [base]))
+
+        if twov < 0:
+            result = Binary('/', Int(1), result)
+
+    return result
+
+
 class Simplifier:
     # Region kinds whose statements must not be rearranged
     frozen_regions = frozenset({'fp-precise'})
@@ -186,20 +218,10 @@ class Simplifier:
                     case '/', Int(a), Int(b) if b != 0 and a % b == 0:
                         return Int(a // b)
                     # Power simplifications
-                    case '**', _, Int(0):
-                        return Int(1)
-                    case '**', base, Int(1):
-                        return base
                     case '**', Int(a), Int(b) if b >= 0:
                         return Int(a ** b)
-                    case '**', base, Int(n) if 2 <= n <= 8:
-                        return expand_power(base, n)
-                    case '**', base, Float(v):
-                        r = self._simplify_pow_float(base, v)
-                        if r is not None:
-                            return r
-                        else:
-                            return Binary('**', base, Float(v))
+                    case '**', base, Number(v) as e:
+                        return reduce_pow(base, v) or Binary('**', base, e)
                     # Constant folding for mixed int/float
                     case '+' | '-' | '*', Number(a), Number(b):
                         return Float({'+': a + b, '-': a - b, '*': a*b}[op])
@@ -235,22 +257,7 @@ class Simplifier:
             case Unary(op, operand):
                 return Unary(op, self.simplify(operand))
             case Call(Var(func), args):
-                args = [self.simplify(a) for a in args]
-                match func, args:
-                    case 'pow', [_, Int(0)]:
-                        return Int(1)
-                    case 'pow', [base, Int(1)]:
-                        return base
-                    case 'pow', [base, Int(n)] if 2 <= n <= 8:
-                        return expand_power(base, n)
-                    case 'pow', [base, Float(v)]:
-                        r = self._simplify_pow_float(base, v)
-                        if r is not None:
-                            return r
-                        else:
-                            return call('pow', [base, Float(v)])
-                    case _:
-                        return call(func, args)
+                return call(func, [self.simplify(a) for a in args])
             case Ternary(c, t, f):
                 sc = self.simplify(c)
                 st, sf = self.simplify(t), self.simplify(f)
@@ -259,37 +266,6 @@ class Simplifier:
                 return Assign(left, self.simplify(right))
             case _:
                 return expr
-
-    def _simplify_pow_float(self, base, v):
-        # Only half integer powers reduce to multiplies and one sqrt
-        twov = round(2*v)
-        if abs(2*v - twov) > 1e-12 or abs(twov) > 17:
-            return None
-
-        if (n := int(twov)) == 0:
-            return Int(1)
-
-        neg, n = n < 0, abs(n)
-        ipart, has_sqrt = n // 2, n % 2 == 1
-
-        if ipart > 8 or (expr_size(base) > 3 and ipart > 0):
-            return None
-
-        # An integer part of zero implies n is one, leaving a bare sqrt
-        if ipart == 0:
-            result = call('sqrt', [base])
-        elif ipart == 1:
-            result = base
-        else:
-            result = expand_power(base, ipart)
-
-        if has_sqrt and ipart > 0:
-            result = Binary('*', result, call('sqrt', [base]))
-
-        if neg:
-            return Binary('/', Int(1), result)
-        else:
-            return result
 
     def simplify_fully(self, expr, max_iter=10):
         # One rewrite can expose another, so iterate to a fixed point
