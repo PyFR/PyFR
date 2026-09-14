@@ -22,17 +22,16 @@ void axnpby(int ib, const struct kargs *restrict args, int _disp_mask)
     static const fpdtype_t _out[] = ${pyfr.carray(out_scale)};
   % endif
 
-    #define X_IDX(v, nv) ((_xi/SOA_SZ*(nv) + (v))*SOA_SZ + _xj)
     for (ixdtype_t _y = 0; _y < nrow; _y++)
     {
-        for (ixdtype_t _xi = 0; _xi < BLK_SZ; _xi += SOA_SZ)
+        for (ixdtype_t _xi = 0; _xi < BLK_SZ; _xi += ${soasz})
         {
             #pragma omp simd
-            for (ixdtype_t _xj = 0; _xj < SOA_SZ; _xj++)
+            for (ixdtype_t _xj = 0; _xj < ${soasz}; _xj++)
             {
                 ixdtype_t base = _y*BLK_SZ*${ncola} + ib*BLK_SZ*${ncola}*nrow;
             % for k in range(ncola):
-                <% idx = f'base + X_IDX({k}, {ncola})' %>
+                <% idx = f'base + (_xi/{soasz}*{ncola} + {k})*{soasz} + _xj' %>
                 x0[${idx}] = (a0 == 0.0)
                            ? ${pyfr.axnpby_expr(k, idx, 1, nv=nv, in_scale_idxs=in_scale_idxs, out_scale=out_scale)}
                            : ${pyfr.axnpby_expr(k, idx, 0, nv=nv, in_scale_idxs=in_scale_idxs, out_scale=out_scale)};
@@ -40,7 +39,6 @@ void axnpby(int ib, const struct kargs *restrict args, int _disp_mask)
             }
         }
     }
-    #undef X_IDX
 % else:
     #pragma omp simd
     for (ixdtype_t i = ib*nrow*BLK_SZ*${ncola}; i < (ib + 1)*nrow*BLK_SZ*${ncola}; i++)

@@ -1,7 +1,18 @@
 from pyfr.backends.base.generator import BaseGPUKernelGenerator
+from pyfr.dsl.codegen import CodeGenerator
+
+
+class OpenCLCodeGenerator(CodeGenerator):
+    region_markers = {
+        'fp-precise': ('#ifdef __clang__\n'
+                       '_Pragma("clang fp reassociate(off) contract(off)")\n'
+                       '#endif')
+    }
 
 
 class OpenCLKernelGenerator(BaseGPUKernelGenerator):
+    codegen_cls = OpenCLCodeGenerator
+
     _lid = ('get_local_id(0)', 'get_local_id(1)')
     _gid = 'get_global_id(0)'
     _shared_prfx = '__local'

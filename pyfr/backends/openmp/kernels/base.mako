@@ -6,7 +6,6 @@
 #include <stdlib.h>
 #include <tgmath.h>
 
-#define SOA_SZ ${soasz}
 #define BLK_SZ ${csubsz}
 
 #define min(a, b) ((a) < (b) ? (a) : (b))
@@ -15,6 +14,12 @@
 // Typedefs
 typedef ${pyfr.npdtype_to_ctype(fpdtype)} fpdtype_t;
 typedef ${pyfr.npdtype_to_ctype(ixdtype)} ixdtype_t;
+// Unsigned integer matching fpdtype_t's width (for bit tricks)
+% if pyfr.npdtype_to_ctype(fpdtype) == 'double':
+typedef uint64_t fp_uint_t;
+% else:
+typedef uint32_t fp_uint_t;
+% endif
 typedef _Float16 half;
 typedef unsigned short bf16;
 
@@ -51,8 +56,5 @@ static inline float bf16_to_f32(bf16 b)
      ((c) / (tile_sz)) * (tile_sz) * (tile_sz) + \
      ((r) % (tile_sz)) * (tile_sz) + \
      ((c) % (tile_sz)))
-
-// FP-precise block support
-#define PYFR_FP_PRECISE_BEGIN
 
 ${next.body()}
