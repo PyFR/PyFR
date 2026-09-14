@@ -44,6 +44,14 @@ def fpcast(context, expr, src, dst):
         return f'({dst})({expr})'
 
 
+def constdot(context, a_, b_, /, **kwargs):
+    ix, nd = util.first(kwargs.items())
+    nd = nd if isinstance(nd, Iterable) else [nd]
+    ab = (f'({a})*({b_.format(**{ix: i})})' for a, i in zip(a_, range(*nd)))
+
+    return '(' + ' + '.join(ab) + ')'
+
+
 def dot(context, a_, b_=None, /, **kwargs):
     ix, nd = util.first(kwargs.items())
     ab = '({})*({})'.format(a_, b_ or a_)

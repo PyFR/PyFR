@@ -42,8 +42,6 @@ class BaseAdvectionIntInters(BaseInters):
             return None
 
         rot, shift = rhs.transform
-        if not np.allclose(rot, np.eye(len(shift))):
-            raise ValueError('Rotational periodicity is not supported')
 
         # Map the LHS flux points into the RHS frame
         lpts = self._inter_ploc(lhs) @ rot.T + shift
@@ -80,6 +78,10 @@ class BaseAdvectionIntInters(BaseInters):
             return self._rhs_reorder[perm]
         else:
             return perm
+
+    def _get_rotation(self):
+        r = self.rhs.transform and self.rhs.transform[0]
+        return None if np.array_equal(r, np.eye(self.ndims)) else r
 
 
 class BaseAdvectionMPIInters(BaseInters):

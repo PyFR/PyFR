@@ -32,6 +32,8 @@ class NavierStokesIntInters(TplargsMixin,
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        self._tplargs['rot'] = self._get_rotation()
+
         self._be.pointwise.register('pyfr.solvers.navstokes.kernels.intconu')
         self._be.pointwise.register('pyfr.solvers.navstokes.kernels.intcflux')
 
