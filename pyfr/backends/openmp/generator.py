@@ -6,6 +6,9 @@ from pyfr.dsl.nodes import (Binary, DslVar, Index, Int, Program, Var,
 
 
 class OpenMPKernelGenerator(BaseKernelGenerator):
+    # Math functions we lower to helper functions in all kernels
+    lower_fns = frozenset({'exp'})
+
     # Lowerings for the $-intrinsics produced by the dereference rules
     _xidx = '_xi + _xj'
     _aosoa = '(_xi / $soasz*$nv + $v)*$soasz + _xj'
@@ -188,6 +191,7 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                 }}'''
 
         result = f'''
+            {self.helpers}
             struct {self.name}_kargs {{ {kargdefn}; }};
             void {self.name}(ixdtype_t _ib,
                              const struct {self.name}_kargs *args,

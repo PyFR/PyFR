@@ -6,6 +6,12 @@ using namespace metal;
 // Typedefs
 typedef ${pyfr.npdtype_to_ctype(fpdtype)} fpdtype_t;
 typedef ${pyfr.npdtype_to_ctype(ixdtype)} ixdtype_t;
+// Unsigned integer matching fpdtype_t's width (for bit tricks)
+% if pyfr.npdtype_to_ctype(fpdtype) == 'double':
+typedef ulong fp_uint_t;
+% else:
+typedef uint fp_uint_t;
+% endif
 typedef bfloat bf16;
 
 inline bf16 f32_to_bf16(float f) { return (bf16) f; }
