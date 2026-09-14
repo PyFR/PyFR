@@ -3,20 +3,6 @@ import numpy as np
 from pyfr.util import first
 
 
-def _get_inter_arrays(interside, meth, elemap, perm=Ellipsis):
-    parts, reorder = [], []
-
-    for etype, fidx, eidxs, idx in interside.foreach():
-        parts.append(getattr(elemap[etype], meth)(eidxs, fidx))
-        reorder.append(np.repeat(idx, elemap[etype].nfacefpts[fidx]))
-
-    if not parts:
-        return []
-
-    ro = np.argsort(np.concatenate(reorder), kind='stable')[perm]
-    return [np.concatenate(a)[ro] for a in zip(*parts)]
-
-
 class BaseInters:
     def __init__(self, be, lhs, elemap, cfg):
         self._be = be
@@ -52,8 +38,26 @@ class BaseInters:
         if value is not None:
             self._external_vals[name] = value
 
+    def _get_fpts(self, interside, etype, fidx, eidxs):
+        return self.elemap[etype].get_srtd_face_fpts(eidxs, fidx)
+
+    def _get_inter_arrays(self, interside, meth, perm=Ellipsis):
+        parts, reorder = [], []
+
+        for etype, fidx, eidxs, idx in interside.foreach():
+            eles = self.elemap[etype]
+            sfpts = self._get_fpts(interside, etype, fidx, eidxs)
+            parts.append(getattr(eles, meth)(eidxs, fidx, sfpts))
+            reorder.append(np.repeat(idx, eles.nfacefpts[fidx]))
+
+        if not parts:
+            return []
+
+        ro = np.argsort(np.concatenate(reorder), kind='stable')[perm]
+        return [np.concatenate(a)[ro] for a in zip(*parts)]
+
     def _const_mat(self, inter, meth):
-        m = _get_inter_arrays(inter, meth, self.elemap, self._perm)
+        m = self._get_inter_arrays(inter, meth, self._perm)
         if not m:
             m = np.empty((0, self.ndims))
         else:
@@ -62,7 +66,7 @@ class BaseInters:
         return self._be.const_matrix(np.atleast_2d(m.T))
 
     def _get_perm_for_view(self, inter, meth):
-        vm = _get_inter_arrays(inter, meth, self.elemap)
+        vm = self._get_inter_arrays(inter, meth)
         mm = self._be.view(*vm, vshape=()).mapping.get()
 
         return np.argsort(mm[0])
@@ -73,7 +77,7 @@ class BaseInters:
         for etype, fidx, eidxs, idx in inter.foreach():
             mat = field[etype]
             eles = self.elemap[etype]
-            fpts = eles.srtd_face_fpts[fidx][eidxs]
+            fpts = self._get_fpts(inter, etype, fidx, eidxs)
             nfp = fpts.shape[1]
             n = len(eidxs)
 
@@ -91,7 +95,7 @@ class BaseInters:
 
     def _view(self, inter, meth, vshape=(), with_perm=True):
         perm = self._perm if with_perm else Ellipsis
-        vm = _get_inter_arrays(inter, meth, self.elemap, perm)
+        vm = self._get_inter_arrays(inter, meth, perm)
         return self._be.view(*vm, vshape=vshape)
 
     def _scal_view(self, inter, meth):
@@ -102,7 +106,7 @@ class BaseInters:
 
     def _xchg_view(self, inter, meth, vshape=(), with_perm=True):
         perm = self._perm if with_perm else Ellipsis
-        vm = _get_inter_arrays(inter, meth, self.elemap, perm)
+        vm = self._get_inter_arrays(inter, meth, perm)
         return self._be.xchg_view(*vm, vshape=vshape)
 
     def _scal_xchg_view(self, inter, meth):

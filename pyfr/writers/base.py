@@ -6,10 +6,13 @@ from pyfr.util import subclass_where
 
 class BaseWriter:
     needs_con = False
+    split_pcon = True
 
     def __init__(self, meshf, pname=None):
         # Load the mesh
-        self.reader = NativeReader(meshf, pname, construct_con=self.needs_con)
+        self.reader = NativeReader(meshf, pname,
+                                   construct_con=self.needs_con,
+                                   split_pcon=self.split_pcon)
 
         ndims = self.ndims = self.reader.mesh.ndims
 

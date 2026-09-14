@@ -96,6 +96,10 @@ class BaseRegion:
         # Eliminate any faces with internal connectivity
         fs.eliminate_paired(*mesh.con)
 
+        # Likewise for periodic faces
+        for lhs, rhs in mesh.pcon.values():
+            fs.eliminate_paired(lhs, rhs)
+
         # Eliminate faces on specified boundaries
         for b in exclbcs:
             if b in mesh.bcon:
@@ -144,8 +148,10 @@ class BaseRegion:
         for etype, eidxs in eles.items():
             eset[eoffs[etype] + eidxs] = 0
 
-        # Packed keys for internal and partition connectivity
-        lkeys, rkeys = map(pkey, mesh.con)
+        # Packed keys for internal, periodic and partition connectivity
+        icons = [mesh.con, *mesh.pcon.values()]
+        lkeys = np.concatenate([pkey(l) for l, r in icons])
+        rkeys = np.concatenate([pkey(r) for l, r in icons])
         pcon = {p: (pkey(pc), np.empty(len(pc), dtype=bool))
                 for p, pc in mesh.con_p.items()}
 

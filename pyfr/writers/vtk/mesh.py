@@ -8,6 +8,7 @@ from pyfr.writers.vtk.volume import BaseVolumeVTKWriter
 
 class VTKMeshWriter(BaseVolumeVTKWriter):
     type = 'mesh'
+    split_pcon = False
 
     def __init__(self, meshf, pname=None, *, cfg=None, **kwargs):
         self.cfg = cfg

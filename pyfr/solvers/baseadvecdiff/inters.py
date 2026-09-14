@@ -1,7 +1,8 @@
 from pyfr.mpiutil import get_comm_rank_root
 from pyfr.solvers.baseadvec import (BaseAdvectionIntInters,
                                     BaseAdvectionMPIInters,
-                                    BaseAdvectionBCInters)
+                                    BaseAdvectionBCInters,
+                                    BaseAdvectionPeriodicInters)
 
 
 class BaseAdvectionDiffusionIntInters(BaseAdvectionIntInters):
@@ -27,6 +28,24 @@ class BaseAdvectionDiffusionIntInters(BaseAdvectionIntInters):
         side = lhs if beta != -0.5 else rhs
 
         # Compute the relevant permutation
+        self._perm = self._get_perm_for_field(side, scal)
+
+
+class BaseAdvectionDiffusionPeriodicInters(BaseAdvectionPeriodicInters):
+    def __init__(self, be, lhs, rhs, elemap, cfg, name):
+        super().__init__(be, lhs, rhs, elemap, cfg, name)
+
+        self._vect_lhs = self._vect_view(lhs, 'get_vect_fpts_for_inters')
+        self._vect_rhs = self._vect_view(rhs, 'get_vect_fpts_for_inters')
+        self._comm_lhs = self._scal_view(lhs, 'get_comm_fpts_for_inters')
+        self._comm_rhs = self._scal_view(rhs, 'get_comm_fpts_for_inters')
+
+        self.artvisc = None
+        self.c |= cfg.items_as('solver-interfaces', float)
+
+    def _gen_perm(self, lhs, rhs, scal):
+        beta = self.cfg.getfloat('solver-interfaces', 'ldg-beta')
+        side = lhs if beta != -0.5 else rhs
         self._perm = self._get_perm_for_field(side, scal)
 
 

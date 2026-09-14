@@ -1,6 +1,8 @@
 import itertools as it
 import math
 
+import numpy as np
+
 from pyfr.exprs import npeval
 from pyfr.solvers.base import BaseInters
 
@@ -25,6 +27,36 @@ class BaseAdvectionIntInters(BaseInters):
     def _gen_perm(self, lhs, rhs, scal):
         # Arbitrarily, take the permutation which results in an optimal
         # memory access pattern for the LHS of the interface
+        self._perm = self._get_perm_for_field(lhs, scal)
+
+
+class BaseAdvectionPeriodicInters(BaseInters):
+    def __init__(self, be, lhs, rhs, elemap, cfg, name):
+        self.lhs, self.rhs = lhs, rhs
+        self.name = name
+        self._rot, self._shift = rhs.transform
+        self._rhs_fpts = {}
+        for etype, fidx, eidxs in rhs.items():
+            eles = elemap[etype]
+            sfpts = eles.get_srtd_face_fpts(eidxs, fidx, rhs.transform)
+            self._rhs_fpts[etype, fidx] = sfpts
+
+        super().__init__(be, lhs, elemap, cfg)
+
+        scal = {t: e._scal_fpts for t, e in elemap.items()}
+        self._gen_perm(lhs, rhs, scal)
+        self._pnorm_lhs = self._const_mat(lhs, 'get_pnorms_for_inters')
+
+        if not np.allclose(self._rot, np.eye(self.ndims)):
+            raise ValueError('Rotational periodicity is not supported')
+
+    def _get_fpts(self, interside, etype, fidx, eidxs):
+        if interside is self.rhs:
+            return self._rhs_fpts[etype, fidx]
+
+        return super()._get_fpts(interside, etype, fidx, eidxs)
+
+    def _gen_perm(self, lhs, rhs, scal):
         self._perm = self._get_perm_for_field(lhs, scal)
 
 

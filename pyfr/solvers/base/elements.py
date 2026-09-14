@@ -20,12 +20,12 @@ class ExportableField:
 
 def inters_map(meth):
     @wraps(meth)
-    def newmeth(self, eidxs, fidx):
+    def newmeth(self, eidxs, fidx, sfpts):
         nfp = self.nfacefpts[fidx]
         n = len(eidxs)
         cmap = np.repeat(eidxs, nfp)
 
-        match meth(self, eidxs, fidx):
+        match meth(self, eidxs, fidx, sfpts):
             case [mid, rmap]:
                 return np.full(n*nfp, mid), rmap.ravel(), cmap
             case [mid, rmap, lda]:
@@ -169,13 +169,25 @@ class BaseElements:
         plocfpts = self.plocfpts
         sffpts = []
 
-        for ffpts in self.basis.facefpts:
+        for fidx, ffpts in enumerate(self.basis.facefpts):
             ffpts = np.asarray(ffpts)
             coords = plocfpts[ffpts].transpose(1, 2, 0)
             perm = batched_fuzzysort(coords)
             sffpts.append(ffpts[perm])
 
         return sffpts
+
+    def get_srtd_face_fpts(self, eidxs, fidx, transform=None):
+        if transform is None:
+            return self.srtd_face_fpts[fidx][eidxs]
+
+        rot, shift = transform
+        ffpts = np.asarray(self.basis.facefpts[fidx])
+        coords = self.plocfpts[ffpts].transpose(1, 2, 0)[eidxs]
+        coords -= shift[None, :, None]
+        perm = batched_fuzzysort(np.einsum('eik,ij->ejk', coords, rot))
+
+        return ffpts[perm]
 
     def _scratch_bufs(self):
         pass
@@ -460,27 +472,23 @@ class BaseElements:
         fpts_idx = self.basis.facefpts[fidx]
         return self._pnorm_fpts[fpts_idx, eidx]
 
-    def get_pnorms_for_inters(self, eidxs, fidx):
-        fpts_idx = self.srtd_face_fpts[fidx][eidxs]
-        pn = self._pnorm_fpts[fpts_idx, eidxs[:, None]]
+    def get_pnorms_for_inters(self, eidxs, fidx, sfpts):
+        pn = self._pnorm_fpts[sfpts, eidxs[:, None]]
         return pn.reshape(-1, self.ndims),
 
     @inters_map
-    def _get_vect_fpts_for_inters(self, eidxs, fidx):
-        rmap = self.srtd_face_fpts[fidx][eidxs]
-        return self._vect_fpts.mid, rmap, self.nfpts
+    def _get_vect_fpts_for_inters(self, eidxs, fidx, sfpts):
+        return self._vect_fpts.mid, sfpts, self.nfpts
 
     @inters_map
-    def _get_vect_upts_for_inters(self, eidxs, fidx):
-        rmap = self.srtd_face_fpts[fidx][eidxs]
-        fmap = self.basis.fpts_map_upts[rmap]
+    def _get_vect_upts_for_inters(self, eidxs, fidx, sfpts):
+        fmap = self.basis.fpts_map_upts[sfpts]
         return self._vect_upts.mid, fmap, self.nupts
 
     @inters_map
-    def _get_comm_fpts_for_inters(self, eidxs, fidx):
-        return self._comm_fpts.mid, self.srtd_face_fpts[fidx][eidxs]
+    def _get_comm_fpts_for_inters(self, eidxs, fidx, sfpts):
+        return self._comm_fpts.mid, sfpts
 
-    def get_ploc_for_inters(self, eidxs, fidx):
-        fpts_idx = self.srtd_face_fpts[fidx][eidxs]
-        ploc = self.plocfpts[fpts_idx, eidxs[:, None]]
+    def get_ploc_for_inters(self, eidxs, fidx, sfpts):
+        ploc = self.plocfpts[sfpts, eidxs[:, None]]
         return ploc.reshape(-1, self.ndims),

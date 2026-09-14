@@ -486,6 +486,7 @@ class VTKSpanwiseWriter(BaseVTKWriter):
     adapter_kind = 'volume'
     output_curved = True
     needs_con = True
+    split_pcon = False
     dimensions = '3'
 
     def __init__(self, meshf, *, nstations=None, boundary=None, periodic=None,

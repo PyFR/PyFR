@@ -38,6 +38,7 @@ class Mesh:
     con: tuple = field(default_factory=tuple)
     con_p: dict = field(default_factory=dict)
     bcon: dict = field(default_factory=dict)
+    pcon: dict = field(default_factory=dict)
     cidxmap: dict = field(default_factory=dict)
 
     # Shared nodes for C0 continuous fields
@@ -104,10 +105,11 @@ class Solution:
 
 
 class Connectivity:
-    def __init__(self, cidxs, eidxs, cidxmap):
+    def __init__(self, cidxs, eidxs, cidxmap, transform=None):
         self.cidxmap = cidxmap
         self.cidxs = cidxs
         self.eidxs = eidxs
+        self.transform = transform
         self._ucidxs = np.unique(cidxs).tolist()
 
     def __len__(self):
@@ -135,7 +137,8 @@ class Connectivity:
         new = self.map_eles(eidx, dtype=int)
         mask = new >= 0
 
-        return Connectivity(self.cidxs[mask], new[mask], self.cidxmap)
+        return Connectivity(self.cidxs[mask], new[mask], self.cidxmap,
+                            self.transform)
 
     @classmethod
     def fuse(cls, cons):
@@ -155,7 +158,8 @@ class Connectivity:
 
 
 class NativeReader:
-    def __init__(self, fname, pname=None, *, construct_con=True):
+    def __init__(self, fname, pname=None, *, construct_con=True,
+                 split_pcon=True):
         self.f = h5py.File(fname, 'r')
         self.mesh = Mesh(fname=fname, raw=self.f)
 
@@ -166,7 +170,7 @@ class NativeReader:
         self._read_nodes()
 
         # Construct connectivity
-        self._construct_con(full=construct_con)
+        self._construct_con(full=construct_con, split_pcon=split_pcon)
 
         self._construct_shared_nodes()
 
@@ -530,7 +534,24 @@ class NativeReader:
 
         return map(np.concatenate, zip(*parts))
 
-    def _construct_con(self, full=True):
+    def _local_eidx(self, g2l, cetmap, cidxs, offs):
+        # Map global element numbers to partition local ones
+        eidx = np.full(len(offs), -1)
+        for etidx, etype in enumerate(self.mesh.etypes):
+            if etype not in g2l:
+                continue
+
+            ordgi, perm = g2l[etype][1:]
+            mask = cetmap[cidxs] == etidx
+            eoffs = offs[mask]
+
+            pos = np.searchsorted(ordgi, eoffs)
+            pos = np.clip(pos, 0, len(ordgi) - 1)
+            eidx[mask] = np.where(ordgi[pos] == eoffs, perm[pos], -1)
+
+        return eidx
+
+    def _construct_con(self, full=True, split_pcon=True):
         cidxmap, cetmap = self._parse_codec()
         g2l = self._build_g2l()
         lcidx, leidx, lgidx, rcidx, rgidx = self._flatten_faces(g2l)
@@ -548,21 +569,7 @@ class NativeReader:
             return
 
         # Global-to-local lookup for rhs element-neighbour faces
-        reidx = np.full(len(lcidx), -1)
-        for etidx, etype in enumerate(self.mesh.etypes):
-            if etype not in g2l:
-                continue
-
-            ordgi, perm = g2l[etype][1:]
-
-            # Select rhs faces whose neighbour is this element type
-            mask = cetmap[rcidx] == etidx
-            offs = rgidx[mask]
-
-            # Map global element numbers to partition local numbers
-            pos = np.searchsorted(ordgi, offs)
-            pos = np.clip(pos, 0, len(ordgi) - 1)
-            reidx[mask] = np.where(ordgi[pos] == offs, perm[pos], -1)
+        reidx = self._local_eidx(g2l, cetmap, rcidx, rgidx)
 
         # Classify interfaces
         is_boundary, is_local = rgidx == -1, reidx >= 0
@@ -572,6 +579,21 @@ class NativeReader:
         lkey, rkey = self._pack_pairs((lcidx[is_local], leidx[is_local]),
                                       (rcidx[is_local], reidx[is_local]))
         iidxs = np.flatnonzero(is_local)[lkey < rkey]
+
+        # Split periodic pairs out into their own connectivity
+        if split_pcon:
+            self._construct_pcon(g2l, cetmap, cidxmap)
+
+            if self.mesh.pcon:
+                pairs = []
+                for lhs, rhs in self.mesh.pcon.values():
+                    for c in (lhs, rhs):
+                        pairs.append((c.cidxs, c.eidxs))
+
+                pcidxs, peidxs = map(np.concatenate, zip(*pairs))
+                ipair = lcidx[iidxs], leidx[iidxs]
+                pkeys, ikeys = self._pack_pairs((pcidxs, peidxs), ipair)
+                iidxs = iidxs[~np.isin(ikeys, pkeys)]
 
         self.mesh.con = (con(lcidx[iidxs], leidx[iidxs]),
                          con(rcidx[iidxs], reidx[iidxs]))
@@ -586,6 +608,38 @@ class NativeReader:
             stride = max(len(self.f[f'eles/{et}']) for et in self.mesh.etypes)
 
             self._construct_mpi_con(g2l, cetmap, cidxmap, lhs, rhs, stride)
+
+    def _construct_pcon(self, g2l, cetmap, cidxmap):
+        mesh = self.mesh
+        comm, rank, root = get_comm_rank_root()
+
+        if rank == root:
+            pdata = {}
+            for name, dset in self.f.get('periodic', {}).items():
+                rot = dset.attrs['R'][:mesh.ndims, :mesh.ndims]
+                shift = dset.attrs['T'][:mesh.ndims]
+                pdata[name] = (dset[()], rot, shift)
+        else:
+            pdata = None
+
+        pdata = comm.bcast(pdata, root=root)
+
+        for name, (pcon, rot, shift) in pdata.items():
+            # Localise element indices
+            lsf, rsf = pcon.T
+            le = self._local_eidx(g2l, cetmap, lsf['cidx'], lsf['off'])
+            re = self._local_eidx(g2l, cetmap, rsf['cidx'], rsf['off'])
+
+            # Skip periodic groups with no face pairs on this rank
+            if not (keep := le >= 0).any():
+                continue
+
+            itransform = rot.T, -(rot.T @ shift)
+            lhs = Connectivity(lsf['cidx'][keep], le[keep], cidxmap,
+                               itransform)
+            rhs = Connectivity(rsf['cidx'][keep], re[keep], cidxmap,
+                               (rot, shift))
+            mesh.pcon[name] = lhs, rhs
 
     def _construct_mpi_con(self, g2l, cetmap, cidxmap, lhs, rhs, stride):
         comm, rank, root = get_comm_rank_root()
@@ -603,7 +657,6 @@ class NativeReader:
         # Distribute this information back to our neighbours
         nmatches = ncomm.neighbor_alltoall(matches)
 
-        etypes = self.mesh.etypes
         for nrank, nmatch in zip(self.neighbours, nmatches):
             # Find which of our lhs faces match this neighbour
             idx = find(nmatch)
@@ -613,16 +666,9 @@ class NativeReader:
             ref = rhs if rank < nrank else lhs
             idx = idx[np.lexsort((ref.idx[idx], ref.cidx[idx]))]
 
-            # Codec and element type indices for matched faces
-            cidxs, etidxs = lhs.cidx[idx], cetmap[lhs.cidx[idx]]
-
             # Convert global element offsets to partition-local indices
-            eidxs = np.empty(len(idx), dtype=int)
-            for ti in np.unique(etidxs):
-                ordgi, perm = g2l[etypes[ti]][1:]
-                mask = etidxs == ti
-                pos = np.searchsorted(ordgi, lhs.idx[idx[mask]])
-                eidxs[mask] = perm[pos]
+            cidxs = lhs.cidx[idx]
+            eidxs = self._local_eidx(g2l, cetmap, cidxs, lhs.idx[idx])
 
             self.mesh.con_p[nrank] = Connectivity(cidxs, eidxs, cidxmap)
 
