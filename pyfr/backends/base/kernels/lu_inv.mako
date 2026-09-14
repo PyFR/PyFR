@@ -15,7 +15,8 @@
     NBLK = -(-n // SB)
     N2 = n*n
     eye = lambda row, col: f'(({row}) == ({col}) ? ({ftype}) 1 : ({ftype}) 0)'
-    src_at = lambda row, col: f'src[{row}*src_ldim + SOA_IX(eoff + bid, {col}, {n})]'
+    soa = lambda col: pyfr.soa_ix('eoff + bid', col, n)
+    src_at = lambda row, col: f'src[{row}*src_ldim + {soa(col)}]'
 %>
     ixdtype_t bid = PYFR_BLOCK_ID;
     int tid = PYFR_THREAD_ID;

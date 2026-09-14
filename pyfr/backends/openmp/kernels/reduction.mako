@@ -26,8 +26,6 @@ void reduction(const struct kargs *restrict args)
     // Initialise the reduction array
     fpdtype_t acc[${nexprs}] = ${pyfr.array(str(init_val), i=nexprs)};
 
-    #define X_IDX_AOSOA(v, nv) ((_xi/SOA_SZ*(nv) + (v))*SOA_SZ + _xj)
-
 % if rop == 'max':
     #pragma omp parallel for ${schedule} reduction(max : acc[:${nexprs}])
 % else:
@@ -40,14 +38,14 @@ void reduction(const struct kargs *restrict args)
         {
             for (ixdtype_t _y = 0; _y < nrow; _y++)
             {
-                for (ixdtype_t _xi = 0; _xi < BLK_SZ; _xi += SOA_SZ)
+                for (ixdtype_t _xi = 0; _xi < BLK_SZ; _xi += ${soasz})
                 {
                     #pragma omp simd
-                    for (ixdtype_t _xj = 0; _xj < SOA_SZ; _xj++)
+                    for (ixdtype_t _xj = 0; _xj < ${soasz}; _xj++)
                     {
                         for (ixdtype_t _k = 0; _k < ${ncola}; _k++)
                         {
-                            ixdtype_t idx = (_y + ib*nrow)*BLK_SZ*${ncola} + X_IDX_AOSOA(_k, ${ncola});
+                            ixdtype_t idx = (_y + ib*nrow)*BLK_SZ*${ncola} + (_xi/${soasz}*${ncola} + _k)*${soasz} + _xj;
                         % for j, e in enumerate(exprs):
                             % if rop == 'max':
                             acc[${j}] = fmax(acc[${j}], ${e});
@@ -66,14 +64,14 @@ void reduction(const struct kargs *restrict args)
             for (ixdtype_t _y = 0; _y < nrow; _y++)
             {
                 ixdtype_t rem = narr % BLK_SZ;
-                for (ixdtype_t _xi = 0; _xi < rem; _xi += SOA_SZ)
+                for (ixdtype_t _xi = 0; _xi < rem; _xi += ${soasz})
                 {
                     #pragma omp simd
-                    for (ixdtype_t _xj = 0; _xj < min(SOA_SZ, rem - _xi); _xj++)
+                    for (ixdtype_t _xj = 0; _xj < min(${soasz}, rem - _xi); _xj++)
                     {
                         for (ixdtype_t _k = 0; _k < ${ncola}; _k++)
                         {
-                            ixdtype_t idx = (_y + ib*nrow)*BLK_SZ*${ncola} + X_IDX_AOSOA(_k, ${ncola});
+                            ixdtype_t idx = (_y + ib*nrow)*BLK_SZ*${ncola} + (_xi/${soasz}*${ncola} + _k)*${soasz} + _xj;
                         % for j, e in enumerate(exprs):
                             % if rop == 'max':
                             acc[${j}] = fmax(acc[${j}], ${e});
@@ -87,8 +85,6 @@ void reduction(const struct kargs *restrict args)
             }
         }
     }
-    #undef X_IDX_AOSOA
-
     // Copy
 % for i in range(nexprs):
     reduced[${i}] = acc[${i}];

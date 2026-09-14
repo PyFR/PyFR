@@ -26,7 +26,7 @@ reduction(ixdtype_t nrow, ixdtype_t ncolb, ixdtype_t ldim,
     {
         for (ixdtype_t j = 0; j < nrow; j++)
         {
-            ixdtype_t idx = j*ldim + SOA_IX(i, k, ncola);
+            ixdtype_t idx = j*ldim + ${pyfr.soa_ix('i', 'k', 'ncola')};
 % for ei in range(nexprs):
   % if rop == 'max':
             acc_${ei} = fmax(acc_${ei}, ${exprs[ei]});

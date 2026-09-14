@@ -1,9 +1,18 @@
 from math import prod
 
 from pyfr.backends.base.generator import BaseGPUKernelGenerator
+from pyfr.dsl.codegen import CodeGenerator
+
+
+class HIPCodeGenerator(CodeGenerator):
+    region_markers = {
+        'fp-precise': '_Pragma("clang fp reassociate(off) contract(off)")'
+    }
 
 
 class HIPKernelGenerator(BaseGPUKernelGenerator):
+    codegen_cls = HIPCodeGenerator
+
     _lid = ('threadIdx.x', 'threadIdx.y')
     _gid = 'ixdtype_t(blockIdx.x)*blockDim.x + threadIdx.x'
     _shared_prfx = '__shared__'

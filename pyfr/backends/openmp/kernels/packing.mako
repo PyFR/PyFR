@@ -20,11 +20,11 @@ void pack_view(const struct kargs *restrict args)
     {
     % if nrv == 1:
     % for c in range(ncv):
-        pmat[${c}*n + i] = v[vix[i] + SOA_SZ*${c}];
+        pmat[${c}*n + i] = v[vix[i] + ${soasz}*${c}];
     % endfor
     % else:
     % for r, c in pyfr.ndrange(nrv, ncv):
-        pmat[${r*ncv + c}*n + i] = v[vix[i] + vrstri[i]*${r} + SOA_SZ*${c}];
+        pmat[${r*ncv + c}*n + i] = v[vix[i] + vrstri[i]*${r} + ${soasz}*${c}];
     % endfor
     % endif
     }
@@ -41,11 +41,11 @@ void unpack_view(const struct kargs *restrict args)
     {
     % if nrv == 1:
     % for c in range(ncv):
-        v[vix[i] + SOA_SZ*${c}] = pmat[${c}*n + i];
+        v[vix[i] + ${soasz}*${c}] = pmat[${c}*n + i];
     % endfor
     % else:
     % for r, c in pyfr.ndrange(nrv, ncv):
-        v[vix[i] + vrstri[i]*${r} + SOA_SZ*${c}] = pmat[${r*ncv + c}*n + i];
+        v[vix[i] + vrstri[i]*${r} + ${soasz}*${c}] = pmat[${r*ncv + c}*n + i];
     % endfor
     % endif
     }
