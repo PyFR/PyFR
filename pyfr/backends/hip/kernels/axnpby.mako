@@ -21,7 +21,7 @@ axnpby(ixdtype_t ncolb, ixdtype_t ldim,
     if (j < ncolb && a0 == 0.0)
     {
     % for k in range(ncola):
-        idx = i*ldim + SOA_IX(j, ${k}, ${ncola});
+        idx = i*ldim + ${pyfr.soa_ix('j', k, ncola)};
         x0[idx] = ${pyfr.axnpby_expr(k, 'idx', 1, nv=nv, in_scale_idxs=in_scale_idxs, out_scale=out_scale)};
     % endfor
     }
@@ -29,7 +29,7 @@ axnpby(ixdtype_t ncolb, ixdtype_t ldim,
     else if (j < ncolb && a0 == 1.0)
     {
     % for k in range(ncola):
-        idx = i*ldim + SOA_IX(j, ${k}, ${ncola});
+        idx = i*ldim + ${pyfr.soa_ix('j', k, ncola)};
         x0[idx] += ${pyfr.axnpby_expr(k, 'idx', 1, nv=nv, in_scale_idxs=in_scale_idxs, out_scale=out_scale)};
     % endfor
     }
@@ -37,7 +37,7 @@ axnpby(ixdtype_t ncolb, ixdtype_t ldim,
     else if (j < ncolb)
     {
     % for k in range(ncola):
-        idx = i*ldim + SOA_IX(j, ${k}, ${ncola});
+        idx = i*ldim + ${pyfr.soa_ix('j', k, ncola)};
         x0[idx] = ${pyfr.axnpby_expr(k, 'idx', 0, nv=nv, in_scale_idxs=in_scale_idxs, out_scale=out_scale)};
     % endfor
     }

@@ -1,9 +1,4 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
-
-// AoSoA macros
-#define SOA_SZ ${soasz}
-#define SOA_IX(a, v, nv) ((((a) / SOA_SZ)*(nv) + (v))*SOA_SZ + (a) % SOA_SZ)
-
 // Typedefs
 typedef unsigned int uint32_t;
 typedef long int64_t;
@@ -86,13 +81,6 @@ void atomic_sum_fpdtype(${aspace} fpdtype_t *addr, fpdtype_t val)
         PYFR_SYNC_THREADS();
     }
 </%def>
-
-// FP-precise block support
-#ifdef __clang__
-#define PYFR_FP_PRECISE_BEGIN _Pragma("clang fp reassociate(off) contract(off)")
-#else
-#define PYFR_FP_PRECISE_BEGIN
-#endif
 
 <%def name="_kdecl(name, bounds)">\
 % if bounds:

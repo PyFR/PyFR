@@ -1,9 +1,18 @@
 import re
 
 from pyfr.backends.base.generator import BaseGPUKernelGenerator
+from pyfr.dsl.codegen import CodeGenerator
+
+
+class MetalCodeGenerator(CodeGenerator):
+    region_markers = {
+        'fp-precise': '_Pragma("clang fp reassociate(off) contract(off)")'
+    }
 
 
 class MetalKernelGenerator(BaseGPUKernelGenerator):
+    codegen_cls = MetalCodeGenerator
+
     _lid = ('_tpitg.x', '_tpitg.y')
     _gid = '_tpig.x'
     _shared_prfx = 'threadgroup'

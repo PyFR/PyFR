@@ -62,7 +62,7 @@ class MetalKernelProvider(BaseKernelProvider):
             v[off:off + blk.nbytes] = blk[:m.nbytes - off]
 
     @memoize
-    def _build_kernel(self, name, src, argtypes):
+    def _build_kernel(self, name, src, argtypes, regions=frozenset()):
         from Metal import MTLSizeMake
 
         # Build the pipeline using the compiler (with disk caching)

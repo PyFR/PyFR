@@ -7,6 +7,9 @@ import re
 from mako.runtime import capture, supports_caller
 import numpy as np
 
+from pyfr.dsl.codegen import CodeGenerator
+from pyfr.dsl.nodes import Var, VarDecl, map_ast
+from pyfr.dsl.rewriter import parse_expr, parse_program, rename_vars
 import pyfr.nputil as nputil
 import pyfr.util as util
 
@@ -91,29 +94,6 @@ def polyfit(context, f, a, b, n, var, nqpts=500):
     pfexpr = f' + {var}*('.join(str(c) for c in coeffs) + ')'*n
 
     return f'({pfexpr})'
-
-
-def _locals(body):
-    # First, strip away any comments
-    body = re.sub(r'//.*?\n', '', body)
-
-    # Strip away string literals
-    body = re.sub(r'"(?:[^"\\]|\\.)*"', '""', body)
-
-    # Next, find all variable declaration statements
-    decls = re.findall(r'(?:[A-Za-z_]\w*)\s+([A-Za-z_]\w*[^;]*?);', body)
-
-    # Strip anything inside () or {}
-    decls = [util.strip_parens(d) for d in decls]
-
-    # A statement can define multiple variables, so split by ','
-    decls = it.chain.from_iterable(d.split(',') for d in decls)
-
-    # Extract the variable names
-    lvars = [re.match(r'\s*(\w+)', v)[1] for v in decls]
-
-    # Prune invalid names
-    return [lv for lv in lvars if lv != 'if']
 
 
 Macro = namedtuple('Macro', ['params', 'externs', 'argsig', 'caller', 'id'])
@@ -220,32 +200,45 @@ def expand(context, name, /, *args, **kwargs):
     except Exception as e:
         raise ExceptionGroup(f'In macro: {name}', [e]) from None
 
-    # Identify any local variable declarations
-    lvars = _locals(body)
+    # Parse the body into an AST
+    ast = parse_program(body)
+
+    # Identify local variable declarations and the names in use
+    lvars, used = [], set()
+
+    def collect(node):
+        if isinstance(node, VarDecl):
+            lvars.append(node.name)
+        elif isinstance(node, Var):
+            used.add(node.name)
+        return map_ast(node, collect)
+
+    collect(ast)
 
     # Suffix these variables by a '_'
     if lvars:
-        body = re.sub(r'\b({0})\b'.format('|'.join(lvars)), r'\1_', body)
+        renames = {v: Var(v + '_') for v in lvars}
+        ast = rename_vars(ast, renames)
+        used = {u + '_' if u in renames else u for u in used}
 
     # Ensure all (used) external parameters have been passed to the kernel
     for extrn in mdef.externs:
-        if (extrn not in context['_extrns'] and
-            re.search(rf'\b{extrn}\b', body)):
+        if extrn not in context['_extrns'] and extrn in used:
             raise ExceptionGroup(f'In macro: {name}',
                                  [ValueError(f'Missing external {extrn!r}')])
 
     # Rename local parameters
-    for lname, subst in params.items():
-        body = re.sub(rf'\b{lname}\b', str(subst), body)
+    renames = {p: parse_expr(str(v)) for p, v in params.items()}
+    ast = rename_vars(ast, renames)
 
-    return f'{{\n{body}\n}}'
+    return '{\n' + CodeGenerator().generate(ast) + '\n}'
 
 
 @supports_caller
 def fp_precise(context):
     body = capture(context, context['caller'].body)
 
-    return '{\nPYFR_FP_PRECISE_BEGIN\n' + body + '\n}'
+    return '#pragma pyfr fp-precise\n{\n' + body + '\n}'
 
 
 @supports_caller
@@ -297,10 +290,11 @@ def kernel(context, name, ndim, **kwargs):
     fpdtype, ixdtype = context['fpdtype'], context['ixdtype']
 
     # Instantiate
-    kern = kerngen(name, int(ndim), kwargs, body, fpdtype, ixdtype)
+    kern = kerngen(name, int(ndim), kwargs, body, fpdtype, ixdtype,
+                   context['soasz'])
 
-    # Save the argument/type list for later use
-    context['_kernel_argspecs'][name] = kern.argspec()
+    # Save the argument/type list and region kinds for later use
+    context['_kernel_meta'][name] = (kern.argspec(), kern.regions)
 
     # Render and return the complete kernel
     return kern.render()
@@ -309,6 +303,11 @@ def kernel(context, name, ndim, **kwargs):
 def alias(context, name, func):
     context['_macros'][name] = context['_macros'][func]
     return ''
+
+
+def soa_ix(context, a, v, nv):
+    sz = context['soasz']
+    return f'(((({a}) / {sz})*({nv}) + ({v}))*{sz} + ({a}) % {sz})'
 
 
 def tiled_idx(context, e, r, c, trows, tcols, padr, padc):

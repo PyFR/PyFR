@@ -79,7 +79,7 @@ class OpenCLKernelProvider(BaseKernelProvider):
 
         return self.backend.compiler.build(src, flags)
 
-    def _build_kernel(self, name, src, argtypes):
+    def _build_kernel(self, name, src, argtypes, regions=frozenset()):
         argtypes = [npdtype_to_ctypestype(arg) for arg in argtypes]
 
         return self._build_program(src).get_kernel(name, argtypes)

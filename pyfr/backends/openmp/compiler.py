@@ -38,8 +38,8 @@ class OpenMPCompiler:
         self.cache = ObjectCache('omp')
 
     def build(self, src, *, fast_math=True):
-        # Compute a digest of the current processor, compiler, and source
-        ckey = digest(self.proc, self.version, self.cmd, src)
+        # Compute a digest of the processor, compiler, source, and flags
+        ckey = digest(self.proc, self.version, self.cmd, src, fast_math)
 
         # Attempt to load the library from the cache
         mod = self._cache_loadlib(ckey)

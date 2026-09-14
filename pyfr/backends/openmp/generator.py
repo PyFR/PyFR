@@ -1,69 +1,109 @@
-import re
 from math import prod
 
 from pyfr.backends.base.generator import BaseKernelGenerator
+from pyfr.dsl.nodes import (Binary, DslVar, Index, Int, Program, Var,
+                            VarDecl, map_ast)
 
 
 class OpenMPKernelGenerator(BaseKernelGenerator):
-    def _render_body_preamble_epilogue(self, body):
-        self._has_fp_precise = 'PYFR_FP_PRECISE_BEGIN' in body
+    # Lowerings for the $-intrinsics produced by the dereference rules
+    _xidx = '_xi + _xj'
+    _aosoa = '(_xi / $soasz*$nv + $v)*$soasz + _xj'
+    _bcast = '$c % $ld + ($c / $ld)*$ld*$r'
+
+    def _render_body_preamble_epilogue(self):
         self._staged_reduces = []
         self._bcol_reduces = []
-        return self._render_body(body), '', ''
+        return super()._render_body_preamble_epilogue()
 
-    def _render_reduce(self, va, body, subp, darg):
+    def _finalise_ast(self, ast):
+        # Redirect 1D view reductions through their staging arrays
+        for va in self.vectargs:
+            if va.isreduce and not va.isbroadcastc:
+                self._staged_reduces.append(va)
+                ast = self._stage_reduce(ast, va)
+
+        return ast
+
+    def _stage_reduce(self, ast, va):
+        rv, xidx = Var(f'_rv_{va.name}'), DslVar('xidx')
+
+        def stage(node):
+            node = map_ast(node, stage)
+            match node:
+                # Rewrite name into _rv_name[$xidx]
+                case Var(name) if name == va.name and va.viewstride == 1:
+                    return Index(rv, xidx)
+                # Rewrite name[i] into _rv_name[i][$xidx]
+                case Index(Var(name), ix) if name == va.name:
+                    return Index(Index(rv, ix), xidx)
+                case _:
+                    return node
+
+        return stage(ast)
+
+    def _render_reduce(self, va, body, codegen):
         # 2D broadcast-col: per-iteration local + direct accumulation
         if va.isbroadcastc:
             self._bcol_reduces.append(va)
             n = prod(va.cdims) if va.cdims else 1
 
             if va.ncdim:
-                decl = f'fpdtype_t {va.name}[{n}];'
-                accum = '\n'.join(
-                    self._accum_expr(va.reduceop, darg.replace('\\1', str(j)),
-                                     f'{va.name}[{j}]')
-                    for j in range(n)
-                )
+                # Declare a local accumulator fpdtype_t name[n]
+                decl = VarDecl(False, 'fpdtype_t', va.name, [Int(n)])
+                # Emit name_v[...] = op(name_v[...], name[j]) per element
+                accum = [self._accum_stmt(va.reduceop, self._deref_arg(va, j),
+                                          Index(Var(va.name), Int(j)))
+                         for j in range(n)]
             else:
-                decl = f'fpdtype_t {va.name};'
-                accum = self._accum_expr(va.reduceop, darg, va.name)
+                # Declare a local accumulator fpdtype_t name
+                decl = VarDecl(False, 'fpdtype_t', va.name)
+                # Emit name_v[...] = op(name_v[...], name)
+                accum = [self._accum_stmt(va.reduceop, self._deref_arg(va),
+                                          Var(va.name))]
 
-            return f'{decl}\n{body}\n{accum}'
-        # 1D view: staging array + atomic writeback
+            dstr = self._generate(codegen, decl)
+            astr = self._generate(codegen, Program(accum))
+            return f'{dstr}\n{body}\n{astr}'
+        # 1D view reductions have already been staged by _finalise_ast
         else:
-            self._staged_reduces.append(va)
-            vs = va.viewstride
-
-            if vs > 1:
-                ptn = r'_rv_{0}[\1][X_IDX]'.format(va.name)
-            else:
-                ptn = r'_rv_{0}[X_IDX]'.format(va.name)
-
-            return re.sub(subp, ptn, body)
+            return body
 
     def _render_staging(self):
         # Generate staging array declarations and atomic writeback code
+        codegen = self.codegen_cls()
         decls, atoms = [], []
-        ix = '_xi + _xj'
+
+        # Index _xi + _xj of the current lane in the staging arrays
+        ix = Binary('+', Var('_xi'), Var('_xj'))
 
         for va in self._staged_reduces:
-            afn = f'atomic_{va.reduceop}_fpdtype'
             name = va.name
+            rv, vix = Var(f'_rv_{name}'), Var(f'{name}_vix')
+            gv = Var(f'{name}_v')
             vs = va.viewstride
 
             if vs > 1:
-                decls.append(f'fpdtype_t _rv_{name}[{vs}][BLK_SZ];')
+                # Declare the staging array fpdtype_t _rv_name[vs][BLK_SZ]
+                sizes = [Int(vs), Var('BLK_SZ')]
+                decls.append(VarDecl(False, 'fpdtype_t', rv.name, sizes))
                 for i in range(vs):
-                    vidx = f'{vs}*({ix}) + {i}'
-                    atoms.append(
-                        f'{afn}(&{name}_v[{name}_vix[{vidx}]], '
-                        f'_rv_{name}[{i}][{ix}]);')
+                    # Flush _rv_name[i][ix] into name_v[name_vix[vs*ix + i]]
+                    vidx = Binary('+', Binary('*', Int(vs), ix), Int(i))
+                    dst = Index(gv, Index(vix, vidx))
+                    src = Index(Index(rv, Int(i)), ix)
+                    atoms.append(self._atomic_stmt(va.reduceop, dst, src))
             else:
-                decls.append(f'fpdtype_t _rv_{name}[BLK_SZ];')
-                atoms.append(f'{afn}(&{name}_v[{name}_vix[{ix}]], '
-                             f'_rv_{name}[{ix}]);')
+                # Declare the staging array fpdtype_t _rv_name[BLK_SZ]
+                sizes = [Var('BLK_SZ')]
+                decls.append(VarDecl(False, 'fpdtype_t', rv.name, sizes))
+                # Flush _rv_name[ix] into name_v[name_vix[ix]]
+                dst, src = Index(gv, Index(vix, ix)), Index(rv, ix)
+                atoms.append(self._atomic_stmt(va.reduceop, dst, src))
 
-        return '\n'.join(decls), '\n'.join(atoms)
+        dstr = self._generate(codegen, Program(decls))
+        astr = self._generate(codegen, Program(atoms))
+        return dstr, astr
 
     def _render_bcol_reduce_init(self):
         # Identity-initialise broadcast-col reduce outputs
@@ -82,7 +122,7 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
 
         # View reduce: atomic flush after each SIMD chunk
         if rflush:
-            rflush_core = (f'for (int _xj = 0; _xj < SOA_SZ; _xj++) '
+            rflush_core = (f'for (int _xj = 0; _xj < {self.soasz}; _xj++) '
                            f'{{ {rflush} }}')
             rflush_clean = (f'for (int _xj = 0; _xj < _xjn; _xj++) '
                             f'{{ {rflush} }}')
@@ -94,10 +134,10 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
 
         if self.ndim == 1:
             core = f'''
-                for (int _xi = 0; _xi < BLK_SZ; _xi += SOA_SZ)
+                for (int _xi = 0; _xi < BLK_SZ; _xi += {self.soasz})
                 {{
                     #pragma omp simd
-                    for (int _xj = 0; _xj < SOA_SZ; _xj++)
+                    for (int _xj = 0; _xj < {self.soasz}; _xj++)
                     {{
                         {self.body}
                     }}
@@ -105,9 +145,9 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                 }}'''
             clean = f'''
                 int _rem = _nx % BLK_SZ;
-                for (int _xi = 0; _xi < _rem; _xi += SOA_SZ)
+                for (int _xi = 0; _xi < _rem; _xi += {self.soasz})
                 {{
-                    int _xjn = min(SOA_SZ, _rem - _xi);
+                    int _xjn = min({self.soasz}, _rem - _xi);
                     #pragma omp simd
                     for (int _xj = 0; _xj < _xjn; _xj++)
                     {{
@@ -120,10 +160,10 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                 {rinit}
                 for (ixdtype_t _y = 0; _y < _ny; _y++)
                 {{
-                    for (int _xi = 0; _xi < BLK_SZ; _xi += SOA_SZ)
+                    for (int _xi = 0; _xi < BLK_SZ; _xi += {self.soasz})
                     {{
                         #pragma omp simd
-                        for (int _xj = 0; _xj < SOA_SZ; _xj++)
+                        for (int _xj = 0; _xj < {self.soasz}; _xj++)
                         {{
                             {self.body}
                         }}
@@ -135,9 +175,9 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                 int _rem = _nx % BLK_SZ;
                 for (ixdtype_t _y = 0; _y < _ny; _y++)
                 {{
-                    for (int _xi = 0; _xi < _rem; _xi += SOA_SZ)
+                    for (int _xi = 0; _xi < _rem; _xi += {self.soasz})
                     {{
-                        int _xjn = min(SOA_SZ, _rem - _xi);
+                        int _xjn = min({self.soasz}, _rem - _xi);
                         #pragma omp simd
                         for (int _xj = 0; _xj < _xjn; _xj++)
                         {{
@@ -155,10 +195,6 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
             {{
                 {kargassn};
                 {rdecls}
-                #define X_IDX (_xi + _xj)
-                #define X_IDX_AOSOA(v, nv)\
-                    ((_xi/SOA_SZ*(nv) + (v))*SOA_SZ + _xj)
-                #define BCAST_BLK(r, c, ld) ((c) % (ld) + ((c) / (ld))*(ld)*r)
                 if (_nx - _ib*BLK_SZ >= BLK_SZ)
                 {{
                     {core}
@@ -167,18 +203,15 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                 {{
                     {clean}
                 }}
-                #undef X_IDX
-                #undef X_IDX_AOSOA
-                #undef BCAST_BLK
             }}'''
-
-        if self._has_fp_precise:
-            result = '// PYFR_DISABLE_FAST_MATH\n' + result
 
         return result
 
     def ldim_size(self, name, factor=1):
-        return f'{factor}*BLK_SZ' if factor > 1 else 'BLK_SZ'
+        if factor > 1:
+            return Binary('*', Int(factor), Var('BLK_SZ'))
+        else:
+            return Var('BLK_SZ')
 
     def needs_ldim(self, arg):
         return False

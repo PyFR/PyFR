@@ -20,8 +20,8 @@ def parse_stmt(code):
     return Parser(Lexer(code).tokenise()).statement()
 
 
-def parse_program(code):
-    return Parser(Lexer(code).tokenise()).parse()
+def parse_program(code, types=()):
+    return Parser(Lexer(code, types=types).tokenise()).parse()
 
 
 def rename_vars(ast, renames):

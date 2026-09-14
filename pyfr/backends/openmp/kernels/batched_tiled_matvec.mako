@@ -27,7 +27,7 @@ void batched_tiled_matvec(const struct batched_tiled_matvec_kargs *restrict args
     static const fpdtype_t out_scale[] = ${pyfr.carray(out_scale)};
 % endif
 
-    #define ROW_PTR(buf, upt, var) ((buf) + (upt)*${x_leaddim} + (s*${nvars} + (var))*SOA_SZ)
+    #define ROW_PTR(buf, upt, var) ((buf) + (upt)*${x_leaddim} + (s*${nvars} + (var))*${soasz})
     #define TILE_PTR(tr, tc, lr) (minv + (tr)*${ntiles_c*tcols**2*csubsz} + (tc)*${tcols**2*csubsz} + (lr)*${tcols*csubsz} + s*${tcols*soasz})
 
     #pragma omp parallel for ${schedule}
@@ -39,22 +39,22 @@ void batched_tiled_matvec(const struct batched_tiled_matvec_kargs *restrict args
 
         for (ixdtype_t s = 0; s < ${csubsz // soasz}; s++)
         {
-            ixdtype_t raw = rem - s*SOA_SZ;
+            ixdtype_t raw = rem - s*${soasz};
             if (raw <= 0) continue;
-            ixdtype_t active = min(raw, (ixdtype_t)SOA_SZ);
+            ixdtype_t active = min(raw, (ixdtype_t)${soasz});
 
 % if tcols > 8:
             for (ixdtype_t tr = 0; tr < ${ntiles_c}; tr++)
             {
                 ixdtype_t row0 = tr*${tcols};
                 ixdtype_t nrowt = min(${tcols}, ${block_size} - row0);
-                alignas(64) fpdtype_t acc[${tcols}][SOA_SZ] = {{0}};
+                alignas(64) fpdtype_t acc[${tcols}][${soasz}] = {{0}};
 
                 for (ixdtype_t tc = 0; tc < ${ntiles_c}; tc++)
                 {
                     ixdtype_t col0 = tc*${tcols};
                     ixdtype_t ncolt = min(${tcols}, ${block_size} - col0);
-                    alignas(64) fpdtype_t xcache[${tcols}][SOA_SZ];
+                    alignas(64) fpdtype_t xcache[${tcols}][${soasz}];
 
                     for (ixdtype_t lc = 0; lc < ncolt; lc++)
                     {
@@ -72,12 +72,12 @@ void batched_tiled_matvec(const struct batched_tiled_matvec_kargs *restrict args
                         ${pcdtype} *trow = TILE_PTR(tr, tc, lr);
 
 % if mixed:
-                        alignas(64) fpdtype_t mcache[${tcols}][SOA_SZ];
+                        alignas(64) fpdtype_t mcache[${tcols}][${soasz}];
                         for (ixdtype_t lc = 0; lc < ncolt; lc++)
                         {
-                            ${pcdtype} *m_ptr = trow + lc*SOA_SZ;
+                            ${pcdtype} *m_ptr = trow + lc*${soasz};
                             #pragma omp simd
-                            for (ixdtype_t lane = 0; lane < SOA_SZ; lane++)
+                            for (ixdtype_t lane = 0; lane < ${soasz}; lane++)
 % if pcdtype == 'bf16':
                                 mcache[lc][lane] = bf16_to_f32(m_ptr[lane]);
 % else:
@@ -88,7 +88,7 @@ void batched_tiled_matvec(const struct batched_tiled_matvec_kargs *restrict args
 
                         for (ixdtype_t lc = 0; lc < ncolt; lc++)
                         {
-                            fpdtype_t *mp = ${'mcache[lc]' if mixed else 'trow + lc*SOA_SZ'};
+                            fpdtype_t *mp = ${'mcache[lc]' if mixed else 'trow + lc*${soasz}'};
 
                             #pragma omp simd
                             for (ixdtype_t lane = 0; lane < active; lane++)
@@ -110,7 +110,7 @@ void batched_tiled_matvec(const struct batched_tiled_matvec_kargs *restrict args
 % else:
             for (ixdtype_t row = 0; row < ${block_size}; row++)
             {
-                alignas(64) fpdtype_t acc[SOA_SZ] = {0};
+                alignas(64) fpdtype_t acc[${soasz}] = {0};
                 ixdtype_t tr = row / ${tcols}, lr = row % ${tcols};
 
                 for (ixdtype_t tc = 0; tc < ${ntiles_c}; tc++)
@@ -123,7 +123,7 @@ void batched_tiled_matvec(const struct batched_tiled_matvec_kargs *restrict args
                     {
                         ixdtype_t col = col0 + lc;
                         ixdtype_t x_upt = col / ${nvars}, x_var = col % ${nvars};
-                        ${pcdtype} *m_ptr = trow + lc*SOA_SZ;
+                        ${pcdtype} *m_ptr = trow + lc*${soasz};
                         fpdtype_t *x_ptr = ROW_PTR(x, x_upt, x_var);
 
                         #pragma omp simd
