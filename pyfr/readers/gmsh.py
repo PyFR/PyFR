@@ -199,6 +199,8 @@ class GmshReader(BaseReader):
     def __init__(self, msh, progress):
         super().__init__(progress)
 
+        self._periodic_links = []
+
         if isinstance(msh, str):
             msh = open(msh)
 
@@ -215,7 +217,8 @@ class GmshReader(BaseReader):
                 'PhysicalNames': self._read_phys_names,
                 'Entities': self._read_entities,
                 'Nodes': self._read_nodes,
-                'Elements': self._read_eles
+                'Elements': self._read_eles,
+                'Periodic': self._read_periodic
             }
 
             for l in filter(lambda l: l != '\n', mshit):
@@ -242,6 +245,8 @@ class GmshReader(BaseReader):
         # Account for any starting node offsets
         for k, v in self._elenodes.items():
             v -= self._nodeoff
+
+        self._resolve_periodic()
 
     def _read_mesh_format(self, mshit):
         ver, ftype, dsize = next(mshit).split()
@@ -270,7 +275,7 @@ class GmshReader(BaseReader):
         #  - periodic faces
         self._volpents = {}
         self._bfacespents = {}
-        self._pfacespents = defaultdict(list)
+        self._pfacespents = defaultdict(lambda: [None, None])
 
         # Seen physical names and (dim, ID) pairs
         seen_names = set()
@@ -307,7 +312,7 @@ class GmshReader(BaseReader):
                 if not p:
                     raise ValueError('Invalid periodic boundary condition')
 
-                self._pfacespents[p[1]].append((dim, pent))
+                self._pfacespents[p[1]][p[2] == 'r'] = (dim, pent)
             # Volume elements
             elif dim == self._voldim:
                 self._volpents[name] = pent
@@ -318,7 +323,7 @@ class GmshReader(BaseReader):
         if not self._volpents:
             raise ValueError('No volume elements in mesh')
 
-        if any(len(pf) != 2 for pf in self._pfacespents.values()):
+        if any(None in pf for pf in self._pfacespents.values()):
             raise ValueError('Unpaired periodic boundary in mesh')
 
     def _read_entities(self, mshit):
@@ -345,6 +350,59 @@ class GmshReader(BaseReader):
 
         if next(mshit) != '$EndEntities\n':
             raise ValueError('Expected $EndEntities')
+
+    def _read_periodic(self, mshit):
+        nlinks = int(next(mshit))
+        for _ in range(nlinks):
+            dim, tag1, tag2 = (int(i) for i in next(mshit).split())
+
+            naff, *aff = next(mshit).split()
+            if int(naff) != 16:
+                raise ValueError('Periodic entity link without an affine map')
+            affine = np.array(aff, dtype=float).reshape(4, 4)
+
+            for _ in range(int(next(mshit))):
+                next(mshit)
+
+            self._periodic_links.append((dim, tag1, tag2, affine))
+
+        if next(mshit) != '$EndPeriodic\n':
+            raise ValueError('Expected $EndPeriodic')
+
+    def _resolve_periodic(self):
+        self._periodic_maps = {}
+        if not self._pfacespents:
+            return
+
+        for name, (lpent, rpent) in self._pfacespents.items():
+            lpid, rpid = lpent[1], rpent[1]
+            links = []
+            for dim, tag1, tag2, aff in self._periodic_links:
+                if dim != self._voldim - 1:
+                    continue
+
+                p1 = self._tagpents.get((dim, tag1), ())
+                p2 = self._tagpents.get((dim, tag2), ())
+                if lpid in p1 and rpid in p2:
+                    links.append((aff, 'l'))
+                elif rpid in p1 and lpid in p2:
+                    links.append((aff, 'r'))
+
+            # Without a $Periodic constraint the map is derived later
+            if not links:
+                continue
+
+            # Check affine map is the same for all entities this periodic BC
+            (affine, side1), *rest = links
+            if any(s != side1 or not np.allclose(a, affine) for a, s in rest):
+                raise ValueError(f'Inconsistent $Periodic maps for {name!r}')
+
+            R, T = affine[:3, :3], affine[:3, 3]
+
+            if side1 == 'l':
+                R, T = R.T, -(R.T @ T)
+
+            self._periodic_maps[name] = (R, T)
 
     def _read_nodes(self, mshit):
         self._read_nodes_impl(mshit)
@@ -490,7 +548,8 @@ class GmshReader(BaseReader):
         # Assemble a nodal mesh
         maps = self._etype_map, self._petype_fnmap, self._nodemaps
         mesh = NodalMeshAssembler(self._nodepts, elenodes, volpent,
-                                  self._bfacespents, self._pfacespents, maps)
+                                  self._bfacespents, self._pfacespents, maps,
+                                  periodic_maps=self._periodic_maps)
 
         nodepts, eles, codec, periodic = mesh.get_eles(lintol, self.progress)
 

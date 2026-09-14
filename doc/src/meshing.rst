@@ -31,8 +31,10 @@ the following guidelines must be followed:
 * Periodic boundary conditions can be defined by assigning one of the
   boundaries a physical name of "periodic-*name*-l" and the other a
   physical name of "periodic-*name*-r" where *name* is an arbitrary
-  identifier. Note that only translational periodicity is currently
-  supported.
+  identifier, with the periodic relationship defined via a
+  ``$Periodic`` section (MSH 4.1). The ``$Periodic`` section is not
+  strictly necessary for translation periodicity. Note that only
+  translational periodicity is currently supported.
 * Curved elements are supported up to quartic order. Such elements must
   be *complete* Lagrange elements as opposed to *incomplete* serendipity
   elements.
