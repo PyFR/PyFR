@@ -23,7 +23,7 @@ employed as an approximation.
 
     ``csv`` | ``hdf5``
 
-#. ``file-header`` --- for CSV output if to write a header row or not:
+#. ``header`` --- for CSV output if to write a header row or not:
 
     *boolean*
 
@@ -70,7 +70,7 @@ Example:
 
     [soln-plugin-fwh]
     file = fwh.csv
-    file-header = true
+    header = true
     surface = box((1, -5), (10, 5))
     quad-deg = 6
     dt = 1e-2

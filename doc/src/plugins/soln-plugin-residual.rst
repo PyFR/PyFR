@@ -14,7 +14,7 @@ Parameterised with
 
     *string*
 
-#. ``file-header`` --- if to output a header row or not:
+#. ``header`` --- if to output a header row or not:
 
     *boolean*
 
@@ -43,5 +43,5 @@ Example:
     [soln-plugin-residual]
     nsteps = 10
     file = residual.csv
-    file-header = true
+    header = true
     norm = inf

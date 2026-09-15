@@ -39,7 +39,7 @@ to a CSV or HDF5 file.  Parameterised with
 
     *boolean*
 
-#. ``file-header`` --- for CSV output to output a header row or not:
+#. ``header`` --- for CSV output to output a header row or not:
 
     *boolean*
 
@@ -52,7 +52,7 @@ Example:
     samp-pts = [(1.0, 0.7, 0.0), (1.0, 0.8, 0.0)]
     format = primitive
     file = point-data.csv
-    file-header = true
+    header = true
 
 This plugin also exposes functionality via a CLI. The following
 functions are available

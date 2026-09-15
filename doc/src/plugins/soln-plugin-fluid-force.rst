@@ -24,7 +24,7 @@ surface.  Parameterised with
 
     ``csv`` | ``hdf5``
 
-#. ``file-header`` --- for CSV output if to write a header row or not:
+#. ``header`` --- for CSV output if to write a header row or not:
 
     *boolean*
 

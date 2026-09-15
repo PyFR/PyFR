@@ -14,7 +14,7 @@ with
 
     *string*
 
-#. ``file-header`` --- if to output a header row or not:
+#. ``header`` --- if to output a header row or not:
 
     *boolean*
 
@@ -25,4 +25,4 @@ Example:
     [soln-plugin-pseudostats]
     flushsteps = 100
     file = pseudostats.csv
-    file-header = true
+    header = true

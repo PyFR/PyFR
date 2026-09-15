@@ -589,7 +589,7 @@ once the drag has converged.
     [soln-plugin-fluidforce-cylinder]
     nsteps = 10
     file = forces.csv
-    file-header = true
+    header = true
     publish-as = forces
 
     [trigger-cd-converged]

@@ -19,7 +19,7 @@ Integrate quantities over the compuational domain. Parameterised with:
 
     ``csv`` | ``hdf5``
 
-#. ``file-header`` --- for CSV output if to write a header row or not:
+#. ``header`` --- for CSV output if to write a header row or not:
 
     *boolean*
 
@@ -74,7 +74,7 @@ Example:
     [soln-plugin-integrate]
     nsteps = 50
     file = integral.csv
-    file-header = true
+    header = true
     quad-deg = 9
     vor1 = (grad_w_y - grad_v_z)
     vor2 = (grad_u_z - grad_w_x)
