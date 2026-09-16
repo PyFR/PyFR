@@ -729,27 +729,26 @@ class NIRFPlugin(BaseSolverPlugin):
                  for i, m in enumerate(moxr)]
 
         vkeys = 'uvw'[:ndims]
-        for bc in intg.system._bc_inters:
-            exprs = {k: v for k, v in bc.c.items() if isinstance(v, str)}
+
+        def body_frame(exprs):
             hasvelo = all(k in exprs for k in vkeys)
             if not (hasvelo or any('ploc' in v for v in exprs.values())):
-                continue
+                return {}
 
             exprs = {k: lab_position(parse_expr(v)) for k, v in exprs.items()}
             if hasvelo:
                 usubs = subs | {f'U{i}': exprs[k] for i, k in enumerate(vkeys)}
                 exprs |= {k: tpl(u, usubs) for k, u in zip(vkeys, ubody)}
 
-            bc.c |= {k: gen(simp(e)) for k, e in exprs.items()}
+            return {k: gen(simp(e)) for k, e in exprs.items()}
 
-            bc.set_external('nirf_R', 'in broadcast fpdtype_t[3][3]',
-                            value=self._nirf_R)
-            if 'ploc' not in bc._external_args:
-                ploc = bc._const_mat(bc.lhs, 'get_ploc_for_inters')
-                bc.set_external('ploc', f'in fpdtype_t[{ndims}]', value=ploc)
-            if self.motion.has_externs:
-                for p in nirf_bc_params(ndims):
-                    bc.set_external(_to_extern(p), 'scalar fpdtype_t')
+        for bc in intg.system.bc_inters:
+            if bc.rewrite_exprs(body_frame):
+                bc.set_external('nirf_R', 'in broadcast fpdtype_t[3][3]',
+                                value=self._nirf_R)
+                if self.motion.has_externs:
+                    for p in nirf_bc_params(ndims):
+                        bc.set_external(_to_extern(p), 'scalar fpdtype_t')
 
     def _update_nirf_R(self):
         R = _quat_to_rotmat(self.motion.fquat)
