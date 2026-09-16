@@ -1,5 +1,3 @@
-from ast import literal_eval
-
 import numpy as np
 
 from pyfr.plugins.postproc.base import BasePostProcPlugin
@@ -35,20 +33,28 @@ class NIRFPostProc(BasePostProcPlugin):
         floc = sdata['loc']
 
         fx0 = np.zeros(3)
-        fx0[:ndims] = literal_eval(
-            data.cfg.get('solver-plugin-nirf', 'center-of-rot')
-        )
+        fx0[:ndims] = data.cfg.getliteral('solver-plugin-nirf',
+                                          'center-of-rot', (0.,)*ndims)
 
         R = _quat_to_rotmat(fquat)
+        Rd = R[:ndims, :ndims]
 
         # r_body (before rotation); pad to 3D for omega x r
         r = np.zeros((3, *data.ploc.shape[1:]))
         r[:ndims] = data.ploc - fx0[:ndims, None, None]
 
+        # The wall distance is a frame-invariant scalar, so evaluate it in
+        # the body frame before anything moves; the normals rotate
+        if data.kind == 'boundary':
+            data.boundary_dist
+            pnorm, normals = data.pnorm, data.normals
+            data.pnorm = np.tensordot(Rd, pnorm, axes=1)
+            data.normals = np.tensordot(Rd, normals, axes=1)
+
         # Transform coordinates: x_lab = R*(x_body - x0) + x0 + loc
         ploc = data.ploc
         ploc -= fx0[:ndims, None, None]
-        ploc[:] = np.tensordot(R[:ndims, :ndims], ploc, axes=1)
+        ploc[:] = np.tensordot(Rd, ploc, axes=1)
         ploc += fx0[:ndims, None, None]
 
         apply_trans = self.cfg.getbool(self.cfgsect,
@@ -71,7 +77,6 @@ class NIRFPostProc(BasePostProcPlugin):
             return
 
         # Scalar gradients (rho, p) rotate as covectors: grad_lab = R*grad_body
-        Rd = R[:ndims, :ndims]
         for vi in (0, ndims + 1):
             data.grad_pris[vi][:] = np.tensordot(Rd, data.grad_pris[vi],
                                                  axes=1)
