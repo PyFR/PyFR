@@ -7,10 +7,15 @@ body.  The mesh remains fixed in the body frame and the fictitious
 body forces arising from the frame's translational acceleration,
 rotation (centrifugal and Coriolis) and angular acceleration (Euler)
 are added as momentum source terms, with the corresponding work term
-added to the energy equation.  Boundary and initial conditions are
-specified in the inertial (lab) frame as usual and are transformed into
-the body frame automatically; see :doc:`postproc-plugins` for exporting
-the solution back into the lab frame.
+added to the energy equation.  See :doc:`postproc-plugins` for
+exporting the solution back into the lab frame.
+
+Boundary and initial conditions are specified in the inertial (lab)
+frame and transformed into the body frame automatically.  Any boundary
+condition whose parameters depend on position, or which specifies a
+velocity, is taken to be given in the lab frame: positions are the
+lab-frame locations of the boundary points and velocities are lab-frame
+velocities, from which the frame motion is removed.
 
 Two modes of operation are available, selected with ``motion``:
 
