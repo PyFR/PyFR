@@ -589,6 +589,7 @@ Solver Plugins
 .. toctree::
    :maxdepth: 3
 
+   plugins/solver-plugin-nirf.rst
    plugins/solver-plugin-source.rst
    plugins/solver-plugin-turbulence.rst
 

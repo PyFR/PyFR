@@ -1,102 +1,11 @@
-"""Non-Inertial Reference Frame (NIRF) plugin.
-
-Simulates flow in a non-inertial (accelerating/rotating) reference frame by
-adding fictitious body-force source terms to the governing equations.  Two
-modes are available:
-
-  prescribed — frame motion is specified analytically as expressions in t.
-  free       — frame motion is computed by integrating the rigid-body ODE
-               driven by aerodynamic forces on a designated boundary.
-
-Both modes serialise kinematic state (location, velocity, orientation,
-angular velocity) on checkpoint, so a prescribed run can be restarted in free
-mode without any loss of continuity.
-
-Config section: [solver-plugin-nirf]
--------------------------------------
-Common options (both modes)
-  motion           str    'prescribed' or 'free'.  Default: 'prescribed'.
-  center-of-rot    tuple  Centre of rotation / pivot point, length-ndims float
-                          tuple, e.g. (0.0, 0.5).  Default: (0,)*ndims.
-
-Prescribed-mode options
-  All motion parameters can be expressions of t.  The user must provide the
-  complete kinematic stack: loc → velo → accel for translation, and
-  rot → omega → alpha for rotation.
-
-  frame-loc-{x,y[,z]}      expr  Frame position (m).  Default: 0.0.
-  frame-velo-{x,y[,z]}     expr  Translational velocity (m/s).  Default: 0.0.
-  frame-accel-{x,y[,z]}    expr  Translational acceleration (m/s²).
-                                  Default: 0.0.
-  frame-rot-z               expr  2-D: rotation angle about z (rad).
-                                  Default: 0.0.
-  frame-rot-{x,y,z}        expr  3-D: ZYX Euler angles (rad).  Default: 0.0.
-  frame-omega-{x,y,z}      expr  Angular velocity (rad/s).  Default: 0.0.
-  frame-alpha-{x,y,z}      expr  Angular acceleration (rad/s²).  Default: 0.0.
-
-Free-mode options
-  mass             float  Body mass.  Required.
-  inertia          float  2-D: scalar moment of inertia about z.
-                   tuple  3-D: 3×3 inertia tensor as a flat 9-element tuple.
-                          Required.
-  dof              str    Comma-separated active degrees of freedom.
-                          2-D: any subset of {x, y, rz}.
-                          3-D: any subset of {x, y, z, rx, ry, rz}.
-                          Default: all DOF for the current dimensionality.
-  dt-ode           float  Rigid-body ODE sub-step size (s).  Default: solver
-                          dt.  (Free-mode integration cadence only.)
-
-  Initial conditions:
-  frame-loc0       tuple  Initial frame position (m).  Default: (0,)*ndims.
-  frame-velo0      tuple  Initial translational velocity (m/s).
-                          Default: (0,)*ndims.
-  frame-accel0     tuple  Initial translational acceleration (m/s²).
-                          Default: (0,)*ndims.
-  frame-rot0-euler float  2-D: initial rotation angle in radians.
-                   tuple  3-D: (phi, theta, psi) ZYX Euler angles in radians.
-                          Mutually exclusive with frame-rot0-quat.
-  frame-rot0-quat  tuple  Initial orientation as (w, x, y, z) quaternion.
-                          Automatically normalised.
-                          Mutually exclusive with frame-rot0-euler.
-  frame-omega0     float  2-D: initial angular velocity (rad/s) about z.
-                   tuple  3-D: (wx, wy, wz).  Default: 0.0 / (0, 0, 0).
-  frame-alpha0     float  2-D: initial angular acceleration (rad/s²) about z.
-                   tuple  3-D: (ax, ay, az).  Default: 0.0 / (0, 0, 0).
-
-  Force/trajectory output (both modes)
-  boundary         str    Body-surface boundary to integrate forces over.
-                          Accepts a comma-separated list of boundary names,
-                          which are fused into a single integration surface.
-                          Required in free mode (drives the ODE); optional in
-                          prescribed mode (enables the CSV trace).
-  nsteps-out       int    Write the force/trajectory CSV every N underlying
-                          solver steps (both modes; independent of dt-ode).
-                          Only the CSV write is throttled — the frame state and
-                          BC rotation matrix still update every step.  Mutually
-                          exclusive with dt-out.  Default: 1.
-  dt-out           float  Write the CSV every dt-out seconds.  Uses integrator
-                          look-ahead to land on the output times.  Mutually
-                          exclusive with nsteps-out.
-  file             str    Path for CSV output.  Optional.
-
-Lab-frame export
------------------
-A companion postproc plugin (`nirf`) rotates coordinates and velocity from
-the body frame back to the inertial (lab) frame at export time:
-
-  pyfr export volume --postproc nirf mesh.pyfrm in.pyfrs out.vtu
-
-Config section: [postproc-plugin-nirf]
-  apply-translation  bool   Add the frame translation `loc` after rotation
-                            (body sits at its lab-frame position).
-                            Default: False (rotation only, body stays put).
-
-"""
-
 import math
 
 import numpy as np
 
+from pyfr.dsl import CodeGenerator, Simplifier, parse_expr
+from pyfr.dsl.derivs import Differentiator
+from pyfr.dsl.nodes import Float, Index, Int, Var, map_ast
+from pyfr.dsl.rewriter import rename_vars
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.exprs import npeval
 from pyfr.plugins.common import init_csv
@@ -104,10 +13,9 @@ from pyfr.plugins.solver.base import BaseSolverPlugin
 from pyfr.quadrules.surface import SurfaceIntegrator
 from pyfr.util import subclass_where
 
-# TODO: viscous stress not just for nav-stokes but only no-slp
 
 def _eval_expr(expr, t):
-    return eval(expr, vars(math), {'t': t})
+    return eval(expr, {**vars(math), 'fmin': min, 'fmax': max}, {'t': t})
 
 
 def nirf_src_params(ndims):
@@ -188,8 +96,8 @@ def _levi_civita_moment(ndims):
 
 
 class NIRFForceIntegrator(SurfaceIntegrator):
-    def __init__(self, cfg, cfgsect, system, bcname, morigin, viscous):
-        con = system.mesh.bcon.get(bcname)
+    def __init__(self, cfg, cfgsect, system, bcspec, morigin, viscous):
+        con = system.mesh.bcon_for(bcspec)
 
         super().__init__(cfg, cfgsect, system.ele_map, con, flags='s')
 
@@ -199,9 +107,8 @@ class NIRFForceIntegrator(SurfaceIntegrator):
         self.elementscls = system.elementscls
         self._eps = _levi_civita_moment(self.ndims)
 
-        if self.locs and morigin is not None:
-            self.rfpts = {k: loc - morigin[:, None, None]
-                         for k, loc in self.locs.items()}
+        self.rfpts = {k: loc - morigin[:, None, None]
+                      for k, loc in self.locs.items()}
 
         # Viscous: stress-model constants plus the per-element gradient
         # operators (m4) and J^-T (rcpjact) used by grad_at_fpts
@@ -247,7 +154,7 @@ class NIRFForceIntegrator(SurfaceIntegrator):
         comm, rank, root = get_comm_rank_root()
 
         ndims = self.ndims
-        mcomp = 3 if ndims == 3 else 1
+        mcomp = self._eps.shape[0]
 
         solns = dict(zip(self.ele_types, soln))
         fm = np.zeros((2 if self.viscous else 1, ndims + mcomp))
@@ -319,21 +226,6 @@ class NIRFForceIntegrator(SurfaceIntegrator):
         return -mu*(gradu + gradu.swapaxes(0, 1) - 2/3*bulk)
 
 
-class NIRFForceSum:
-    def __init__(self, cfg, cfgsect, system, bcnames, morigin, viscous):
-        self.ints = [NIRFForceIntegrator(cfg, cfgsect, system, b, morigin,
-                                         viscous) for b in bcnames]
-
-    def compute(self, soln):
-        force, moment = self.ints[0].compute(soln)
-        for ff in self.ints[1:]:
-            f, m = ff.compute(soln)
-            force = force + f
-            moment = moment + m
-
-        return force, moment
-
-
 class BaseMotion:
     name = None
     needs_force = False
@@ -364,6 +256,14 @@ class BaseMotion:
     def advance(self, intg, force, moment):
         raise NotImplementedError
 
+    # Bring the state to t where this is possible independently of advance
+    def sync(self, t):
+        pass
+
+    # Kernel-side expressions for the frame parameters seen by the BCs
+    def bc_exprs(self):
+        raise NotImplementedError
+
 
 class PrescribedMotion(BaseMotion):
     name = 'prescribed'
@@ -371,100 +271,71 @@ class PrescribedMotion(BaseMotion):
     def __init__(self, plugin, cfgsect):
         super().__init__(plugin, cfgsect)
 
-        subs = self.cfg.items('constants')
-        subs |= dict(abs='fabs', pi=math.pi)
+        self.kin = kin = self._kinematics()
+        comps = 'xyz'[:self.ndims]
 
-        self.fexprs = self._parse_motion_exprs(subs)
-        self._validate_cfg()
-        self._build_tplargs()
+        self.fexprs = {
+            kind: [kin[f'frame-{kind}-{c}'] for c in comps]
+            for kind in ('loc', 'velo', 'accel')
+        }
+        self.fexprs |= {
+            kind: [kin[f'frame-{kind}-{c}'] for c in 'xyz']
+            for kind in ('omega', 'alpha')
+        }
+        self.fexprs['rot'] = [kin[f'frame-rot-{c}']
+                              for c in ('z' if self.ndims == 2 else 'xyz')]
+
+        self.tplargs = {_to_tplkey(p): kin[p]
+                        for p in nirf_src_params(self.ndims)}
+        self.tplargs |= nirf_origin_tplargs(self.cfg, cfgsect, self.ndims)
 
         self.advance_to(plugin._intg.tcurr)
 
-    def _parse_motion_exprs(self, subs):
-        ge = self.cfg.getexpr
-        cfgsect = self.cfgsect
-        comps = 'xyz'[:self.ndims]
+    # Kinematics derived from the position and orientation expressions
+    def _kinematics(self):
+        cfg, cfgsect, ndims = self.cfg, self.cfgsect, self.ndims
 
-        exprs = {}
-        for kind in ('loc', 'velo', 'accel'):
-            exprs[kind] = [ge(cfgsect, f'frame-{kind}-{c}', '0.0', subs=subs)
-                           for c in comps]
-        for kind in ('omega', 'alpha'):
-            exprs[kind] = [ge(cfgsect, f'frame-{kind}-{c}', '0.0', subs=subs)
-                           for c in 'xyz']
-        if self.ndims == 2:
-            exprs['rot'] = [ge(cfgsect, 'frame-rot-z', '0.0', subs=subs)]
+        consts = {k: parse_expr(v) for k, v in cfg.items('constants').items()}
+        consts['pi'] = Float(math.pi)
+
+        simp = Simplifier().simplify_fully
+        diff = Differentiator('t').diff
+
+        def expr(name):
+            return simp(rename_vars(parse_expr(cfg.get(cfgsect, name, '0.0')),
+                                    consts))
+
+        def d(e):
+            return simp(diff(e))
+
+        def rewrite(tpl, subs):
+            return simp(rename_vars(parse_expr(tpl), subs))
+
+        kin = {}
+        for c in 'xyz'[:ndims]:
+            kin[f'frame-loc-{c}'] = loc = expr(f'frame-loc-{c}')
+            kin[f'frame-velo-{c}'] = velo = d(loc)
+            kin[f'frame-accel-{c}'] = d(velo)
+
+        if ndims == 2:
+            kin['frame-rot-z'] = rot = expr('frame-rot-z')
+            omega = [Float(0.0), Float(0.0), d(rot)]
         else:
-            exprs['rot'] = [ge(cfgsect, f'frame-rot-{c}', '0.0', subs=subs)
-                            for c in 'xyz']
-        return exprs
+            rot = {f'r{c}': expr(f'frame-rot-{c}') for c in 'xyz'}
+            kin |= {f'frame-rot-{c}': rot[f'r{c}'] for c in 'xyz'}
 
-    def _build_tplargs(self):
-        for kind, comps in (('omega', 'xyz'), ('alpha', 'xyz'),
-                            ('accel', 'xyz'[:self.ndims])):
-            for i, c in enumerate(comps):
-                key = _to_tplkey(f'frame-{kind}-{c}')
-                self.tplargs[key] = self.fexprs[kind][i]
-        self.tplargs |= nirf_origin_tplargs(self.cfg, self.cfgsect, self.ndims)
+            # Body-frame angular velocity of the ZYX Euler angle sequence
+            subs = rot | {f'd{k}': d(v) for k, v in rot.items()}
+            omega = [rewrite('drx - drz*sin(ry)', subs),
+                     rewrite('dry*cos(rx) + drz*sin(rx)*cos(ry)', subs),
+                     rewrite('drz*cos(rx)*cos(ry) - dry*sin(rx)', subs)]
 
-    def _validate_cfg(self):
-        def ev(exprs, t):
-            return np.array([_eval_expr(e, t) for e in exprs])
+        for c, w in zip('xyz', omega):
+            kin[f'frame-omega-{c}'] = w
+            kin[f'frame-alpha-{c}'] = d(w)
 
-        def _rich(f, t, h):
-            fp = f(t + h)
-            fm = f(t - h)
-            fph = f(t + h / 2)
-            fmh = f(t - h / 2)
-            d1 = (fp - fm) / (2 * h)
-            d2 = (fph - fmh) / h
-            return (4 * d2 - d1) / 3
-
-        def converged_fd(f, t):
-            h = 1e-4
-            prev = _rich(f, t, h)
-            for _ in range(20):
-                h /= 2
-                curr = _rich(f, t, h)
-                scale = max(np.max(np.abs(curr)), 1.0)
-                if np.max(np.abs(curr - prev)) / scale < 1e-8:
-                    return curr
-                prev = curr
-            return curr
-
-        def check(dname, fname, fd, given):
-            denom = max(np.max(np.abs(given)),
-                        np.max(np.abs(fd)), 1.0)
-            err = np.max(np.abs(fd - given)) / denom
-            if err > 1e-6:
-                raise ValueError(
-                    f'{dname} is not the derivative '
-                    f'of {fname}; numerical={fd}, '
-                    f'specified={given}'
-                )
-
-        t = 1.0
-
-        for deriv, primary in (('velo', 'loc'),
-                               ('accel', 'velo'),
-                               ('alpha', 'omega')):
-            fd = converged_fd(
-                lambda s, p=primary: ev(self.fexprs[p], s), t
-            )
-            check(f'frame-{deriv}', f'frame-{primary}',
-                  fd, ev(self.fexprs[deriv], t))
-
-        # rot -> omega via quaternion kinematics
-        def quat_at(t):
-            rv = ev(self.fexprs['rot'], t)
-            if self.ndims == 2:
-                return _euler_to_quat(rv[0], 0, 0)
-            return _euler_to_quat(*rv[::-1])
-
-        dqdt_fd = converged_fd(quat_at, t)
-        w = ev(self.fexprs['omega'], t)
-        dqdt_an = 0.5 * _quat_mult(quat_at(t), np.r_[0, w])
-        check('frame-omega', 'frame-rot', dqdt_fd, dqdt_an)
+        gen = CodeGenerator().generate
+        return {k: gen(v) for k, v in kin.items()}
 
     def advance_to(self, t):
         vals = {k: np.array([_eval_expr(e, t) for e in exprs])
@@ -485,6 +356,12 @@ class PrescribedMotion(BaseMotion):
 
     def advance(self, intg, force, moment):
         self.advance_to(intg.tcurr)
+
+    def sync(self, t):
+        self.advance_to(t)
+
+    def bc_exprs(self):
+        return {p: self.kin[p] for p in nirf_bc_params(self.ndims)}
 
 
 class FreeMotion(BaseMotion):
@@ -542,6 +419,9 @@ class FreeMotion(BaseMotion):
         self.tplargs = {_to_tplkey(p): _to_extern(p) for p in params}
         self.tplargs |= nirf_origin_tplargs(self.cfg, cfgsect, self.ndims)
         self.extern_names = [_to_extern(p) for p in params]
+
+    def bc_exprs(self):
+        return {p: _to_extern(p) for p in nirf_bc_params(self.ndims)}
 
     def _parse_dof(self):
         if self.ndims == 2:
@@ -644,6 +524,7 @@ class NIRFPlugin(BaseSolverPlugin):
             )
 
         self._init_nirf_R()
+        self._transform_bcs(intg)
         if self.motion.extern_names:
             self._register_externs(intg, self.motion.extern_names)
 
@@ -657,34 +538,18 @@ class NIRFPlugin(BaseSolverPlugin):
             eles.add_src_macro('pyfr.plugins.solver.kernels.nirf', macro,
                                self.motion.tplargs, ploc=True, soln=True)
 
-    # Read-only proxies so existing self._fX accesses keep working
-    @property
-    def _floc(self):    return self.motion.floc
-    @property
-    def _fvelo(self):   return self.motion.fvelo
-    @property
-    def _faccel(self):  return self.motion.faccel
-    @property
-    def _fquat(self):   return self.motion.fquat
-    @property
-    def _fomega(self):  return self.motion.fomega
-    @property
-    def _falpha(self):  return self.motion.falpha
-    @property
-    def tode_last(self): return self.motion.tode_last
-
     def _transform_ics(self, intg, cfgsect):
         ndims = self.ndims
         cor = np.array(self.cfg.getliteral(
             cfgsect, 'center-of-rot', (0.,) * ndims
         ))
 
-        R3 = _quat_to_rotmat(self._fquat)
+        R3 = _quat_to_rotmat(self.motion.fquat)
         R = R3[:ndims, :ndims]
         Rt3 = R3.T
-        omega = self._fomega
-        velo = self._fvelo[:ndims]
-        floc = self._floc[:ndims]
+        omega = self.motion.fomega
+        velo = self.motion.fvelo[:ndims]
+        floc = self.motion.floc[:ndims]
 
         consts = self.cfg.items_as('constants', float)
 
@@ -750,9 +615,8 @@ class NIRFPlugin(BaseSolverPlugin):
 
     def _init_force_integrator(self, cfgsect):
         intg = self._intg
-        comm, rank, root = get_comm_rank_root()
 
-        bcnames = self._parse_boundaries(cfgsect)
+        bcspec = self.cfg.get(cfgsect, 'boundary')
         viscous = 'navier-stokes' in intg.system.name
 
         self.cfg.set(cfgsect, 'quad-deg',
@@ -762,19 +626,8 @@ class NIRFPlugin(BaseSolverPlugin):
         fx0 = np.array(self.cfg.getliteral(cfgsect, 'center-of-rot',
                                            (0.,) * self.ndims), dtype=float)
 
-        # Ensure every requested boundary exists on at least one rank
-        allbcs = comm.gather(set(intg.system.mesh.bcon), root=root)
-        if rank == root:
-            have = set().union(*allbcs)
-            if missing := [b for b in bcnames if b not in have]:
-                raise RuntimeError(f'Boundaries do not exist: {missing}')
-
-        self._ff_int = NIRFForceSum(
-            self.cfg, cfgsect, intg.system, bcnames, fx0, viscous)
-
-    def _parse_boundaries(self, cfgsect):
-        raw = self.cfg.get(cfgsect, 'boundary')
-        return [b.strip() for b in raw.split(',') if b.strip()]
+        self._ff_int = NIRFForceIntegrator(
+            self.cfg, cfgsect, intg.system, bcspec, fx0, viscous)
 
     def _init_force_output(self, cfgsect):
         # Integrate forces only if something consumes them: the rigid-body ODE
@@ -822,31 +675,84 @@ class NIRFPlugin(BaseSolverPlugin):
         ev = self._extern_values
 
         for i, c in enumerate('xyz'):
-            ev[f'frame_omega_{c}'] = self._fomega[i]
-            ev[f'frame_alpha_{c}'] = self._falpha[i]
+            ev[f'frame_omega_{c}'] = self.motion.fomega[i]
+            ev[f'frame_alpha_{c}'] = self.motion.falpha[i]
 
         for i, c in enumerate(comps):
-            ev[f'frame_loc_{c}'] = self._floc[i]
-            ev[f'frame_velo_{c}'] = self._fvelo[i]
-            ev[f'frame_accel_{c}'] = self._faccel[i]
+            ev[f'frame_loc_{c}'] = self.motion.floc[i]
+            ev[f'frame_velo_{c}'] = self.motion.fvelo[i]
+            ev[f'frame_accel_{c}'] = self.motion.faccel[i]
 
     def _init_nirf_R(self):
-        intg = self._intg
-        R0 = _quat_to_rotmat(self._fquat).T
-        self._nirf_R = intg.backend.matrix(
-            (3, 3), initval=R0
-        )
+        R0 = _quat_to_rotmat(self.motion.fquat).T
+        self._nirf_R = self._intg.backend.matrix((3, 3), initval=R0)
+
+    # Rewrite the lab-frame BC expressions into the body frame:
+    #   x_lab  = R·ploc + loc
+    #   u_body = Rᵀ·(u_lab − V) − Ω×(ploc − x0)
+    def _transform_bcs(self, intg):
+        ndims = self.ndims
+        comps = 'xyz'[:ndims]
+        gen = CodeGenerator().generate
+        simp = Simplifier().simplify_fully
+
+        def tpl(s, subs):
+            return rename_vars(parse_expr(s), subs)
+
+        fp = {k: parse_expr(v) for k, v in self.motion.bc_exprs().items()}
+        subs = {f'L{i}': fp[f'frame-loc-{c}'] for i, c in enumerate(comps)}
+        subs |= {f'V{i}': fp[f'frame-velo-{c}'] for i, c in enumerate(comps)}
+        subs |= {f'W{i}': fp[f'frame-omega-{c}'] for i, c in enumerate('xyz')}
+        subs |= {f'X{i}': Float(v) for i, v in enumerate(self.cfg.getliteral(
+            self.cfgsect, 'center-of-rot', (0.,) * ndims))}
+
+        xlab = [tpl(' + '.join(f'nirf_R[{j}][{i}]*ploc[{j}]'
+                               for j in range(ndims)) + f' + L{i}', subs)
+                for i in range(ndims)]
+
+        def lab_position(node):
+            match node:
+                case Index(Var('ploc'), Int(i)):
+                    return xlab[i]
+                case _:
+                    return map_ast(node, lab_position)
+
+        if ndims == 2:
+            moxr = ['W2*(ploc[1] - X1)', '-W2*(ploc[0] - X0)']
+        else:
+            moxr = ['W2*(ploc[1] - X1) - W1*(ploc[2] - X2)',
+                    'W0*(ploc[2] - X2) - W2*(ploc[0] - X0)',
+                    'W1*(ploc[0] - X0) - W0*(ploc[1] - X1)']
+
+        ubody = [' + '.join(f'nirf_R[{i}][{j}]*(U{j} - V{j})'
+                            for j in range(ndims)) + f' + {m}'
+                 for i, m in enumerate(moxr)]
+
+        vkeys = 'uvw'[:ndims]
         for bc in intg.system._bc_inters:
-            if any(c.__name__ == 'NIRFBCMixin'
-                   for c in type(bc).__mro__):
-                bc.set_external(
-                    'nirf_R',
-                    'in broadcast fpdtype_t[3][3]',
-                    value=self._nirf_R
-                )
+            exprs = {k: v for k, v in bc.c.items() if isinstance(v, str)}
+            hasvelo = all(k in exprs for k in vkeys)
+            if not (hasvelo or any('ploc' in v for v in exprs.values())):
+                continue
+
+            exprs = {k: lab_position(parse_expr(v)) for k, v in exprs.items()}
+            if hasvelo:
+                usubs = subs | {f'U{i}': exprs[k] for i, k in enumerate(vkeys)}
+                exprs |= {k: tpl(u, usubs) for k, u in zip(vkeys, ubody)}
+
+            bc.c |= {k: gen(simp(e)) for k, e in exprs.items()}
+
+            bc.set_external('nirf_R', 'in broadcast fpdtype_t[3][3]',
+                            value=self._nirf_R)
+            if 'ploc' not in bc._external_args:
+                ploc = bc._const_mat(bc.lhs, 'get_ploc_for_inters')
+                bc.set_external('ploc', f'in fpdtype_t[{ndims}]', value=ploc)
+            if self.motion.has_externs:
+                for p in nirf_bc_params(ndims):
+                    bc.set_external(_to_extern(p), 'scalar fpdtype_t')
 
     def _update_nirf_R(self):
-        R = _quat_to_rotmat(self._fquat)
+        R = _quat_to_rotmat(self.motion.fquat)
         self._nirf_R.set(R.T)
 
     def __call__(self, intg):
@@ -883,15 +789,15 @@ class NIRFPlugin(BaseSolverPlugin):
         if rank != root:
             return
 
-        phi, theta, psi = _quat_to_euler(self._fquat)
+        phi, theta, psi = _quat_to_euler(self.motion.fquat)
 
         if self.ndims == 2:
-            ang = [phi, self._fomega[2], self._falpha[2]]
+            ang = [phi, self.motion.fomega[2], self.motion.falpha[2]]
         else:
-            ang = [phi, theta, psi, *self._fomega, *self._falpha]
+            ang = [phi, theta, psi, *self.motion.fomega, *self.motion.falpha]
 
         self._csv(intg.tcurr, *ang,
-                  *self._floc, *self._fvelo, *self._faccel,
+                  *self.motion.floc, *self.motion.fvelo, *self.motion.faccel,
                   *force, *moment)
 
     _sdata_dtype = np.dtype([
@@ -921,11 +827,15 @@ class NIRFPlugin(BaseSolverPlugin):
                             self._serialise_data)
 
     def _serialise_data(self):
+        # A writer listed before this plugin would otherwise record the
+        # state of the previous step
+        self.motion.sync(self._intg.tcurr)
+
         pad = 3 - self.ndims
         return np.void((
-            np.pad(self._floc, (0, pad)),
-            np.pad(self._fvelo, (0, pad)),
-            np.pad(self._faccel, (0, pad)),
-            self._fquat, self._fomega, self._falpha,
-            self.tode_last
+            np.pad(self.motion.floc, (0, pad)),
+            np.pad(self.motion.fvelo, (0, pad)),
+            np.pad(self.motion.faccel, (0, pad)),
+            self.motion.fquat, self.motion.fomega, self.motion.falpha,
+            self.motion.tode_last
         ), dtype=self._sdata_dtype)
