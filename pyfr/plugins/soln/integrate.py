@@ -19,6 +19,9 @@ class IntegratePlugin(PublishMixin, SeriesWriterMixin, BackendMixin,
         # Expressions to integrate
         c = self.cfg.items_as('constants', float)
         self._inames = self.cfg.items(cfgsect, prefix='int-')
+        if not self._inames:
+            raise ValueError(f'No int- expressions given in {cfgsect}')
+
         self.exprs = [self.cfg.getexpr(cfgsect, k, subs=c)
                       for k in self._inames]
 
