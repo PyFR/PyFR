@@ -153,8 +153,8 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
         # External kernel arguments dictionary
         tplargs['_extrns'] = extrns
 
-        # Backchannel for obtaining kernel argument types
-        tplargs['_kernel_argspecs'] = argspecs = {}
+        # Backchannel for obtaining kernel argument types and metadata
+        tplargs['_kernel_meta'] = meta = {}
 
         # Render the template to yield the source code
         tpl = self.backend.lookup.get_template(mod)
@@ -162,15 +162,15 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
         src = re.sub(r'\n\n+', r'\n\n', src)
 
         # Check the kernel exists in the template
-        if name not in argspecs:
+        if name not in meta:
             raise ValueError(f'Kernel {name!r} not defined in template')
 
         # Extract the metadata for the kernel
-        ndim, argn, argt = argspecs[name]
+        (ndim, argn, argt), regions = meta[name]
 
-        return src, ndim, argn, argt
+        return src, ndim, argn, argt, regions
 
-    def _build_kernel(self, name, src, args):
+    def _build_kernel(self, name, src, args, regions=frozenset()):
         pass
 
     def _build_args(self, ndim, argn, argt, argdict):
@@ -218,12 +218,13 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
         # Generate the kernel providing method
         def kernel_meth(self, tplargs, dims, extrns={}, **kwargs):
             # Render the source of kernel
-            src, ndim, argn, argt = self._render_kernel(name, mod, extrns,
-                                                        tplargs)
+            src, ndim, argn, argt, regions = self._render_kernel(
+                name, mod, extrns, tplargs
+            )
 
             # Compile the kernel
             argtypes = [t for _, ts in argt for t in ts]
-            fun = self._build_kernel(name, src, argtypes)
+            fun = self._build_kernel(name, src, argtypes, regions)
 
             # Process the argument list
             args = self._build_args(len(dims), argn, argt, kwargs)

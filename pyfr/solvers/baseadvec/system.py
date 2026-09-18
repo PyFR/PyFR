@@ -28,7 +28,7 @@ class BaseAdvectionSystem(BaseSystem):
         for m, (lhs, rhs) in zip(self._mpi_inters, mpi_v):
             m.scal_lhs = lhs
             m.scal_rhs = rhs
-        for b, lhs in zip(self._bc_inters, bc_v):
+        for b, lhs in zip(self.bc_inters, bc_v):
             b.scal_lhs = lhs
         self.register_mpi_exchange('scal_fpts', mpi_v)
 
@@ -39,7 +39,7 @@ class BaseAdvectionSystem(BaseSystem):
             self.cfg.getint('solver', 'order') > 0):
             self._ef = EntropyFilter(self.backend, self.cfg, self,
                                      self._int_inters, self._mpi_inters,
-                                     self._bc_inters)
+                                     self.bc_inters)
         else:
             self._ef = None
 

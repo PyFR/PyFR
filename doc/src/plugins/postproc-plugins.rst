@@ -67,3 +67,18 @@ data.  No parameters required.
    The wall distance is approximated as the physical distance from
    the wall face to the nearest interior solution point of the boundary
    element.
+
+nirf
+====
+
+Transforms the solution of a non-inertial reference frame run (see
+:doc:`solver-plugin-nirf`) from the body frame back into the inertial
+(lab) frame: the coordinates are rotated and, optionally, translated to
+the body's lab-frame position, and the velocity, its gradients and any
+derived quantities take their lab-frame values.  Reads ``center-of-rot``
+from ``[solver-plugin-nirf]`` and, from ``[postproc-plugin-nirf]``:
+
+#. ``apply-translation`` --- also translate the body to its lab-frame
+   position (defaults to ``false``):
+
+    *boolean*

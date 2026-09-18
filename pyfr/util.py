@@ -214,11 +214,6 @@ def paren_depths(s, opens='([{', closes=')]}'):
         yield c, depth
 
 
-def strip_parens(s):
-    return ''.join(c for c, d in paren_depths(s, '({', '})')
-                   if d == 0 and c not in ')}')
-
-
 def expand_braces(spec):
     # Expand brace enumerations
     if not (m := re.search(r'\{([^{}]*)\}', spec)):

@@ -33,7 +33,7 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
                 i.artvisc = lhs
             for m, (lhs, rhs) in zip(self._mpi_inters, mpi_v):
                 m.artvisc = lhs
-            for b, lhs in zip(self._bc_inters, bc_v):
+            for b, lhs in zip(self.bc_inters, bc_v):
                 b.artvisc = lhs
 
             # Register vertex exchange kernels and MPI requests

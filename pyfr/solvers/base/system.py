@@ -76,7 +76,7 @@ class BaseSystem:
         self._int_inters = self._load_int_inters(mesh, elemap)
         self._mpi_inters = self._load_mpi_inters(mesh, elemap)
         bcs = self._load_bc_inters(mesh, elemap, initsoln, serialiser)
-        self._bc_inters, self._bc_bindfns, self._bc_advfns = bcs
+        self.bc_inters, self._bc_bindfns, self._bc_advfns = bcs
 
     def _alloc_register_banks(self, registers, eles, ics):
         self.ele_banks = [[] for _ in eles]
@@ -173,7 +173,7 @@ class BaseSystem:
             mpi_views.append((lhs, rhs))
 
         bc_views = []
-        for b in self._bc_inters:
+        for b in self.bc_inters:
             perm = b._perm if use_perm(bc_layout) else Ellipsis
             lhs = self._field_view(b.lhs, field, bc_layout, be.view,
                                    perm, vshape)
@@ -203,7 +203,7 @@ class BaseSystem:
     def commit(self):
         # Prepare the kernels and any associated MPI requests
         self._gen_kernels(self.nrhs, self.ele_map.values(), self._int_inters,
-                          self._mpi_inters, self._bc_inters)
+                          self._mpi_inters, self.bc_inters)
         self._gen_mpireqs(self._mpi_inters)
         self.backend.commit()
 
@@ -215,7 +215,7 @@ class BaseSystem:
         del self._int_inters
         del self._mpi_inters
 
-        for b in self._bc_inters:
+        for b in self.bc_inters:
             del b.elemap
 
         # Observed input/output bank numbers

@@ -10,6 +10,15 @@ class BasePostProcPlugin(BasePlugin):
     needs_gridh = False
     fields = {}
 
+    # Transforms mutate the export data in place (coordinates, fields,
+    # gradients) rather than deriving new named fields.  They declare no
+    # `fields` and are run before any field-deriving plugin.
+    transform = False
+
+    # Data-source prefix this plugin attaches to (None = generic table
+    # derivation).  A data source discovers its named plugins by this.
+    source_prefix = None
+
     def __init__(self, source, cfg, export_type=None, want=None):
         cfgsect = f'postproc-plugin-{self.name}'
         super().__init__(cfg=cfg, cfgsect=cfgsect, ndims=source.ndims)

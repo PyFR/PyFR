@@ -3,14 +3,15 @@
 #include <metal_stdlib>
 
 using namespace metal;
-
-// AoSoA macros
-#define SOA_SZ ${soasz}
-#define SOA_IX(a, v, nv) ((((a) / SOA_SZ)*(nv) + (v))*SOA_SZ + (a) % SOA_SZ)
-
 // Typedefs
 typedef ${pyfr.npdtype_to_ctype(fpdtype)} fpdtype_t;
 typedef ${pyfr.npdtype_to_ctype(ixdtype)} ixdtype_t;
+// Unsigned integer matching fpdtype_t's width (for bit tricks)
+% if pyfr.npdtype_to_ctype(fpdtype) == 'double':
+typedef ulong fp_uint_t;
+% else:
+typedef uint fp_uint_t;
+% endif
 typedef bfloat bf16;
 
 inline bf16 f32_to_bf16(float f) { return (bf16) f; }
@@ -83,9 +84,6 @@ inline void atomic_sum_fpdtype(${aspace} fpdtype_t* addr, fpdtype_t val)
         PYFR_SYNC_THREADS();
     }
 </%def>
-
-// FP-precise block support
-#define PYFR_FP_PRECISE_BEGIN _Pragma("clang fp reassociate(off) contract(off)")
 
 <%def name="_kdecl(name, bounds)">kernel void ${name}</%def>
 <%def name="_karg(intent, t, n)">\

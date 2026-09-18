@@ -1,9 +1,4 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
-
-// AoSoA macros
-#define SOA_SZ ${soasz}
-#define SOA_IX(a, v, nv) ((((a) / SOA_SZ)*(nv) + (v))*SOA_SZ + (a) % SOA_SZ)
-
 // Typedefs
 typedef int int32_t;
 typedef unsigned int uint32_t;
@@ -11,6 +6,12 @@ typedef long long int64_t;
 typedef unsigned long long uint64_t;
 typedef ${pyfr.npdtype_to_ctype(fpdtype)} fpdtype_t;
 typedef ${pyfr.npdtype_to_ctype(ixdtype)} ixdtype_t;
+// Unsigned integer matching fpdtype_t's width (for bit tricks)
+% if pyfr.npdtype_to_ctype(fpdtype) == 'double':
+typedef uint64_t fp_uint_t;
+% else:
+typedef uint32_t fp_uint_t;
+% endif
 
 // Atomic helpers
 #define atomic_min_fpdtype(addr, val) atomicMin(addr, val)
@@ -84,9 +85,6 @@ __device__ static inline float bf16_to_f32(bf16 b) { return (float) b; }
         PYFR_SYNC_THREADS();
     }
 </%def>
-
-// FP-precise block support
-#define PYFR_FP_PRECISE_BEGIN _Pragma("clang fp reassociate(off) contract(off)")
 
 <%def name="_kdecl(name, bounds)">\
 % if bounds:
