@@ -160,15 +160,18 @@ class BasePartitioner:
         return wts
 
     @staticmethod
-    def _construct_graph(con, elewts_fn, exwts={}):
-        # Construct the dual graph
-        con = np.vstack([con, con[:, ::-1]])
+    def _construct_graph(con, emap, elewts):
+        # Construct the dual graph of the merged elements
+        con = emap[np.vstack([con, con[:, ::-1]])]
 
-        # Sort by the left hand side
-        con = con[np.argsort(con[:, 0])]
+        # Remove connections internal to a merged element
+        con = con[con[:, 0] != con[:, 1]]
+
+        # Sort by the left hand side, removing any parallel edges
+        con = np.unique(con[:, 0]*len(emap) + con[:, 1])
 
         # Left and right hand side global element numbers
-        lhs, rhs = con.T
+        lhs, rhs = np.divmod(con, len(emap))
 
         # Compute vertex offsets
         vtab = (lhs[1:] != lhs[:-1]).nonzero()[0]
@@ -177,30 +180,26 @@ class BasePartitioner:
         # Compute the vertex number to global element number map
         vemap = lhs[vtab[:-1]]
 
-        # Prepare vertex weights
-        vwts = elewts_fn(vemap)
-        for i, j in exwts.items():
-            vwts[np.searchsorted(vemap, i)] = j
+        # Compute the global element number to vertex number map
+        evmap = np.searchsorted(vemap, emap)
 
-        # Ensure vwts is always two dimensional
-        vwts = vwts.reshape(len(vwts), -1)
+        # Weight each vertex by the total weight of its merged elements
+        elewts = elewts.reshape(len(emap), -1)
+        vwts = np.zeros((len(vemap), elewts.shape[1]), dtype=elewts.dtype)
+        np.add.at(vwts, evmap, elewts)
 
         # Prepare the edges and their weights
         etab = np.searchsorted(vemap, rhs)
         ewts = np.ones_like(etab)
 
-        return Graph(vtab, etab, vwts, ewts), vemap
+        return Graph(vtab, etab, vwts, ewts), evmap
 
     def _partition_graph(self, graph, partwts):
         pass
 
     @staticmethod
-    def _group_periodic_eles(mesh, con, cdisps, elewts_fn):
-        cdtype = [('l', np.int64), ('r', np.int64)]
-        ds, pidx = DisjointSet(), []
-
-        # View it as a structured array
-        conv = con.view(cdtype).squeeze()
+    def _group_periodic_eles(mesh, cdisps, neles):
+        ds = DisjointSet()
 
         # Obtain the periodic connectivity info
         pfaces = mesh['periodic'] if 'periodic' in mesh else {}
@@ -212,56 +211,17 @@ class BasePartitioner:
 
             # Convert from local to global element numbers
             pcon = cdisps[pcon['cidx']] + pcon['off']
-            pcon = pcon.reshape(-1, 2)
-
-            # Sort so lhs <= rhs
-            pcon.sort()
-
-            # Locate these entries in the connectivity array
-            pidx.append(np.searchsorted(conv, pcon.view(cdtype).squeeze()))
 
             # Determine which elements require merging
             for l, r in iter_struct(pcon.reshape(-1, 2)):
                 ds.union(l, r)
 
-        if (pmerge := ds.merges()):
-            # Eliminate connectivity entries associated with periodic faces
-            con = np.delete(con, np.hstack(pidx), axis=0)
+        # Map each element to the representative of its merged group
+        emap = np.arange(neles)
+        for i, j in ds.merges().items():
+            emap[i] = j
 
-            mfrom = np.array(list(pmerge))
-            mto = np.array(list(pmerge.values()))
-
-            # Merge the associated elements on the left
-            ls = np.searchsorted(con[:, 0], mfrom, side='left')
-            le = np.searchsorted(con[:, 0], mfrom, side='right')
-            for s, e, t in zip(ls, le, mto):
-                con[s:e, 0] = t
-
-            # Merge the associated elements on the right
-            rix = np.argsort(con[:, 1])
-            rs = np.searchsorted(con[:, 1], mfrom, side='left', sorter=rix)
-            re = np.searchsorted(con[:, 1], mfrom, side='right', sorter=rix)
-            for s, e, t in zip(rs, re, mto):
-                con[rix[s:e], 1] = t
-
-        # Tally up the weights for the merged elements
-        exwts = {j: elewts_fn(j) for j in set(pmerge.values())}
-        for i, j in pmerge.items():
-            exwts[j] = exwts[j] + elewts_fn(i)
-
-        return con, exwts, pmerge
-
-    @staticmethod
-    def _ungroup_periodic_eles(pmerge, vemap, vparts):
-        # For each merged element identify its partition number
-        pparts = vparts[np.searchsorted(vemap, list(pmerge.values()))]
-
-        # With this we can unmerge the elements and update the arrays
-        vemap = np.concatenate((vemap, list(pmerge)))
-        vparts = np.concatenate((vparts, pparts))
-
-        # Sort by vemap to give the global element number partition array
-        return vparts[np.argsort(vemap)]
+        return emap
 
     @staticmethod
     def _analyse_parts(nparts, con, vparts):
@@ -372,12 +332,12 @@ class BasePartitioner:
 
         # Merge periodic elements
         with progress.start('Group periodic elements'):
-            pmcon, exwts, pmerge = self._group_periodic_eles(mesh, con,
-                                                             cdisps, elewts_fn)
+            emap = self._group_periodic_eles(mesh, cdisps, len(etags))
 
         # Obtain the dual graph for this mesh
         with progress.start('Construct graph'):
-            graph, vemap = self._construct_graph(pmcon, elewts_fn, exwts=exwts)
+            elewts = elewts_fn(np.arange(len(etags)))
+            graph, evmap = self._construct_graph(con, emap, elewts)
 
         # Partition the graph
         with progress.start('Partition graph'):
@@ -388,11 +348,11 @@ class BasePartitioner:
                     raise RuntimeError(f'Partitioner error: mesh has {n} '
                                        f'parts versus goal of {self.nparts}')
             else:
-                vparts = np.zeros(len(vemap), dtype=np.int32)
+                vparts = np.zeros(len(graph.vtab) - 1, dtype=np.int32)
 
         # Unmerge periodic elements
         with progress.start('Ungroup periodic elements'):
-            vparts = self._ungroup_periodic_eles(pmerge, vemap, vparts)
+            vparts = vparts[evmap]
 
         # Construct the partitioning data
         with progress.start('Construct partitioning'):
