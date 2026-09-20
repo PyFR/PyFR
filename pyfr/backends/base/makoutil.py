@@ -268,8 +268,11 @@ def gpukernel(context, name, bounds=None, kargs=None, **kwargs):
 
 
 @supports_caller
-def kernel(context, name, ndim, **kwargs):
+def kernel(context, name, ndim, kargs={}, **kwargs):
     extrns = context['_extrns']
+
+    # Merge any argument declarations computed by the template
+    kwargs = kargs | kwargs
 
     # Validate the argument list
     if any(arg in extrns for arg in kwargs):
