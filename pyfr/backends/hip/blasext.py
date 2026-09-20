@@ -1,42 +1,11 @@
 import numpy as np
 
 from pyfr.backends.base.blasext import BaseBlasExtKernels
-from pyfr.backends.hip.provider import (HIPKernel, HIPKernelProvider,
-                                        get_grid_for_block)
+from pyfr.backends.hip.provider import HIPKernel, HIPKernelProvider
 
 
 class HIPBlasExtKernels(BaseBlasExtKernels, HIPKernelProvider):
     pvar_idx = 'VARIDX'
-
-    def _axnpby(self, arr, tplargs):
-        nv, ixdtype = tplargs['nv'], self.backend.ixdtype
-        nrow, _, ldim, fpdtype = arr[0].traits[1:]
-        ncolb = arr[0].ioshape[-1]
-
-        # Determine the grid/block
-        block = (128, 1, 1)
-        grid = get_grid_for_block(block, ncolb, nrow)
-        tplargs['block'] = block
-
-        # Render the kernel template
-        src = self.backend.lookup.get_template('axnpby').render(**tplargs)
-
-        # Build the kernel
-        kern = self._build_kernel('axnpby', src,
-                                  [ixdtype]*2 + [np.uintp]*nv + [fpdtype]*nv)
-
-        # Set the parameters
-        params = kern.make_params(grid, block)
-        params.set_args(ncolb, ldim, *arr)
-
-        class AxnpbyKernel(HIPKernel):
-            def bind(self, *consts):
-                params.set_args(*consts, start=2 + nv)
-
-            def run(self, stream):
-                kern.exec_async(stream, params)
-
-        return AxnpbyKernel(mats=arr)
 
     def copy(self, dst, src):
         hip = self.backend.hip

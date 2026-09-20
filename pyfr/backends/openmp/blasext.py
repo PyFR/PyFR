@@ -7,27 +7,6 @@ from pyfr.backends.openmp.provider import OpenMPKernel, OpenMPKernelProvider
 class OpenMPBlasExtKernels(BaseBlasExtKernels, OpenMPKernelProvider):
     pvar_idx = '_k'
 
-    def _axnpby(self, arr, tplargs):
-        nv, ixdtype = tplargs['nv'], self.backend.ixdtype
-        nblocks, nrow, *_, fpdtype = arr[0].traits
-
-        # Render the kernel template
-        src = self.backend.lookup.get_template('axnpby').render(**tplargs)
-
-        # Build the kernel
-        kern = self._build_kernel('axnpby', src,
-                                  [ixdtype] + [np.uintp]*nv + [fpdtype]*nv)
-
-        # Set the static arguments
-        kern.set_nblocks(nblocks)
-        kern.set_args(nrow, *arr)
-
-        class AxnpbyKernel(OpenMPKernel):
-            def bind(self, *consts):
-                self.kernel.set_args(*consts, start=1 + nv)
-
-        return AxnpbyKernel(mats=arr, kernel=kern)
-
     def copy(self, dst, src):
         ixdtype = self.backend.ixdtype
 

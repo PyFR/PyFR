@@ -17,6 +17,10 @@ class OpenMPKernel(Kernel):
         if kernel:
             self.kernel = kernel
 
+        # Assign each array argument a bit in the displacement mask
+        vidxs = [i for i, (f, _), _ in args.values() if f != 's']
+        self.argbits = {i: 1 << n for n, i in enumerate(vidxs)}
+
     def _set_arg(self, i, v):
         self.kernel.set_arg(i, v)
 

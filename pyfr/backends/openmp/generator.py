@@ -251,10 +251,14 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
         # Now add any scalar arguments
         kargs.extend((sa.dtype, sa.name, None, None) for sa in self.scalargs)
 
+        # The displacement mask carries one bit per array argument
+        if len(self.vectargs) > 31:
+            raise ValueError('Kernels are limited to 31 array arguments')
+
         # Finally, add the vector arguments
-        for va in self.vectargs:
+        for vidx, va in enumerate(self.vectargs):
             da = self._displace_arg(va)
-            mi = len(kargs) if da else None
+            mi = vidx if da else None
 
             if va.intent == 'in':
                 kargs.append((f'const {va.dtype}*', f'{va.name}_v', da, mi))

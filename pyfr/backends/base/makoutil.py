@@ -54,23 +54,6 @@ def dot(context, a_, b_=None, /, **kwargs):
     return '(' + ' + '.join(ab.format(**{ix: i}) for i in range(*nd)) + ')'
 
 
-def axnpby_expr(context, k, idx, start=0, *, nv, in_scale_idxs=(),
-                out_scale=None, in_name='_in', out_name='_out'):
-    terms = []
-    for l in range(start, nv):
-        coef, val = f'a{l}', f'x{l}[{idx}]'
-        if l in in_scale_idxs:
-            terms.append(f'({coef})*{in_name}[{k}]*({val})')
-        else:
-            terms.append(f'({coef})*({val})')
-
-    if terms:
-        expr = '(' + ' + '.join(terms) + ')'
-        return f'{out_name}[{k}]*({expr})' if out_scale else expr
-    else:
-        return '0'
-
-
 def array(context, expr_, vals_={}, /, **kwargs):
     ix = util.first(kwargs)
     ni = kwargs.pop(ix)
