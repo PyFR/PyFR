@@ -16,19 +16,18 @@ class MetalBlasExtKernels(BaseBlasExtKernels, MetalKernelProvider):
         # Render the kernel template
         src = self.backend.lookup.get_template('axnpby').render(**tplargs)
 
-        # Build the kernel
-        kern = self._build_kernel(
-            'axnpby', src,
-            [ixdtype]*2 + [np.uintp]*nv + [np.dtype((fpdtype, nv))]
-        )
+        # Build the kernel with the scalar arguments packed into a struct
+        kern = self._build_kernel('axnpby', src,
+                                  [ixdtype]*2 + [np.uintp]*nv + [fpdtype]*nv,
+                                  pack_scalars=True)
 
         # Grid and threadgroup dimensions
         grid, tgrp = (ncolb, nrow, 1), (128, 1, 1)
-        kargs = [ncolb, ldim] + [a.data for a in arr] + [(1.0,)*nv]
+        kargs = [ncolb, ldim] + [a.data for a in arr] + [1.0]*nv
 
         class AxnpbyKernel(MetalKernel):
             def bind(self, *consts):
-                kargs[2 + nv] = consts
+                kargs[2 + nv:] = consts
 
             def run(self, cbuf):
                 kern(cbuf, grid, tgrp, *kargs)

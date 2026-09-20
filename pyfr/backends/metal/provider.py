@@ -1,4 +1,5 @@
-from ctypes import Array, sizeof
+from ctypes import sizeof
+from struct import Struct
 
 import numpy as np
 
@@ -62,7 +63,8 @@ class MetalKernelProvider(BaseKernelProvider):
             v[off:off + blk.nbytes] = blk[:m.nbytes - off]
 
     @memoize
-    def _build_kernel(self, name, src, argtypes, regions=frozenset()):
+    def _build_kernel(self, name, src, argtypes, regions=frozenset(),
+                      pack_scalars=False):
         from Metal import MTLSizeMake
 
         # Build the pipeline using the compiler (with disk caching)
@@ -72,24 +74,31 @@ class MetalKernelProvider(BaseKernelProvider):
         pargs, sargs = [], []
         for i, argt in enumerate(argtypes):
             if argt == np.uintp:
-                pargs.append(i)
+                pargs.append((i, len(pargs) + 1 if pack_scalars else i))
             else:
                 ctype = npdtype_to_ctypestype(argt)
                 sargs.append((i, ctype(), sizeof(ctype)))
+
+        # Memory layout of scalar argument structure
+        sfmt = ''.join(np.dtype(argtypes[i]).char for i, _, _ in sargs)
+        sastruct = Struct('@' + sfmt)
 
         def encode(cbuf, grid, tgrp, *args):
             cce = cbuf.computeCommandEncoder()
             cce.setComputePipelineState_(cpsf)
 
-            for i in pargs:
-                cce.setBuffer_offset_atIndex_(*args[i], i)
-
-            for i, val, sz in sargs:
-                if isinstance(val, Array):
-                    val[:] = args[i]
-                else:
+            # Bind the scalar arguments; either packed or individually
+            if pack_scalars:
+                sa = sastruct.pack(*(args[i] for i, _, _ in sargs))
+                cce.setBytes_length_atIndex_(sa, sastruct.size, 0)
+            else:
+                for i, val, sz in sargs:
                     val.value = args[i]
-                cce.setBytes_length_atIndex_(val, sz, i)
+                    cce.setBytes_length_atIndex_(val, sz, i)
+
+            # Bind the pointer arguments
+            for i, j in pargs:
+                cce.setBuffer_offset_atIndex_(*args[i], j)
 
             cce.dispatchThreads_threadsPerThreadgroup_(MTLSizeMake(*grid),
                                                        MTLSizeMake(*tgrp))
@@ -112,6 +121,11 @@ class MetalPointwiseKernelProvider(MetalKernelProvider,
             block2d = self._tgrp2d
 
         self.kernel_generator_cls = KernelGenerator
+
+    def _build_kernel(self, name, src, argtypes, regions=frozenset()):
+        # Pack the scalar arguments of generated kernels into one struct
+        return super()._build_kernel(name, src, argtypes, regions,
+                                     pack_scalars=True)
 
     def _instantiate_kernel(self, dims, fun, args):
         # Determine the thread group and grid sizes

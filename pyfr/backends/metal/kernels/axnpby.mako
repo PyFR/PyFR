@@ -1,15 +1,21 @@
 <%inherit file='base'/>
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
+struct _sargs_t
+{
+    ixdtype_t ncolb, ldim;
+    fpdtype_t a[${nv}];
+};
+
 kernel void
-axnpby(constant ixdtype_t& ncolb, constant ixdtype_t& ldim,
+axnpby(constant _sargs_t& _sa,
        device fpdtype_t* x0,
        ${', '.join(f'device const fpdtype_t* x{i}' for i in range(1, nv)) + ',' if nv > 1 else ''}
-       constant fpdtype_t* _a,
        uint2 ji [[thread_position_in_grid]])
 {
+    const ixdtype_t ncolb = _sa.ncolb, ldim = _sa.ldim;
 % for i in range(nv):
-    fpdtype_t a${i} = _a[${i}];
+    fpdtype_t a${i} = _sa.a[${i}];
 % endfor
 % if in_scale:
     const fpdtype_t _in[] = ${pyfr.carray(in_scale)};
