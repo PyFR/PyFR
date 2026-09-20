@@ -27,6 +27,7 @@ class TplargsMixin:
                              shock_capturing=shock_capturing, c=self.c,
                              p_min=self.p_min)
 
+
 class NavierStokesIntInters(TplargsMixin,
                             BaseAdvectionDiffusionIntInters):
     def __init__(self, *args, **kwargs):
