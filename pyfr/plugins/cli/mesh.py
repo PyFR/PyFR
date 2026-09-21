@@ -510,8 +510,7 @@ class MeshCLIPlugin(BaseCLIPlugin):
         init_mpi()
 
         reader = NativeReader(args.mesh, pname=args.pname,
-                              construct_con=args.nsr_thresh > 0,
-                              split_pcon=False)
+                              construct_con=args.nsr_thresh > 0)
         cfg = Inifile.load(args.cfg)
 
         # Override polynomial order from config if provided

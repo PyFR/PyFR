@@ -41,6 +41,12 @@ class Mesh:
     pcon: dict = field(default_factory=dict)
     cidxmap: dict = field(default_factory=dict)
 
+    @property
+    def con_all(self):
+        # Internal connectivity with the periodic pairs folded back in
+        pairs = [self.con, *self.pcon.values()]
+        return tuple(map(Connectivity.concat, zip(*pairs)))
+
     # Shared nodes for C0 continuous fields
     node_idxs: np.ndarray = None
     node_valency: np.ndarray = None
@@ -141,6 +147,14 @@ class Connectivity:
                             self.transform)
 
     @classmethod
+    def concat(cls, cons):
+        # Concatenate several connectivities, which must share a cidxmap
+        cidxs = np.concatenate([c.cidxs for c in cons])
+        eidxs = np.concatenate([c.eidxs for c in cons])
+
+        return cls(cidxs, eidxs, first(cons).cidxmap)
+
+    @classmethod
     def fuse(cls, cons):
         # Fuse several connectivities, which must share a cidxmap, into one
         cons = list(cons)
@@ -149,17 +163,14 @@ class Connectivity:
         elif len(cons) == 1:
             return cons[0]
         else:
-            cidxs = np.concatenate([c.cidxs for c in cons])
-            eidxs = np.concatenate([c.eidxs for c in cons])
+            c = cls.concat(cons)
+            sidx = np.lexsort((c.eidxs, c.cidxs))
 
-            sidx = np.lexsort((eidxs, cidxs))
-
-            return cls(cidxs[sidx], eidxs[sidx], first(cons).cidxmap)
+            return cls(c.cidxs[sidx], c.eidxs[sidx], c.cidxmap)
 
 
 class NativeReader:
-    def __init__(self, fname, pname=None, *, construct_con=True,
-                 split_pcon=True):
+    def __init__(self, fname, pname=None, *, construct_con=True):
         self.f = h5py.File(fname, 'r')
         self.mesh = Mesh(fname=fname, raw=self.f)
 
@@ -170,7 +181,7 @@ class NativeReader:
         self._read_nodes()
 
         # Construct connectivity
-        self._construct_con(full=construct_con, split_pcon=split_pcon)
+        self._construct_con(full=construct_con)
 
         self._construct_shared_nodes()
 
@@ -498,13 +509,13 @@ class NativeReader:
         return [c*stride + o for c, o in pairs]
 
     @staticmethod
-    def _pair_finder(lhs, stride):
+    def _pair_finder(cidx, idx, stride):
         # Pack (cidx, idx) pairs into flat keys for binary search
-        keys = lhs.cidx.astype(int)*stride + lhs.idx
+        keys = cidx.astype(int)*stride + idx
         sord = np.argsort(keys)
 
-        def find(rec):
-            qkeys = rec['cidx'].astype(int)*stride + rec['idx']
+        def find(qcidx, qidx):
+            qkeys = qcidx.astype(int)*stride + qidx
             pos = np.searchsorted(keys, qkeys, sorter=sord)
             idx = np.take(sord, pos, mode='clip')
             return idx[keys[idx] == qkeys]
@@ -551,12 +562,12 @@ class NativeReader:
 
         return eidx
 
-    def _construct_con(self, full=True, split_pcon=True):
+    def _construct_con(self, full=True):
         cidxmap, cetmap = self._parse_codec()
         g2l = self._build_g2l()
         lcidx, leidx, lgidx, rcidx, rgidx = self._flatten_faces(g2l)
 
-        con = lambda c, e: Connectivity(c, e, cidxmap)
+        con = lambda c, e, t=None: Connectivity(c, e, cidxmap, t)
 
         # Start by constructing the boundary connectivity
         for bccidx in np.unique(rcidx[rgidx == -1]):
@@ -575,25 +586,17 @@ class NativeReader:
         is_boundary, is_local = rgidx == -1, reidx >= 0
         is_mpi = ~(is_boundary | is_local)
 
+        # Stride for packing (cidx, idx) into collision-free keys
+        stride = max(len(self.f[f'eles/{et}']) for et in self.mesh.etypes)
+
+        # Split periodic pairs out into their own connectivity
+        find = self._pair_finder(lcidx, lgidx, stride)
+        is_local &= ~self._construct_pcon(find, con, lcidx, leidx)
+
         # Deduplicate internal interfaces
         lkey, rkey = self._pack_pairs((lcidx[is_local], leidx[is_local]),
                                       (rcidx[is_local], reidx[is_local]))
         iidxs = np.flatnonzero(is_local)[lkey < rkey]
-
-        # Split periodic pairs out into their own connectivity
-        if split_pcon:
-            self._construct_pcon(g2l, cetmap, cidxmap)
-
-            if self.mesh.pcon:
-                pairs = []
-                for lhs, rhs in self.mesh.pcon.values():
-                    for c in (lhs, rhs):
-                        pairs.append((c.cidxs, c.eidxs))
-
-                pcidxs, peidxs = map(np.concatenate, zip(*pairs))
-                ipair = lcidx[iidxs], leidx[iidxs]
-                pkeys, ikeys = self._pack_pairs((pcidxs, peidxs), ipair)
-                iidxs = iidxs[~np.isin(ikeys, pkeys)]
 
         self.mesh.con = (con(lcidx[iidxs], leidx[iidxs]),
                          con(rcidx[iidxs], reidx[iidxs]))
@@ -604,42 +607,41 @@ class NativeReader:
             lhs = np.rec.fromarrays([lcidx[is_mpi], lgidx[is_mpi]], dtype=dt)
             rhs = np.rec.fromarrays([rcidx[is_mpi], rgidx[is_mpi]], dtype=dt)
 
-            # Stride for packing (cidx, idx) into collision-free keys
-            stride = max(len(self.f[f'eles/{et}']) for et in self.mesh.etypes)
-
             self._construct_mpi_con(g2l, cetmap, cidxmap, lhs, rhs, stride)
 
-    def _construct_pcon(self, g2l, cetmap, cidxmap):
-        mesh = self.mesh
+    def _construct_pcon(self, find, con, lcidx, leidx):
         comm, rank, root = get_comm_rank_root()
+        ndims = self.mesh.ndims
 
+        # Have the root rank read in the periodic face pairs
         if rank == root:
             pdata = {}
             for name, dset in self.f.get('periodic', {}).items():
-                rot = dset.attrs['R'][:mesh.ndims, :mesh.ndims]
-                shift = dset.attrs['T'][:mesh.ndims]
+                rot = dset.attrs['R'][:ndims, :ndims]
+                shift = dset.attrs['T'][:ndims]
                 pdata[name] = (dset[()], rot, shift)
         else:
             pdata = None
 
-        pdata = comm.bcast(pdata, root=root)
+        is_periodic = np.zeros(len(lcidx), dtype=bool)
 
-        for name, (pcon, rot, shift) in pdata.items():
-            # Localise element indices
+        for name, (pcon, rot, shift) in comm.bcast(pdata, root=root).items():
+            # Find which faces of each pair are on this rank
             lsf, rsf = pcon.T
-            le = self._local_eidx(g2l, cetmap, lsf['cidx'], lsf['off'])
-            re = self._local_eidx(g2l, cetmap, rsf['cidx'], rsf['off'])
+            li = find(lsf['cidx'], lsf['off'])
+            ri = find(rsf['cidx'], rsf['off'])
 
             # Skip periodic groups with no face pairs on this rank
-            if not (keep := le >= 0).any():
+            if not len(li):
                 continue
 
-            itransform = rot.T, -(rot.T @ shift)
-            lhs = Connectivity(lsf['cidx'][keep], le[keep], cidxmap,
-                               itransform)
-            rhs = Connectivity(rsf['cidx'][keep], re[keep], cidxmap,
-                               (rot, shift))
-            mesh.pcon[name] = lhs, rhs
+            is_periodic[li] = is_periodic[ri] = True
+
+            # Record the transform which maps LHS faces onto RHS faces
+            self.mesh.pcon[name] = (con(lcidx[li], leidx[li]),
+                                    con(lcidx[ri], leidx[ri], (rot, shift)))
+
+        return is_periodic
 
     def _construct_mpi_con(self, g2l, cetmap, cidxmap, lhs, rhs, stride):
         comm, rank, root = get_comm_rank_root()
@@ -649,17 +651,18 @@ class NativeReader:
                                                          self.neighbours))
 
         # Build a lookup to match (cidx, offset) pairs against lhs faces
-        find = self._pair_finder(lhs, stride)
+        find = self._pair_finder(lhs.cidx, lhs.idx, stride)
 
         # See which of our neighbours' unpaired faces we have
-        matches = [rhs[find(u)] for u in ncomm.neighbor_allgather(rhs)]
+        matches = [rhs[find(u['cidx'], u['idx'])]
+                   for u in ncomm.neighbor_allgather(rhs)]
 
         # Distribute this information back to our neighbours
         nmatches = ncomm.neighbor_alltoall(matches)
 
         for nrank, nmatch in zip(self.neighbours, nmatches):
             # Find which of our lhs faces match this neighbour
-            idx = find(nmatch)
+            idx = find(nmatch['cidx'], nmatch['idx'])
 
             # Both ranks must agree on face ordering; sort by the
             # lower-ranked side so each rank's pairing is consistent

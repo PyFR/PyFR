@@ -4,6 +4,7 @@ import math
 import numpy as np
 
 from pyfr.exprs import npeval
+from pyfr.nputil import batched_fuzzysort
 from pyfr.solvers.base import BaseInters
 
 
@@ -17,6 +18,9 @@ class BaseAdvectionIntInters(BaseInters):
         self.lhs = lhs
         self.rhs = rhs
 
+        # Permute the RHS flux points so they pair with those of the LHS
+        self._rhs_reorder = self._gen_rhs_reorder(lhs, rhs)
+
         # Compute the `optimal' permutation for our interface
         scal = {t: e._scal_fpts for t, e in elemap.items()}
         self._gen_perm(lhs, rhs, scal)
@@ -29,35 +33,50 @@ class BaseAdvectionIntInters(BaseInters):
         # memory access pattern for the LHS of the interface
         self._perm = self._get_perm_for_field(lhs, scal)
 
+    def _gen_rhs_reorder(self, lhs, rhs, tol=1e-6):
+        # Faces which share a frame have their flux points paired already
+        if rhs.transform is None:
+            return None
 
-class BaseAdvectionPeriodicInters(BaseInters):
-    def __init__(self, be, lhs, rhs, elemap, cfg, name):
-        self.lhs, self.rhs = lhs, rhs
-        self.name = name
-        self._rot, self._shift = rhs.transform
-        self._rhs_fpts = {}
-        for etype, fidx, eidxs in rhs.items():
-            eles = elemap[etype]
-            sfpts = eles.get_srtd_face_fpts(eidxs, fidx, rhs.transform)
-            self._rhs_fpts[etype, fidx] = sfpts
-
-        super().__init__(be, lhs, elemap, cfg)
-
-        scal = {t: e._scal_fpts for t, e in elemap.items()}
-        self._gen_perm(lhs, rhs, scal)
-        self._pnorm_lhs = self._const_mat(lhs, 'get_pnorms_for_inters')
-
-        if not np.allclose(self._rot, np.eye(self.ndims)):
+        rot, shift = rhs.transform
+        if not np.allclose(rot, np.eye(len(shift))):
             raise ValueError('Rotational periodicity is not supported')
 
-    def _get_fpts(self, interside, etype, fidx, eidxs):
-        if interside is self.rhs:
-            return self._rhs_fpts[etype, fidx]
+        # Map the LHS flux points into the RHS frame
+        lpts = self._inter_ploc(lhs) @ rot.T + shift
+        rpts = self._inter_ploc(rhs)
 
-        return super()._get_fpts(interside, etype, fidx, eidxs)
+        # Offset of each interface into the flux point arrays
+        nfps = np.zeros(len(lhs), dtype=int)
+        for etype, fidx, eidxs, idx in lhs.foreach():
+            nfps[idx] = self.elemap[etype].nfacefpts[fidx]
+        offs = np.concatenate(([0], np.cumsum(nfps[:-1])))
 
-    def _gen_perm(self, lhs, rhs, scal):
-        self._perm = self._get_perm_for_field(lhs, scal)
+        reorder = np.empty(len(lpts), dtype=int)
+        for nfp in np.unique(nfps):
+            # Flux point indices of the interfaces with this many points
+            ix = offs[nfps == nfp, None] + np.arange(nfp)
+
+            # Sort both sides together so coincident points sort alike
+            pts = np.concatenate([lpts[ix], rpts[ix]]).transpose(0, 2, 1)
+            lperm, rperm = np.split(batched_fuzzysort(pts, tol), 2)
+
+            # Pair each LHS flux point with the like-sorted RHS flux point
+            rpos = np.take_along_axis(rperm, np.argsort(lperm, axis=1), 1)
+            reorder[ix] = np.take_along_axis(ix, rpos, 1)
+
+        # Ensure the paired flux points coincide
+        if np.abs(lpts - rpts[reorder]).max() > tol:
+            raise ValueError('Periodic flux points do not coincide')
+
+        return reorder
+
+    def side_perm(self, inter, with_perm=True):
+        perm = super().side_perm(inter, with_perm)
+        if inter is self.rhs and self._rhs_reorder is not None:
+            return self._rhs_reorder[perm]
+        else:
+            return perm
 
 
 class BaseAdvectionMPIInters(BaseInters):

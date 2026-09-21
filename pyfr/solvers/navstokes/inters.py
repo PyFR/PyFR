@@ -3,8 +3,7 @@ import numpy as np
 from pyfr.exprs import npeval
 from pyfr.solvers.baseadvecdiff import (BaseAdvectionDiffusionBCInters,
                                         BaseAdvectionDiffusionIntInters,
-                                        BaseAdvectionDiffusionMPIInters,
-                                        BaseAdvectionDiffusionPeriodicInters)
+                                        BaseAdvectionDiffusionMPIInters)
 from pyfr.solvers.euler.inters import MassFlowBCMixin, PressureBCMixin
 
 
@@ -28,7 +27,8 @@ class TplargsMixin:
                              p_min=self.p_min)
 
 
-class NavierStokesLocalIntersMixin(TplargsMixin):
+class NavierStokesIntInters(TplargsMixin,
+                            BaseAdvectionDiffusionIntInters):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -46,16 +46,6 @@ class NavierStokesLocalIntersMixin(TplargsMixin):
             gradul=self._vect_lhs, gradur=self._vect_rhs,
             artvisc=self.artvisc, nl=self._pnorm_lhs
         )
-
-
-class NavierStokesIntInters(NavierStokesLocalIntersMixin,
-                            BaseAdvectionDiffusionIntInters):
-    pass
-
-
-class NavierStokesPeriodicInters(NavierStokesLocalIntersMixin,
-                                 BaseAdvectionDiffusionPeriodicInters):
-    pass
 
 
 class NavierStokesMPIInters(TplargsMixin,

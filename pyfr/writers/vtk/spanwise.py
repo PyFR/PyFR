@@ -239,7 +239,7 @@ class ExtrudedSpanwise(_SpanwiseBase, AlltoallMixin):
 
     def _span_links(self, offs):
         # Per-cidx element type offset table
-        lhs, rhs = self.pmesh.con
+        lhs, rhs = self.pmesh.con_all
         cmap = lhs.cidxmap
         cidxoff = np.zeros(max(cmap) + 1, dtype=int)
         for cidx, (etype, _) in cmap.items():
@@ -486,7 +486,6 @@ class VTKSpanwiseWriter(BaseVTKWriter):
     adapter_kind = 'volume'
     output_curved = True
     needs_con = True
-    split_pcon = False
     dimensions = '3'
 
     def __init__(self, meshf, *, nstations=None, boundary=None, periodic=None,

@@ -15,7 +15,6 @@ from pyfr.util import subclasses
 class BaseSystem:
     elementscls = None
     intinterscls = None
-    pinterscls = None
     mpiinterscls = None
     bbcinterscls = None
 
@@ -75,7 +74,6 @@ class BaseSystem:
 
         # Load the interfaces
         self._int_inters = self._load_int_inters(mesh, elemap)
-        self._int_inters.extend(self._load_p_inters(mesh, elemap))
         self._mpi_inters = self._load_mpi_inters(mesh, elemap)
         bcs = self._load_bc_inters(mesh, elemap, initsoln, serialiser)
         self._bc_inters, self._bc_bindfns, self._bc_advfns = bcs
@@ -113,7 +111,7 @@ class BaseSystem:
 
         self._kernel_callbacks.append((tuple(names), callback))
 
-    def _field_view(self, iface, interside, field, layout, view_fn,
+    def _field_view(self, interside, field, layout, view_fn,
                     perm=Ellipsis, vshape=()):
         matmap, rowmap, colmap, reorder = [], [], [], []
 
@@ -122,7 +120,7 @@ class BaseSystem:
             n = len(eidxs)
 
             if layout == 'fpts':
-                fpts = iface._get_fpts(interside, etype, fidx, eidxs)
+                fpts = eles.srtd_face_fpts[fidx][eidxs]
                 nfp = fpts.shape[1]
                 matmap.append(np.full(n * nfp, mat.mid))
                 rowmap.append(fpts.ravel())
@@ -146,9 +144,9 @@ class BaseSystem:
         c = np.concatenate(colmap)[ro]
         return view_fn(m, r, c, vshape=vshape)
 
-    def _compute_perm(self, iface, interside, field):
+    def _compute_perm(self, interside, field):
         # Compute the optimal memory access permutation for a field
-        v = self._field_view(iface, interside, field, 'fpts',
+        v = self._field_view(interside, field, 'fpts',
                              self.backend.view, vshape=())
         return np.argsort(v.mapping.get()[0])
 
@@ -160,24 +158,25 @@ class BaseSystem:
 
         iint_views = []
         for i in self._int_inters:
-            perm = i._perm if use_perm(layout) else Ellipsis
-            lhs = self._field_view(i, i.lhs, field, layout, be.view, perm,
+            lperm = i.side_perm(i.lhs, use_perm(layout))
+            rperm = i.side_perm(i.rhs, use_perm(layout))
+            lhs = self._field_view(i.lhs, field, layout, be.view, lperm,
                                    vshape)
-            rhs = self._field_view(i, i.rhs, field, layout, be.view, perm,
+            rhs = self._field_view(i.rhs, field, layout, be.view, rperm,
                                    vshape)
             iint_views.append((lhs, rhs))
 
         mpi_views = []
         for m in self._mpi_inters:
-            lhs = self._field_view(m, m.lhs, field, layout, be.xchg_view,
+            lhs = self._field_view(m.lhs, field, layout, be.xchg_view,
                                    vshape=vshape)
             rhs = be.xchg_matrix_for_view(lhs)
             mpi_views.append((lhs, rhs))
 
         bc_views = []
         for b in self._bc_inters:
-            perm = b._perm if use_perm(bc_layout) else Ellipsis
-            lhs = self._field_view(b, b.lhs, field, bc_layout, be.view,
+            perm = b.side_perm(b.lhs, use_perm(bc_layout))
+            lhs = self._field_view(b.lhs, field, bc_layout, be.view,
                                    perm, vshape)
             bc_views.append(lhs)
 
@@ -249,19 +248,10 @@ class BaseSystem:
         return eles, elemap, ics
 
     def _load_int_inters(self, mesh, elemap):
-        int_inters = self.intinterscls(self.backend, *mesh.con, elemap,
-                                       self.cfg)
+        cons = [mesh.con, *mesh.pcon.values()]
 
-        return [int_inters]
-
-    def _load_p_inters(self, mesh, elemap):
-        p_inters = []
-        for name, (lhs, rhs) in mesh.pcon.items():
-            piface = self.pinterscls(self.backend, lhs, rhs, elemap, self.cfg,
-                                     name)
-            p_inters.append(piface)
-
-        return p_inters
+        return [self.intinterscls(self.backend, *c, elemap, self.cfg)
+                for c in cons]
 
     def _load_mpi_inters(self, mesh, elemap):
         mpi_inters = []

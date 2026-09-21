@@ -133,7 +133,8 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
             ))
 
     @inters_map
-    def _get_grad_upts_for_inters(self, eidxs, fidx, sfpts):
-        fmap = self.basis.fpts_map_upts[sfpts]
+    def _get_grad_upts_for_inters(self, eidxs, fidx):
+        rmap = self.srtd_face_fpts[fidx][eidxs]
+        fmap = self.basis.fpts_map_upts[rmap]
         return self._grad_upts.mid, fmap, self.nupts
 
