@@ -18,6 +18,7 @@ class BaseSDIRKStepper(BaseImplicitStepper):
     bhat = []
     _gamma = 0
 
+    stepper_has_comp_accum = True
     stepper_order = 1
 
     _r_u = VectorRegister(n=2)
@@ -154,6 +155,10 @@ class BaseSDIRKStepper(BaseImplicitStepper):
                 if i < self._nstages - 1:
                     self._rhs(t_i, r_ui, f_reg)
 
+        # Form the step increment and add it to u_n with compensation
+        if self.comp_accum:
+            r_ui = self._accumulate_step(dt, r_un, r_ui, r_f)
+
         # Handle FSAL
         if self._fsal:
             r_f[0], r_f[-1] = r_f[-1], r_f[0]
@@ -169,6 +174,19 @@ class BaseSDIRKStepper(BaseImplicitStepper):
     def _compute_error_estimate(self, dt, r_f):
         pairs = [(dt*ei, fi) for ei, fi in zip(self._err_coeffs, r_f)]
         self._addv_nz(self._r_err, pairs)
+
+    def _comp_accum_banks(self):
+        return self._r_u
+
+    def _accumulate_step(self, dt, r_un, r_ui, r_f):
+        # Weight the stage fluxes to form the step increment
+        args = [v for bi, fi in zip(self.b, r_f) if bi for v in (dt*bi, fi)]
+
+        # Update the solution in-place unless it may need to be restored
+        r_out = r_ui if self.stepper_has_errest else r_un
+        self._add_with_comp(r_out, r_un, *args)
+
+        return r_out
 
 
 class ImplicitEulerStepper(BaseSDIRKStepper):
