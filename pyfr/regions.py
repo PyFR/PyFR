@@ -94,7 +94,7 @@ class BaseRegion:
         fs = FaceSet(mesh.cidxmap, neles, self.region_eles(mesh))
 
         # Eliminate any faces with internal connectivity
-        fs.eliminate_paired(*mesh.con)
+        fs.eliminate_paired(*mesh.con_all)
 
         # Eliminate faces on specified boundaries
         for b in exclbcs:
@@ -145,7 +145,7 @@ class BaseRegion:
             eset[eoffs[etype] + eidxs] = 0
 
         # Packed keys for internal and partition connectivity
-        lkeys, rkeys = map(pkey, mesh.con)
+        lkeys, rkeys = map(pkey, mesh.con_all)
         pcon = {p: (pkey(pc), np.empty(len(pc), dtype=bool))
                 for p, pc in mesh.con_p.items()}
 

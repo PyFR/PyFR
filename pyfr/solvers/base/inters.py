@@ -52,8 +52,15 @@ class BaseInters:
         if value is not None:
             self._external_vals[name] = value
 
+    def side_perm(self, inter, with_perm=True):
+        return self._perm if with_perm else Ellipsis
+
+    def _inter_ploc(self, inter):
+        ploc, = _get_inter_arrays(inter, 'get_ploc_for_inters', self.elemap)
+        return ploc
+
     def _const_mat(self, inter, meth):
-        m = _get_inter_arrays(inter, meth, self.elemap, self._perm)
+        m = _get_inter_arrays(inter, meth, self.elemap, self.side_perm(inter))
         if not m:
             m = np.empty((0, self.ndims))
         else:
@@ -65,7 +72,7 @@ class BaseInters:
         vm = _get_inter_arrays(inter, meth, self.elemap)
         mm = self._be.view(*vm, vshape=()).mapping.get()
 
-        return np.argsort(mm[0])
+        return np.argsort(mm[0][self.side_perm(inter, False)])
 
     def _get_perm_for_field(self, inter, field):
         matmap, rowmap, colmap, reorder = [], [], [], []
@@ -87,10 +94,10 @@ class BaseInters:
         r = np.concatenate(rowmap)[ro]
         c = np.concatenate(colmap)[ro]
         mm = self._be.view(m, r, c, vshape=()).mapping.get()
-        return np.argsort(mm[0])
+        return np.argsort(mm[0][self.side_perm(inter, False)])
 
     def _view(self, inter, meth, vshape=(), with_perm=True):
-        perm = self._perm if with_perm else Ellipsis
+        perm = self.side_perm(inter, with_perm)
         vm = _get_inter_arrays(inter, meth, self.elemap, perm)
         return self._be.view(*vm, vshape=vshape)
 
@@ -101,7 +108,7 @@ class BaseInters:
         return self._view(inter, meth, (self.ndims, self.nvars))
 
     def _xchg_view(self, inter, meth, vshape=(), with_perm=True):
-        perm = self._perm if with_perm else Ellipsis
+        perm = self.side_perm(inter, with_perm)
         vm = _get_inter_arrays(inter, meth, self.elemap, perm)
         return self._be.xchg_view(*vm, vshape=vshape)
 

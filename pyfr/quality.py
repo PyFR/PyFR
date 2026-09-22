@@ -81,8 +81,8 @@ def neighbour_size_ratio(mesh, char_len):
             np.maximum.at(nsr[et], ei, face_r[mask])
 
     # Internal faces
-    if mesh.con:
-        for lhs, rhs in [mesh.con, mesh.con[::-1]]:
+    if (con := mesh.con_all):
+        for lhs, rhs in [con, con[::-1]]:
             process(lhs, lhs.map_eles(char_len), rhs.map_eles(char_len))
 
     # MPI faces

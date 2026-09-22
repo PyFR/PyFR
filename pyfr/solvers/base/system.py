@@ -158,10 +158,11 @@ class BaseSystem:
 
         iint_views = []
         for i in self._int_inters:
-            perm = i._perm if use_perm(layout) else Ellipsis
-            lhs = self._field_view(i.lhs, field, layout, be.view, perm,
+            lperm = i.side_perm(i.lhs, use_perm(layout))
+            rperm = i.side_perm(i.rhs, use_perm(layout))
+            lhs = self._field_view(i.lhs, field, layout, be.view, lperm,
                                    vshape)
-            rhs = self._field_view(i.rhs, field, layout, be.view, perm,
+            rhs = self._field_view(i.rhs, field, layout, be.view, rperm,
                                    vshape)
             iint_views.append((lhs, rhs))
 
@@ -174,7 +175,7 @@ class BaseSystem:
 
         bc_views = []
         for b in self._bc_inters:
-            perm = b._perm if use_perm(bc_layout) else Ellipsis
+            perm = b.side_perm(b.lhs, use_perm(bc_layout))
             lhs = self._field_view(b.lhs, field, bc_layout, be.view,
                                    perm, vshape)
             bc_views.append(lhs)
@@ -247,10 +248,10 @@ class BaseSystem:
         return eles, elemap, ics
 
     def _load_int_inters(self, mesh, elemap):
-        int_inters = self.intinterscls(self.backend, *mesh.con, elemap,
-                                       self.cfg)
+        cons = [mesh.con, *mesh.pcon.values()]
 
-        return [int_inters]
+        return [self.intinterscls(self.backend, *c, elemap, self.cfg)
+                for c in cons]
 
     def _load_mpi_inters(self, mesh, elemap):
         mpi_inters = []
