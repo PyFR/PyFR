@@ -246,7 +246,7 @@ class GmshReader(BaseReader):
         for k, v in self._elenodes.items():
             v -= self._nodeoff
 
-        self._resolve_periodic()
+        self._pfaces = self._resolve_periodic()
 
     def _read_mesh_format(self, mshit):
         ver, ftype, dsize = next(mshit).split()
@@ -360,49 +360,52 @@ class GmshReader(BaseReader):
             if int(naff) != 16:
                 raise ValueError('Periodic entity link without an affine map')
             affine = np.array(aff, dtype=float).reshape(4, 4)
+            transform = affine[:3, :3], affine[:3, 3]
 
             for _ in range(int(next(mshit))):
                 next(mshit)
 
-            self._periodic_links.append((dim, tag1, tag2, affine))
+            self._periodic_links.append((dim, tag1, tag2, transform))
 
         if next(mshit) != '$EndPeriodic\n':
             raise ValueError('Expected $EndPeriodic')
 
     def _resolve_periodic(self):
-        self._periodic_maps = {}
-        if not self._pfacespents:
-            return
+        pfaces = {}
 
         for name, (lpent, rpent) in self._pfacespents.items():
             lpid, rpid = lpent[1], rpent[1]
             links = []
-            for dim, tag1, tag2, aff in self._periodic_links:
+            for dim, tag1, tag2, transform in self._periodic_links:
                 if dim != self._voldim - 1:
                     continue
 
                 p1 = self._tagpents.get((dim, tag1), ())
                 p2 = self._tagpents.get((dim, tag2), ())
+
+                # Normalise the transform to map the left side onto the right
                 if lpid in p1 and rpid in p2:
-                    links.append((aff, 'l'))
-                elif rpid in p1 and lpid in p2:
-                    links.append((aff, 'r'))
+                    R, T = transform
+                    transform = R.T, -(R.T @ T)
+                elif not (rpid in p1 and lpid in p2):
+                    continue
+
+                links.append(transform)
 
             # Without a $Periodic constraint the map is derived later
             if not links:
+                pfaces[name] = (lpent, rpent, None)
                 continue
 
             # Check affine map is the same for all entities this periodic BC
-            (affine, side1), *rest = links
-            if any(s != side1 or not np.allclose(a, affine) for a, s in rest):
-                raise ValueError(f'Inconsistent $Periodic maps for {name!r}')
+            R, T = links[0]
+            for rot, shift in links[1:]:
+                if not np.allclose(rot, R) or not np.allclose(shift, T):
+                    raise ValueError(f'Inconsistent periodic maps for {name!r}')
 
-            R, T = affine[:3, :3], affine[:3, 3]
+            pfaces[name] = (lpent, rpent, (R, T))
 
-            if side1 == 'l':
-                R, T = R.T, -(R.T @ T)
-
-            self._periodic_maps[name] = (R, T)
+        return pfaces
 
     def _read_nodes(self, mshit):
         self._read_nodes_impl(mshit)
@@ -548,8 +551,7 @@ class GmshReader(BaseReader):
         # Assemble a nodal mesh
         maps = self._etype_map, self._petype_fnmap, self._nodemaps
         mesh = NodalMeshAssembler(self._nodepts, elenodes, volpent,
-                                  self._bfacespents, self._pfacespents, maps,
-                                  periodic_maps=self._periodic_maps)
+                                  self._bfacespents, self._pfaces, maps)
 
         nodepts, eles, codec, periodic = mesh.get_eles(lintol, self.progress)
 

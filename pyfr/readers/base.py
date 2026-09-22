@@ -125,15 +125,13 @@ class NodalMeshAssembler:
     _petype_focount = {'line': 2, 'tri': 3, 'quad': 4,
                        'tet': 4, 'pyr': 5, 'pri': 6, 'hex': 8}
 
-    def __init__(self, nodepts, elenodes, volpent, bfacespents, pfacespents,
-                 maps, periodic_maps=None):
+    def __init__(self, nodepts, elenodes, volpent, bfacespents, pfaces, maps):
         self._nodepts = nodepts
         self._elenodes = elenodes
         self._volpent = volpent
         self._bfacespents = bfacespents
-        self._pfacespents = pfacespents
+        self._pfaces = pfaces
         self._etype_map, self._petype_fnmap, self._nodemaps = maps
-        self._periodic_maps = periodic_maps or {}
 
     def _check_pyr_parallelogram(self, foeles):
         # Find PyFR node map for the quad face
@@ -267,12 +265,12 @@ class NodalMeshAssembler:
         periodic = {}
         pdtype = [('cidx', np.int16), ('off', np.int64)]
 
-        for k, (lpent, rpent) in self._pfacespents.items():
+        for k, (lpent, rpent, transform) in self._pfaces.items():
             plist = []
 
             # Either the mesh has $Periodic, or we derive a translation
-            if (m := self._periodic_maps.get(k)) is not None:
-                R, T = m
+            if transform:
+                R, T = transform
             else:
                 lcent = np.concatenate([self._nodepts[fn].mean(axis=1)
                                         for fn in bpart[lpent].values()])
