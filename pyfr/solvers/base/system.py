@@ -154,12 +154,15 @@ class BaseSystem:
                          vshape=()):
         bc_layout = bc_layout or layout
         be = self.backend
-        use_perm = lambda l: l in ('fpts', 'face-expand')
+
+        # Leave face-granular views in interface order
+        def side_perm(i, side, l):
+            return Ellipsis if l == 'face' else i.side_perm(side)
 
         iint_views = []
         for i in self._int_inters:
-            lperm = i.side_perm(i.lhs, use_perm(layout))
-            rperm = i.side_perm(i.rhs, use_perm(layout))
+            lperm = side_perm(i, i.lhs, layout)
+            rperm = side_perm(i, i.rhs, layout)
             lhs = self._field_view(i.lhs, field, layout, be.view, lperm,
                                    vshape)
             rhs = self._field_view(i.rhs, field, layout, be.view, rperm,
@@ -175,7 +178,7 @@ class BaseSystem:
 
         bc_views = []
         for b in self._bc_inters:
-            perm = b.side_perm(b.lhs, use_perm(bc_layout))
+            perm = side_perm(b, b.lhs, bc_layout)
             lhs = self._field_view(b.lhs, field, bc_layout, be.view,
                                    perm, vshape)
             bc_views.append(lhs)
