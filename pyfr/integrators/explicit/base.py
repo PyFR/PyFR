@@ -29,11 +29,11 @@ class BaseExplicitIntegrator(BaseIntegrator):
         # Event handlers for advance_to
         self.plugins = self._get_plugins(initsoln)
 
+        # Allocate the compensation terms of the solution banks
+        self._alloc_comp_accum()
+
         # Commit the system
         self.system.commit()
-
-        # Index of the register number containing the solution
-        self.idxcurr = 0
 
         # Pre-process solution
         self.system.preproc(self.tcurr, self.idxcurr)

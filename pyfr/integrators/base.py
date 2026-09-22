@@ -1,4 +1,5 @@
 from collections import defaultdict, deque, namedtuple
+from functools import cached_property
 import itertools as it
 import re
 import sys
@@ -60,6 +61,9 @@ class BaseIntegrator(metaclass=RegisterMeta):
         # Start time
         self.tstart = cfg.getfloat('solver-time-integrator', 'tstart', 0.0)
         self.tend = cfg.getfloat('solver-time-integrator', 'tend')
+
+        # Index of the register number containing the solution
+        self.idxcurr = 0
 
         # Current time; defaults to tstart unless restarting
         if self.isrestart:
@@ -430,43 +434,66 @@ class BaseIntegrator(metaclass=RegisterMeta):
 
     @memoize
     def _get_add_kerns(self, *rs, in_scale=(), in_scale_idxs=(),
-                       out_scale=()):
+                       out_scale=(), comp=None):
+        if comp is not None and (in_scale or out_scale):
+            raise ValueError('Scaling is incompatible with compensation')
+
+        # Locate the compensated operand and see if the output has a term
+        cidx = rs.index(comp) if comp is not None else None
+        wcomp = cidx is not None and rs[0] in self._comp_accum_banks()
+
         kerns = []
         tplargs = dict(ncola=self.system.nvars, nv=len(rs),
                        in_scale=in_scale, in_scale_idxs=in_scale_idxs,
-                       out_scale=out_scale)
+                       out_scale=out_scale, cidx=cidx, wcomp=wcomp)
 
         shapes, banks = self.system.ele_shapes.values(), self.system.ele_banks
-        for (nupts, _, neles), em in zip(shapes, banks):
+        for (nupts, _, neles), em, cm in zip(shapes, banks, self._comp):
             # Pass one operand and one coefficient per register
             args = {f'x{i}': em[r] for i, r in enumerate(rs)}
-            args |= {f'a{i}': 0.0 for i in range(len(rs))}
+            args |= {f'a{i}': 0.0 for i in range(len(rs)) if i != cidx}
 
-            kern = self.backend.kernel('axnpby', tplargs=tplargs,
-                                       dims=[nupts, neles], **args)
+            # Pass the compensated operand's term and, if any, the output's
+            if cidx is not None:
+                args[f'x{cidx}c'] = cm[comp]
+            if wcomp:
+                args['x0c'] = cm[rs[0]]
+
+            kern = self.backend.kernel('axnpby', dims=[nupts, neles],
+                                       tplargs=tplargs, **args)
             kerns.append(kern)
 
         return kerns
 
     def _addv(self, consts, regidxs, in_scale=(), in_scale_idxs=(),
-              out_scale=()):
+              out_scale=(), comp=None):
         if len(regidxs) != len(set(regidxs)):
             raise ValueError('Duplicate register indices')
+
+        # Check the compensated operand, if any, has a unit weight
+        if comp is not None and consts[regidxs.index(comp)] != 1.0:
+            raise ValueError('Compensated operand must have a unit weight')
+
+        # Locate the compensated operand unless compensation is disabled
+        if comp is not None and self.comp_accum:
+            cidx = regidxs.index(comp)
+        else:
+            comp, cidx = None, None
 
         # Get a suitable set of axnpby kernels
         in_s, out_s = tuple(in_scale), tuple(out_scale)
         axnpby = self._get_add_kerns(*regidxs, in_scale=in_s,
                                      in_scale_idxs=in_scale_idxs,
-                                     out_scale=out_s)
+                                     out_scale=out_s, comp=comp)
 
-        # Bind the arguments
+        # Bind the weights, omitting that of the compensated operand
         for k in axnpby:
-            k.bind(**{f'a{i}': c for i, c in enumerate(consts)})
+            k.bind(**{f'a{i}': c for i, c in enumerate(consts) if i != cidx})
 
         self.backend.run_kernels(axnpby)
 
-    def _add(self, *args, in_scale=(), in_scale_idxs=(), out_scale=()):
-        self._addv(args[::2], args[1::2], in_scale, in_scale_idxs, out_scale)
+    def _add(self, *args, **kwargs):
+        self._addv(args[::2], args[1::2], **kwargs)
 
     def _addv_nz(self, out_reg, pairs):
         consts, regidxs = [0], [out_reg]
@@ -476,6 +503,23 @@ class BaseIntegrator(metaclass=RegisterMeta):
                 regidxs.append(r)
 
         self._addv(consts, regidxs)
+
+    @cached_property
+    def comp_accum(self):
+        # Read whether time steps are accumulated with compensation
+        return self.cfg.getbool('solver-time-integrator',
+                                'compensated-accumulation', False)
+
+    def _comp_accum_banks(self):
+        # Compensate only the bank initially holding the solution
+        return [self.idxcurr]
+
+    def _alloc_comp_accum(self):
+        # Allocate compensation terms for the banks which can hold the solution
+        banks = self._comp_accum_banks() if self.comp_accum else []
+        matrix = self.backend.matrix
+        self._comp = [{b: matrix(s, tags={'align'}) for b in banks}
+                      for s in self.system.ele_shapes.values()]
 
     def _size_register(self, reg, n):
         if not reg.dynamic:

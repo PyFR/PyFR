@@ -1,29 +1,45 @@
 <%inherit file='base'/>
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
-<%!
-def axnpby_expr(k, start, nv, in_scale_idxs, out_scale):
-    terms = []
-    for l in range(start, nv):
-        coef, val = f'a{l}', f'x{l}[{k}]'
-        if l in in_scale_idxs:
-            terms.append(f'({coef})*_in[{k}]*({val})')
-        else:
-            terms.append(f'({coef})*({val})')
-
-    if terms:
-        expr = '(' + ' + '.join(terms) + ')'
-        return f'_out[{k}]*{expr}' if out_scale else expr
-    else:
-        return '0'
-%>
-
 <%
     # One operand and one coefficient argument per register
     kargs = {'x0': f'inout fpdtype_t[{ncola}]'}
     kargs |= {f'x{i}': f'in fpdtype_t[{ncola}]' for i in range(1, nv)}
-    kargs |= {f'a{i}': 'scalar fpdtype_t' for i in range(nv)}
+    kargs |= {f'a{i}': 'scalar fpdtype_t' for i in range(nv) if i != cidx}
+
+    # Read the compensated operand's term and write that of the output, if any
+    if cidx is not None:
+        kargs[f'x{cidx}c'] = f'in fpdtype_t[{ncola}]'
+    if wcomp:
+        kargs['x0c'] = f'{'inout' if cidx == 0 else 'out'} fpdtype_t[{ncola}]'
 %>
+
+## Update each component from the operands weighted from index start
+<%def name="stmts(start, op='=')">
+% for k in range(ncola):
+<%
+    # Weight each operand other than the compensated one
+    terms = []
+    for l in range(start, nv):
+        if l != cidx:
+            isc = f'_in[{k}]*' if l in in_scale_idxs else ''
+            terms.append(f'a{l}*{isc}x{l}[{k}]')
+
+    # Sum the terms and apply any output scaling
+    tsum = f'({' + '.join(terms) or '0'})'
+    s = f'_out[{k}]*{tsum}' if out_scale else tsum
+
+    # Accumulate the sum into x0, compensating if required
+    if cidx is None:
+        stmt = f'x0[{k}] {op} {s};'
+    else:
+        olo = f'x0c[{k}]' if wcomp else None
+        stmt = pyfr.compadd(hi=f'x{cidx}[{k}]', lo=f'x{cidx}c[{k}]', inc=s,
+                            ohi=f'x0[{k}]', olo=olo)
+%>
+    ${stmt}
+% endfor
+</%def>
 
 <%pyfr:kernel name='axnpby' ndim='2' kargs='${kargs}'>
 % if in_scale:
@@ -32,24 +48,23 @@ def axnpby_expr(k, start, nv, in_scale_idxs, out_scale):
 % if out_scale:
     const fpdtype_t _out[] = ${pyfr.carray(out_scale)};
 % endif
+## Dispatch on the weight of x0 unless it is the compensated operand
+% if cidx == 0:
+    ${stmts(1)}
+% else:
     if (a0 == 0.0)
     {
-% for k in range(ncola):
-        x0[${k}] = ${axnpby_expr(k, 1, nv, in_scale_idxs, out_scale)};
-% endfor
+        ${stmts(1)}
     }
-% if nv > 1:
+% if nv > 1 and cidx is None:
     else if (a0 == 1.0)
     {
-% for k in range(ncola):
-        x0[${k}] += ${axnpby_expr(k, 1, nv, in_scale_idxs, out_scale)};
-% endfor
+        ${stmts(1, '+=')}
     }
 % endif
     else
     {
-% for k in range(ncola):
-        x0[${k}] = ${axnpby_expr(k, 0, nv, in_scale_idxs, out_scale)};
-% endfor
+        ${stmts(0)}
     }
+% endif
 </%pyfr:kernel>
