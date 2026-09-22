@@ -13,6 +13,9 @@ class BaseExplicitIntegrator(BaseIntegrator):
         if self.controller_needs_errest and not self.stepper_has_errest:
             raise TypeError('Incompatible stepper/controller combination')
 
+        # Size any dynamic registers
+        self._size_registers()
+
         # Construct the relevant system
         self.system = systemcls(backend, mesh, initsoln, self._registers, cfg,
                                 self.serialiser,
@@ -30,11 +33,11 @@ class BaseExplicitIntegrator(BaseIntegrator):
         # Event handlers for advance_to
         self.plugins = self._get_plugins(initsoln)
 
+        # Allocate the compensation terms of the solution banks
+        self._alloc_comp_accum()
+
         # Commit the system
         self.system.commit()
-
-        # Index of the register number containing the solution
-        self.idxcurr = 0
 
         # Pre-process solution
         self.system.preproc(self.tcurr, self.idxcurr)

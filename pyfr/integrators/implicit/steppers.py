@@ -5,8 +5,7 @@ import numpy as np
 from pyfr.integrators.implicit.base import (BaseImplicitIntegrator,
                                             DivergenceError, SolveStats)
 from pyfr.integrators.registers import (DynamicScalarRegister,
-                                        DynamicVectorRegister,
-                                        ScalarRegister, VectorRegister)
+                                        DynamicVectorRegister, ScalarRegister)
 
 
 class BaseImplicitStepper(BaseImplicitIntegrator):
@@ -20,8 +19,14 @@ class BaseSDIRKStepper(BaseImplicitStepper):
     _gamma = 0
 
     requires_nonlinear_solver = True
+    stepper_has_comp_accum = True
 
-    _r_u = VectorRegister(n=2)
+    # Solution register
+    _r_u = ScalarRegister(compensated=True)
+
+    # Stage register; also holds u(t + dt) if steps may be rejected
+    _r_s = DynamicScalarRegister()
+
     _r_f = DynamicVectorRegister()
     _r_err = DynamicScalarRegister(rhs=False)
 
@@ -46,6 +51,12 @@ class BaseSDIRKStepper(BaseImplicitStepper):
 
         super().__init__(*args, **kwargs)
 
+    def _assign_registers(self):
+        super()._assign_registers()
+
+        # Take u(t) from the solution register
+        self.idxcurr = self._r_u
+
     @property
     def stepper_has_errest(self):
         return self.controller_needs_errest and len(self.bhat)
@@ -53,6 +64,11 @@ class BaseSDIRKStepper(BaseImplicitStepper):
     @property
     def nimplicit(self):
         return sum(Ai[i] != 0 for i, Ai in enumerate(self.A))
+
+    def _size_registers(self):
+        # Compensate the stage register if it alternates with the solution
+        errest = bool(self.stepper_has_errest)
+        self._size_register(self._r_s, 1, compensated=errest)
 
     def _compute_guess_weights(self):
         pfit = np.polynomial.Polynomial.fit
@@ -118,7 +134,7 @@ class BaseSDIRKStepper(BaseImplicitStepper):
 
     def step(self, t, dt):
         r_f = self._r_f
-        r_un, r_ui = self._r_u
+        r_un, r_ui = self._r_u, self._r_s
 
         # Invalidate the predictor damping norm cache
         self._guess_norms.clear()
@@ -166,6 +182,10 @@ class BaseSDIRKStepper(BaseImplicitStepper):
                 if i < self._nstages - 1:
                     self._rhs(t_i, r_ui, f_reg)
 
+        # Form the step increment and add it to u_n with compensation
+        if self.comp_accum:
+            r_ui = self._accumulate_step(dt, r_un, r_ui, r_f)
+
         # Handle FSAL
         if self._fsal:
             r_f[0], r_f[-1] = r_f[-1], r_f[0]
@@ -181,6 +201,16 @@ class BaseSDIRKStepper(BaseImplicitStepper):
     def _compute_error_estimate(self, dt, r_f):
         ecoeffs = [dt*ei for ei in self._err_coeffs]
         self._addv_nz(self._r_err, zip(ecoeffs, r_f))
+
+    def _accumulate_step(self, dt, r_un, r_ui, r_f):
+        # Weight the stage fluxes to form the step increment
+        args = [v for bi, fi in zip(self.b, r_f) if bi for v in (dt*bi, fi)]
+
+        # Update the solution in-place unless it may need to be restored
+        r_out = r_ui if self.stepper_has_errest else r_un
+        self._add_with_comp(r_out, r_un, *args)
+
+        return r_out
 
 
 class ImplicitEulerStepper(BaseSDIRKStepper):
@@ -242,8 +272,14 @@ class BaseRosenbrockStepper(BaseImplicitStepper):
 
     requires_nonlinear_solver = False
     requires_linear_solver = True
+    stepper_has_comp_accum = True
 
-    _r_u = VectorRegister(n=2)
+    # Solution register
+    _r_u = ScalarRegister(compensated=True)
+
+    # Holds u(t + dt) unless the solution is updated in-place
+    _r_unext = DynamicScalarRegister()
+
     _r_f0 = ScalarRegister()
     _r_fv = ScalarRegister()
     _r_resid = ScalarRegister(rhs=False)
@@ -270,6 +306,12 @@ class BaseRosenbrockStepper(BaseImplicitStepper):
 
         super().__init__(*args, **kwargs)
 
+    def _assign_registers(self):
+        super()._assign_registers()
+
+        # Take u(t) from the solution register
+        self.idxcurr = self._r_u
+
     @property
     def stepper_has_errest(self):
         return self.controller_needs_errest and len(self.bhat)
@@ -277,6 +319,13 @@ class BaseRosenbrockStepper(BaseImplicitStepper):
     @property
     def nimplicit(self):
         return self._nstages
+
+    def _size_registers(self):
+        errest, comp_accum = bool(self.stepper_has_errest), self.comp_accum
+
+        # Size the u(t + dt) register unless the solution is updated in-place
+        n = int(errest or not comp_accum)
+        self._size_register(self._r_unext, n, compensated=errest)
 
     def _stage_solve(self, stage, t, r_un, f_reg, gdt, matvec, precond,
                      rtol, probe):
@@ -317,7 +366,7 @@ class BaseRosenbrockStepper(BaseImplicitStepper):
         return self._timed_stage(stage, gdt, solve_fn)
 
     def step(self, t, dt):
-        r_un, r_ui = self._r_u
+        r_un, r_ui = self._r_u, self._r_unext
         r_us = self._r_us
 
         # Ensure r_un references the bank containing u(t)
@@ -348,8 +397,11 @@ class BaseRosenbrockStepper(BaseImplicitStepper):
             self._stage_stats.append(stats)
 
         # Obtain the solution as u_n + sum(m_j*U_j)
-        pairs = [(1, r_un)] + list(zip(self._mt, r_us))
-        self._addv_nz(r_ui, pairs)
+        if self.comp_accum:
+            r_ui = self._accumulate_step(r_un, r_ui, r_us)
+        else:
+            pairs = [(1, r_un)] + list(zip(self._mt, r_us))
+            self._addv_nz(r_ui, pairs)
 
         # Compute error estimate if this scheme has an embedded pair
         if self.stepper_has_errest:
@@ -357,6 +409,16 @@ class BaseRosenbrockStepper(BaseImplicitStepper):
             return r_ui, r_un, self._r_err
 
         return r_ui
+
+    def _accumulate_step(self, r_un, r_ui, r_us):
+        # Weight the stage increments to form the step increment
+        args = [v for mj, uj in zip(self._mt, r_us) for v in (mj, uj)]
+
+        # Update the solution in-place unless it may need to be restored
+        r_out = r_ui if self.stepper_has_errest else r_un
+        self._add_with_comp(r_out, r_un, *args)
+
+        return r_out
 
 
 class ROS2Stepper(BaseRosenbrockStepper):
