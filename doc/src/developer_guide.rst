@@ -84,6 +84,18 @@ include ``broadcast``, ``broadcast-row``, ``broadcast-col``, ``mpi``,
 ``sum``.  The implementation in
 :mod:`pyfr.backends.base.generator` defines the exact constraints.
 
+Kernels whose argument list depends on template parameters can build a
+dictionary of specifications in a Mako code block and pass it via the
+``kargs`` attribute:
+
+.. code-block:: none
+
+    <% kargs = {f'x{i}': 'in fpdtype_t' for i in range(nv)} %>
+    <%pyfr:kernel name='kernel_name' ndim='1' kargs='${kargs}'
+                  f='out fpdtype_t'>
+        f = ${' + '.join(f'x{i}' for i in range(nv))};
+    </%pyfr:kernel>
+
 PyFR-Mako Macros
 ----------------
 

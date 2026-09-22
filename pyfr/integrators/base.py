@@ -54,6 +54,9 @@ class BaseIntegrator(metaclass=RegisterMeta):
         prevcfgs = initsoln.prevcfgs if initsoln else {}
         self.prevcfgs = {k: v.tostr() for k, v in prevcfgs.items()}
 
+        # Register our pointwise kernel
+        backend.pointwise.register('pyfr.backends.base.kernels.axnpby')
+
         # Start time
         self.tstart = cfg.getfloat('solver-time-integrator', 'tstart', 0.0)
         self.tend = cfg.getfloat('solver-time-integrator', 'tend')
@@ -425,12 +428,25 @@ class BaseIntegrator(metaclass=RegisterMeta):
         # Sum to get the global number over all partitions
         return scal_coll(comm.Allreduce, ndofs)
 
-    @kernel_getter
-    def _get_add_kerns(self, emats, *rs, in_scale=(), in_scale_idxs=(),
+    @memoize
+    def _get_add_kerns(self, *rs, in_scale=(), in_scale_idxs=(),
                        out_scale=()):
-        return self.backend.kernel('axnpby', *[emats[r] for r in rs],
-                                   in_scale=in_scale, out_scale=out_scale,
-                                   in_scale_idxs=in_scale_idxs)
+        kerns = []
+        tplargs = dict(ncola=self.system.nvars, nv=len(rs),
+                       in_scale=in_scale, in_scale_idxs=in_scale_idxs,
+                       out_scale=out_scale)
+
+        shapes, banks = self.system.ele_shapes.values(), self.system.ele_banks
+        for (nupts, _, neles), em in zip(shapes, banks):
+            # Pass one operand and one coefficient per register
+            args = {f'x{i}': em[r] for i, r in enumerate(rs)}
+            args |= {f'a{i}': 0.0 for i in range(len(rs))}
+
+            kern = self.backend.kernel('axnpby', tplargs=tplargs,
+                                       dims=[nupts, neles], **args)
+            kerns.append(kern)
+
+        return kerns
 
     def _addv(self, consts, regidxs, in_scale=(), in_scale_idxs=(),
               out_scale=()):
@@ -445,7 +461,7 @@ class BaseIntegrator(metaclass=RegisterMeta):
 
         # Bind the arguments
         for k in axnpby:
-            k.bind(*consts)
+            k.bind(**{f'a{i}': c for i, c in enumerate(consts)})
 
         self.backend.run_kernels(axnpby)
 

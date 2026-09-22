@@ -13,7 +13,7 @@ struct kargs
 
 void batch_gemm(ixdtype_t ib, const struct kargs *args, int _disp_mask)
 {
-    args->exec((_disp_mask & 32) ? args->blockk : args->blockk_nt,
-               args->b + ((_disp_mask & 8) ? 0 : ib*args->bblocksz),
-               args->c + ((_disp_mask & 32) ? 0 : ib*args->cblocksz));
+    args->exec((_disp_mask & 2) ? args->blockk : args->blockk_nt,
+               args->b + ((_disp_mask & 1) ? 0 : ib*args->bblocksz),
+               args->c + ((_disp_mask & 2) ? 0 : ib*args->cblocksz));
 }

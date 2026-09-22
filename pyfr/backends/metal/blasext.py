@@ -8,33 +8,6 @@ from pyfr.backends.metal.util import call_
 class MetalBlasExtKernels(BaseBlasExtKernels, MetalKernelProvider):
     pvar_idx = 'VARIDX'
 
-    def _axnpby(self, arr, tplargs):
-        nv, ixdtype = tplargs['nv'], self.backend.ixdtype
-        nrow, _, ldim, fpdtype = arr[0].traits[1:]
-        ncolb = arr[0].ioshape[-1]
-
-        # Render the kernel template
-        src = self.backend.lookup.get_template('axnpby').render(**tplargs)
-
-        # Build the kernel
-        kern = self._build_kernel(
-            'axnpby', src,
-            [ixdtype]*2 + [np.uintp]*nv + [np.dtype((fpdtype, nv))]
-        )
-
-        # Grid and threadgroup dimensions
-        grid, tgrp = (ncolb, nrow, 1), (128, 1, 1)
-        kargs = [ncolb, ldim] + [a.data for a in arr] + [(1.0,)*nv]
-
-        class AxnpbyKernel(MetalKernel):
-            def bind(self, *consts):
-                kargs[2 + nv] = consts
-
-            def run(self, cbuf):
-                kern(cbuf, grid, tgrp, *kargs)
-
-        return AxnpbyKernel(mats=arr)
-
     def copy(self, dst, src):
         if dst.traits != src.traits:
             raise ValueError('Incompatible matrix types')

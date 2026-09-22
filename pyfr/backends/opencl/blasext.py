@@ -7,29 +7,6 @@ from pyfr.backends.opencl.provider import OpenCLKernel, OpenCLKernelProvider
 class OpenCLBlasExtKernels(BaseBlasExtKernels, OpenCLKernelProvider):
     pvar_idx = 'k'
 
-    def _axnpby(self, arr, tplargs):
-        nv, ixdtype = tplargs['nv'], self.backend.ixdtype
-        nrow, _, ldim, fpdtype = arr[0].traits[1:]
-        ncolb = arr[0].ioshape[-1]
-
-        # Render the kernel template
-        src = self.backend.lookup.get_template('axnpby').render(**tplargs)
-
-        # Build the kernel
-        kern = self._build_kernel('axnpby', src,
-                                  [ixdtype]*2 + [np.uintp]*nv + [fpdtype]*nv)
-        kern.set_dims((ncolb + (-ncolb % 128), nrow), (128, 1))
-        kern.set_args(ncolb, ldim, *arr)
-
-        class AxnpbyKernel(OpenCLKernel):
-            def bind(self, *consts):
-                kern.set_args(*consts, start=2 + nv)
-
-            def run(self, queue, wait_for=None, ret_evt=False):
-                return kern.exec_async(queue, wait_for, ret_evt)
-
-        return AxnpbyKernel(mats=arr)
-
     def copy(self, dst, src):
         cl = self.backend.cl
 

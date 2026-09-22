@@ -1,41 +1,11 @@
 import numpy as np
 
 from pyfr.backends.base.blasext import BaseBlasExtKernels
-from pyfr.backends.cuda.provider import (CUDAKernel, CUDAKernelProvider,
-                                         get_grid_for_block)
+from pyfr.backends.cuda.provider import CUDAKernel, CUDAKernelProvider
 
 
 class CUDABlasExtKernels(BaseBlasExtKernels, CUDAKernelProvider):
     pvar_idx = 'VARIDX'
-
-    def _axnpby(self, arr, tplargs):
-        nv, ixdtype = tplargs['nv'], self.backend.ixdtype
-        nrow, _, ldim, fpdtype = arr[0].traits[1:]
-        ncolb = arr[0].ioshape[-1]
-
-        # Render the kernel template
-        src = self.backend.lookup.get_template('axnpby').render(**tplargs)
-
-        # Build the kernel
-        kern = self._build_kernel('axnpby', src,
-                                  [ixdtype]*2 + [np.uintp]*nv + [fpdtype]*nv)
-
-        # Determine the grid/block
-        block = (128, 1, 1)
-        grid = get_grid_for_block(block, ncolb, nrow)
-
-        # Set the parameters
-        params = kern.make_params(grid, block)
-        params.set_args(ncolb, ldim, *arr)
-
-        class AxnpbyKernel(CUDAKernel):
-            def bind(self, *consts):
-                params.set_args(*consts, start=2 + nv)
-
-            def run(self, stream):
-                kern.exec_async(stream, params)
-
-        return AxnpbyKernel(mats=arr)
 
     def copy(self, dst, src):
         cuda = self.backend.cuda

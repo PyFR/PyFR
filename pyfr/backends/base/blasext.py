@@ -6,18 +6,6 @@ from pyfr.util import first
 
 
 class BaseBlasExtKernels:
-    def axnpby(self, *arr, in_scale=(), in_scale_idxs=(), out_scale=()):
-        if any(arr[0].traits != x.traits for x in arr[1:]):
-            raise ValueError('Incompatible matrix types')
-
-        nv = len(arr)
-        ncola = arr[0].ioshape[-2]
-
-        tplargs = dict(ncola=ncola, nv=nv, in_scale_idxs=in_scale_idxs,
-                       in_scale=in_scale, out_scale=out_scale)
-
-        return self._axnpby(arr, tplargs)
-
     def reduction(self, rop, expr, vvars, svars=[], pvars={}):
         # Ensure all matrices are compatible
         fvvar = first(vvars.values())

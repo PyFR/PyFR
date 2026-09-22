@@ -17,6 +17,10 @@ class OpenMPKernel(Kernel):
         if kernel:
             self.kernel = kernel
 
+        # Assign each array argument a bit in the displacement mask
+        vidxs = [i for i, (f, _), _ in args.values() if f != 's']
+        self.argbits = {i: 1 << n for n, i in enumerate(vidxs)}
+
     def _set_arg(self, i, v):
         self.kernel.set_arg(i, v)
 
@@ -126,8 +130,9 @@ class OpenMPKernelProvider(BaseKernelProvider):
         return type('ArgStruct', (Structure,), {'_fields_': fields})
 
     @memoize
-    def _build_library(self, src):
-        fast_math = 'PYFR_DISABLE_FAST_MATH' not in src
+    def _build_library(self, src, regions=frozenset()):
+        # Precise regions require the library be built sans fast-math
+        fast_math = 'fp-precise' not in regions
         return self.backend.compiler.build(src, fast_math=fast_math)
 
     def _build_function(self, name, src, argtypes, restype=None):
@@ -135,8 +140,8 @@ class OpenMPKernelProvider(BaseKernelProvider):
         return lib.function(name, restype,
                             [npdtype_to_ctypestype(arg) for arg in argtypes])
 
-    def _build_kernel(self, name, src, argtypes):
-        lib = self._build_library(src)
+    def _build_kernel(self, name, src, argtypes, regions=frozenset()):
+        lib = self._build_library(src, regions)
         fun = lib.function(name)
 
         return OpenMPKernelFunction(self.backend, fun,

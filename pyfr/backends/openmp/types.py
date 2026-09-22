@@ -174,7 +174,7 @@ class OpenMPGraph(base.Graph):
 
                     aoff = self.klist[j].arg_off(aidx)
                     argsubs[j].append((aoff, allocsz + suboff))
-                    argmasks[j] |= 1 << aidx
+                    argmasks[j] |= kl.argbits[aidx]
 
                     # Mark the substituted argument as sealed
                     kl.sealed.add(aidx)

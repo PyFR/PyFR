@@ -38,7 +38,7 @@ class HIPUnorderedMetaKernel(BaseUnorderedMetaKernel):
 
 class HIPKernelProvider(BaseKernelProvider):
     @memoize
-    def _build_kernel(self, name, src, argtypes):
+    def _build_kernel(self, name, src, argtypes, regions=frozenset()):
         mod = HIPCompilerModule(self.backend, src)
         return mod.get_function(name, argtypes)
 

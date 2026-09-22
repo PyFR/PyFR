@@ -32,7 +32,7 @@ reduction(constant ixdtype_t& nrow, constant ixdtype_t& ncolb,
     {
         for (ixdtype_t j = 0; j < nrow; j++)
         {
-            ixdtype_t idx = j*ldim + SOA_IX(i, blockIdx.y, ${ncola});
+            ixdtype_t idx = j*ldim + ${pyfr.soa_ix('i', 'blockIdx.y', ncola)};
         % for i, e in enumerate(exprs):
           % if rop == 'max':
             acc[${i}] = fmax(acc[${i}], ${e});

@@ -21,7 +21,7 @@
     for (int idx = tid; idx < ${block_size}; idx += ${mvthreads})
     {
         int upt = idx / ${nvars}, var = idx % ${nvars};
-        fpdtype_t v = x[ldx*upt + SOA_IX(midx, var, ${nvars})];
+        fpdtype_t v = x[ldx*upt + ${pyfr.soa_ix('midx', 'var', nvars)}];
         xf[idx] = ${'_in[var]*v' if in_scale else 'v'};
     }
     PYFR_SYNC_THREADS();
@@ -43,5 +43,5 @@
             batched_tiled_matvec_accum(tile, xf, col, width, &acc);
         }
 
-        y[ldy*upt + SOA_IX(midx, var, ${nvars})] = ${'_out[var]*acc' if out_scale else 'acc'};
+        y[ldy*upt + ${pyfr.soa_ix('midx', 'var', nvars)}] = ${'_out[var]*acc' if out_scale else 'acc'};
     }

@@ -16,6 +16,11 @@ class GMRESMixin(BaseLinearSolver):
         m = cfg.getint('solver-gmres', 'restart', 0)
         self._gmres_m = min(m, nmax) if m else nmax
 
+        # Backend buffer restrictions limit us to 30 Krylov vectors
+        if self._gmres_m > 30:
+            raise ValueError('GMRES basis size is limited to 30; set '
+                             'restart or linear-max-iter accordingly')
+
         # Arnoldi method
         match cfg.get('solver-gmres', 'arnoldi', 'cgs').lower():
             case 'cgs':
