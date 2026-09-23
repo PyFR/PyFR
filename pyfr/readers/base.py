@@ -125,13 +125,12 @@ class NodalMeshAssembler:
     _petype_focount = {'line': 2, 'tri': 3, 'quad': 4,
                        'tet': 4, 'pyr': 5, 'pri': 6, 'hex': 8}
 
-    def __init__(self, nodepts, elenodes, volpent, bfacespents, pfacespents,
-                 maps):
+    def __init__(self, nodepts, elenodes, volpent, bfacespents, pfaces, maps):
         self._nodepts = nodepts
         self._elenodes = elenodes
         self._volpent = volpent
         self._bfacespents = bfacespents
-        self._pfacespents = pfacespents
+        self._pfaces = pfaces
         self._etype_map, self._petype_fnmap, self._nodemaps = maps
 
     def _check_pyr_parallelogram(self, foeles):
@@ -262,37 +261,36 @@ class NodalMeshAssembler:
 
         return resid, cconn
 
-    @staticmethod
-    def _pair_translational(lpts, rpts):
-        lfidx = fuzzysort(lpts.T, range(len(lpts)))
-        rfidx = fuzzysort(rpts.T, range(len(rpts)))
-
-        dT = rpts[rfidx] - lpts[lfidx]
-        T = dT.mean(axis=0)
-        if not np.allclose(dT, T):
-            raise ValueError('Periodic pairing is not a rigid translation')
-
-        # Pure translation: rotation/reflection block is the identity
-        R = np.eye(lpts.shape[1])
-        return lfidx, rfidx, R, T
-
     def _pair_periodic_volume_faces(self, bpart, cconn, resid):
         periodic = {}
         pdtype = [('cidx', np.int16), ('off', np.int64)]
 
-        for k, (lpent, rpent) in self._pfacespents.items():
+        for k, (lpent, rpent, transform) in self._pfaces.items():
             plist = []
+
+            # Either the mesh has $Periodic, or we derive a translation
+            if transform:
+                R, T = transform
+            else:
+                lcent = np.concatenate([self._nodepts[fn].mean(axis=1)
+                                        for fn in bpart[lpent].values()])
+                rcent = np.concatenate([self._nodepts[fn].mean(axis=1)
+                                        for fn in bpart[rpent].values()])
+                R, T = np.eye(3), rcent.mean(axis=0) - lcent.mean(axis=0)
 
             for pftype in bpart[lpent]:
                 lfnodes = bpart[lpent][pftype]
                 rfnodes = bpart[rpent][pftype]
 
-                lfpts = self._nodepts[lfnodes]
-                rfpts = self._nodepts[rfnodes]
+                # Map the rhs onto the lhs and pair the two sides by position
+                lpts = self._nodepts[lfnodes].mean(axis=1)
+                rpts = ((self._nodepts[rfnodes] - T) @ R).mean(axis=1)
 
-                lfidx, rfidx, R, T = self._pair_translational(
-                    lfpts.mean(axis=1), rfpts.mean(axis=1)
-                )
+                lfidx = fuzzysort(lpts.T, range(len(lpts)))
+                rfidx = fuzzysort(rpts.T, range(len(rpts)))
+
+                if not np.allclose(lpts[lfidx], rpts[rfidx]):
+                    raise ValueError('Could not pair periodic faces')
 
                 for lfn, rfn in zip(lfnodes[lfidx], rfnodes[rfidx]):
                     lf = lcidx, loff = resid.pop(tuple(sorted(lfn)))
