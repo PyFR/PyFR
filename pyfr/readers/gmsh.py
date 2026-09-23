@@ -199,8 +199,6 @@ class GmshReader(BaseReader):
     def __init__(self, msh, progress):
         super().__init__(progress)
 
-        self._periodic_links = []
-
         if isinstance(msh, str):
             msh = open(msh)
 
@@ -352,6 +350,7 @@ class GmshReader(BaseReader):
             raise ValueError('Expected $EndEntities')
 
     def _read_periodic(self, mshit):
+        self._periodic_links = []
         nlinks = int(next(mshit))
         for _ in range(nlinks):
             dim, tag1, tag2 = (int(i) for i in next(mshit).split())
@@ -372,11 +371,12 @@ class GmshReader(BaseReader):
 
     def _resolve_periodic(self):
         pfaces = {}
+        periodic_links = getattr(self, '_periodic_links', [])
 
         for name, (lpent, rpent) in self._pfacespents.items():
             lpid, rpid = lpent[1], rpent[1]
             links = []
-            for dim, tag1, tag2, transform in self._periodic_links:
+            for dim, tag1, tag2, transform in periodic_links:
                 if dim != self._voldim - 1:
                     continue
 
@@ -399,9 +399,9 @@ class GmshReader(BaseReader):
 
             # Check affine map is the same for all entities this periodic BC
             R, T = links[0]
-            for rot, shift in links[1:]:
-                if not np.allclose(rot, R) or not np.allclose(shift, T):
-                    raise ValueError(f'Inconsistent periodic maps for {name!r}')
+            if any(not np.allclose(rot, R) or not np.allclose(shift, T)
+                   for rot, shift in links[1:]):
+                raise ValueError(f'Inconsistent periodic maps for {name!r}')
 
             pfaces[name] = (lpent, rpent, (R, T))
 
