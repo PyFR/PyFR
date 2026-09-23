@@ -1,7 +1,8 @@
 import numpy as np
 
 from pyfr.backends.base.blasext import BaseBlasExtKernels
-from pyfr.backends.hip.provider import HIPKernel, HIPKernelProvider
+from pyfr.backends.hip.provider import (HIPKernel, HIPKernelProvider,
+                                        get_grid_for_block)
 
 
 class HIPBlasExtKernels(BaseBlasExtKernels, HIPKernelProvider):
@@ -43,8 +44,7 @@ class HIPBlasExtKernels(BaseBlasExtKernels, HIPKernelProvider):
 
         # Reduction block dimensions
         block = (256, 1, 1)
-        nblocks = min(1024, (ncolb + block[0] - 1) // block[0])
-        grid = (nblocks, ncola, 1)
+        grid = get_grid_for_block(block, ncolb, ncola)
 
         # Result buffer on device
         reduced_dev = hip.mem_alloc(nexprs*ncola*fvvar.itemsize)

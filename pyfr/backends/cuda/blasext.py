@@ -1,7 +1,8 @@
 import numpy as np
 
 from pyfr.backends.base.blasext import BaseBlasExtKernels
-from pyfr.backends.cuda.provider import CUDAKernel, CUDAKernelProvider
+from pyfr.backends.cuda.provider import (CUDAKernel, CUDAKernelProvider,
+                                         get_grid_for_block)
 
 
 class CUDABlasExtKernels(BaseBlasExtKernels, CUDAKernelProvider):
@@ -43,8 +44,7 @@ class CUDABlasExtKernels(BaseBlasExtKernels, CUDAKernelProvider):
 
         # Reduction block dimensions (use more blocks for atomic approach)
         block = (256, 1, 1)
-        nblocks = min(1024, (ncolb + block[0] - 1) // block[0])
-        grid = (nblocks, ncola, 1)
+        grid = get_grid_for_block(block, ncolb, ncola)
 
         # Result buffer on device (nexprs*ncola, not nexprs*ncola*nblocks)
         reduced_dev = cuda.mem_alloc(nexprs*ncola*fvvar.itemsize)
