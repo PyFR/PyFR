@@ -7,17 +7,15 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
 
     @property
     def _scratch_bufs(self):
-        bufs = {'scal_fpts', 'vect_fpts', 'vect_upts'}
+        bufs = {'scal_fpts', 'vect_fpts', 'vect_upts', 'comm_fpts'}
 
         if 'flux' in self.antialias:
             bufs |= {'scal_qpts', 'vect_qpts'}
         elif self.grad_fusion:
             bufs |= {'grad_upts'}
 
-        if self.basis.fpts_in_upts:
-            bufs |= {'comm_fpts'}
-            if self.grad_fusion:
-                bufs -= {'vect_fpts'}
+        if self.basis.fpts_in_upts and self.grad_fusion:
+            bufs -= {'vect_fpts'}
 
         return bufs
 
@@ -41,16 +39,14 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         # Mesh regions
         regions = self.mesh_regions
 
-        if abs(self.cfg.getfloat('solver-interfaces', 'ldg-beta')) == 0.5:
-            kernels['copy_fpts'] = lambda: kernel(
-                'copy', self._comm_fpts, self._scal_fpts
-            )
-
+        # Uncorrected gradient at the solution points
         if self.basis.order > 0:
             kernels['tgradpcoru_upts'] = lambda uin: kernel(
-                'mul', self.opmat('M4 - M6*M0'), self.scal_upts[uin],
+                'mul', self.opmat('M4'), self.scal_upts[uin],
                 out=self._grad_upts
             )
+
+        # Correct using the common solution jumps at the flux points
         kernels['tgradcoru_upts'] = lambda: kernel(
             'mul', self.opmat('M6'), self._comm_fpts,
             out=self._grad_upts, beta=float(self.basis.order > 0)

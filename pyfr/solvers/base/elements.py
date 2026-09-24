@@ -95,10 +95,8 @@ class BaseElements:
 
         if self.basis.fpts_in_upts:
             self.get_vect_fpts_for_inters = self._get_vect_upts_for_inters
-            self.get_comm_fpts_for_inters = self._get_comm_fpts_for_inters
         else:
             self.get_vect_fpts_for_inters = self._get_vect_fpts_for_inters
-            self.get_comm_fpts_for_inters = self._get_vect_fpts_for_inters
 
     def set_ics_from_cfg(self):
         # Bring simulation constants into scope
@@ -260,9 +258,7 @@ class BaseElements:
 
         # Allocate space if needed for interfaces
         if 'comm_fpts' in sbufs:
-            self._comm_fpts = salloc('vect_fpts', nfpts)
-        elif 'vect_fpts' in sbufs:
-            self._comm_fpts = self._vect_fpts.slice(0, self.nfpts)
+            self._comm_fpts = salloc('comm_fpts', nfpts)
 
         if 'grad_upts' in sbufs and self.grad_fusion:
             self._grad_upts = valloc('vect_fpts', nupts)
@@ -477,7 +473,7 @@ class BaseElements:
         return self._vect_upts.mid, fmap, self.nupts
 
     @inters_map
-    def _get_comm_fpts_for_inters(self, eidxs, fidx):
+    def get_comm_fpts_for_inters(self, eidxs, fidx):
         return self._comm_fpts.mid, self.srtd_face_fpts[fidx][eidxs]
 
     def get_ploc_for_inters(self, eidxs, fidx):

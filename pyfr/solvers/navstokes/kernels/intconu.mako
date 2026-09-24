@@ -8,12 +8,12 @@
               urout='out view fpdtype_t[${str(nvars)}]'>
 % for i in range(nvars):
 % if c['ldg-beta'] == -0.5:
-    urout[${i}] = ulin[${i}];
+    urout[${i}] = ulin[${i}] - urin[${i}];
 % elif c['ldg-beta'] == 0.5:
-    ulout[${i}] = urin[${i}];
+    ulout[${i}] = urin[${i}] - ulin[${i}];
 % else:
-    ulout[${i}] = urout[${i}] = urin[${i}]*${0.5 + c['ldg-beta']}
-                              + ulin[${i}]*${0.5 - c['ldg-beta']};
+    ulout[${i}] = ${0.5 + c['ldg-beta']}*(urin[${i}] - ulin[${i}]);
+    urout[${i}] = ${0.5 - c['ldg-beta']}*(ulin[${i}] - urin[${i}]);
 % endif
 % endfor
 </%pyfr:kernel>

@@ -10,5 +10,10 @@
     fpdtype_t mag_nl = sqrt(${pyfr.dot('nlin[{i}]', i=ndims)});
     fpdtype_t norm_nl[] = ${pyfr.array('(1 / mag_nl)*nlin[{i}]', i=ndims)};
 
-    ${pyfr.expand('bc_ldg_state', 'ulin', 'norm_nl', 'ulout')};
+    fpdtype_t ubc[${nvars}];
+    ${pyfr.expand('bc_ldg_state', 'ulin', 'norm_nl', 'ubc')};
+
+% for i in range(nvars):
+    ulout[${i}] = ubc[${i}] - ulin[${i}];
+% endfor
 </%pyfr:kernel>

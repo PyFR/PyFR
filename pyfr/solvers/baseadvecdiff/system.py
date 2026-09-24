@@ -82,12 +82,9 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         g_soln.add_all(k['eles/copy_soln'], deps=k['eles/entropy_filter'])
 
         # Compute the common solution at our internal/boundary interfaces
-        for l in k['eles/copy_fpts']:
-            g_soln.add(l, deps=deps(l, 'eles/disu'))
-        kdeps = k['eles/copy_fpts'] or k['eles/disu']
         g_soln.add_all(k['iint/con_u'],
-                       deps=kdeps + k['mpiint/scal_fpts_pack'])
-        g_soln.add_all(k['bcint/con_u'], deps=kdeps)
+                       deps=k['eles/disu'] + k['mpiint/scal_fpts_pack'])
+        g_soln.add_all(k['bcint/con_u'], deps=k['eles/disu'])
 
         g_soln.commit()
 
@@ -252,11 +249,8 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
             g_soln.add_mpi_req(send, deps=[pack])
 
         # Compute the common solution at our internal/boundary interfaces
-        for l in k['eles/copy_fpts']:
-            g_soln.add(l, deps=deps(l, 'eles/disu'))
-        kdeps = k['eles/copy_fpts'] or k['eles/disu']
-        g_soln.add_all(k['iint/con_u'], deps=kdeps)
-        g_soln.add_all(k['bcint/con_u'], deps=kdeps)
+        g_soln.add_all(k['iint/con_u'], deps=k['eles/disu'])
+        g_soln.add_all(k['bcint/con_u'], deps=k['eles/disu'])
 
         # Compute the transformed gradient of the partially corrected solution
         g_soln.add_all(k['eles/tgradpcoru_upts'],

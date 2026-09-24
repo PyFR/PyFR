@@ -56,10 +56,12 @@ class NavierStokesMPIInters(TplargsMixin,
         self._be.pointwise.register('pyfr.solvers.navstokes.kernels.mpiconu')
         self._be.pointwise.register('pyfr.solvers.navstokes.kernels.mpicflux')
 
-        self.kernels['con_u'] = lambda: self._be.kernel(
-            'mpiconu', tplargs=self._tplargs, dims=[self.ninterfpts],
-            ulin=self.scal_lhs, urin=self.scal_rhs, ulout=self._comm_lhs
-        )
+        # Our side of the common solution jump is zero if β = -0.5
+        if self.c['ldg-beta'] != -0.5:
+            self.kernels['con_u'] = lambda: self._be.kernel(
+                'mpiconu', tplargs=self._tplargs, dims=[self.ninterfpts],
+                ulin=self.scal_lhs, urin=self.scal_rhs, ulout=self._comm_lhs
+            )
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'mpicflux', tplargs=self._tplargs, dims=[self.ninterfpts],
             ul=self.scal_lhs, ur=self.scal_rhs,
