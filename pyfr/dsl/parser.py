@@ -14,7 +14,6 @@ class Parser:
         self.tokens = tokens
         self.i = 0
         self.pcomments = []
-        self.scopes = [{}]
         self._typedefs = set()
 
     def peek(self):
@@ -65,12 +64,6 @@ class Parser:
             raise SyntaxError(f'Expected type, got {tok}')
 
         return is_const, self.advance()
-
-    def push_scope(self):
-        self.scopes.append({})
-
-    def pop_scope(self):
-        self.scopes.pop()
 
     def parse(self):
         body = []
@@ -138,7 +131,6 @@ class Parser:
 
     def block(self):
         self.expect('SYMBOL', '{')
-        self.push_scope()
 
         stmts = []
         while self.peek().value != '}':
@@ -146,7 +138,6 @@ class Parser:
 
         stmts += self.drain_comments()
         self.expect('SYMBOL', '}')
-        self.pop_scope()
 
         return Block(stmts)
 
@@ -201,8 +192,6 @@ class Parser:
                 init = self.expression(PRECEDENCE[','])
         else:
             init = None
-
-        self.scopes[-1][name] = vtype
 
         return VarDecl(is_const, vtype, name, sizes or None, init)
 

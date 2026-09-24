@@ -1,8 +1,7 @@
 from pyfr.dsl.lexer import Lexer
-from pyfr.dsl.nodes import (DslVar, Float, Index, Var, VarDecl, map_ast,
+from pyfr.dsl.nodes import (DslVar, Float, Var, VarDecl, map_ast,
                             unwrap_index)
 from pyfr.dsl.parser import Parser
-from pyfr.dsl.simplifier import Simplifier
 
 
 def parse_expr(code, lexer=Lexer):
@@ -45,20 +44,6 @@ def rename_vars(ast, renames):
                 return map_ast(node, rename)
 
     return rename(ast)
-
-
-def fold_indices(ast):
-    simp = Simplifier()
-
-    # Fold constant arithmetic inside array indices
-    def fold(node):
-        node = map_ast(node, fold)
-        if isinstance(node, Index):
-            return Index(node.array, simp.simplify_fully(node.index))
-        else:
-            return node
-
-    return fold(ast)
 
 
 class Rewriter:

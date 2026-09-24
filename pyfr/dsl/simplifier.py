@@ -1,5 +1,9 @@
-from pyfr.dsl.nodes import (Assign, Binary, Call, Float, Int, Number, Region,
-                            Ternary, Unary, Var, call, expr_children, map_ast)
+from collections import defaultdict
+
+from pyfr.dsl.nodes import (Assign, Binary, Block, Call, Float, For, Int,
+                            Number, Region, Ternary, Typedef, Unary, VarDecl,
+                            call, expr_children, map_ast)
+from pyfr.dsl.types import Environment
 
 
 def expr_size(expr):
@@ -56,216 +60,226 @@ class Simplifier:
     # Region kinds whose statements must not be rearranged
     frozen_regions = frozenset({'fp-precise'})
 
-    def _is_const(self, expr):
-        match expr:
-            case Number(v):
-                return v
-            case _:
-                return None
+    def __init__(self, env=None):
+        self.env = env or Environment()
 
-    def _get_const(self, expr):
-        match expr:
-            case Number(v):
-                return (v, None)
-            case Binary('*', c, rest) if (cv := self._is_const(c)) is not None:
-                return (cv, rest)
-            case _:
-                return None
+    def _kind(self, expr):
+        return self.env.type_of(expr).kind
 
-    def _strip_coeff(self, expr):
-        match expr:
-            case Binary('*', c, rest) if (cv := self._is_const(c)) is not None:
-                return (cv, rest)
-            case Binary('*', left, right):
-                n, stripped = self._strip_coeff(left)
-                if n != 1:
-                    return (n, Binary('*', stripped, right))
-                else:
-                    return (1, expr)
-            case _:
-                return (1, expr)
-
-    def _make_const(self, c):
+    def _literal(self, c):
         return Float(c) if isinstance(c, float) else Int(c)
 
-    def _scale_expr(self, c, expr):
-        if c == 1:
-            return expr
-        elif c == 0:
-            return Int(0)
-        elif expr:
-            return Binary('*', self._make_const(c), expr)
+    def _const(self, c, kind):
+        # Mint a literal of the given kind, or nothing if it is unknown
+        if kind == 'float':
+            return Float(float(c))
+        elif kind == 'int' and c == int(c):
+            return Int(int(c))
         else:
-            return self._make_const(c)
+            return None
 
-    def _simplify_add(self, left, right):
-        match left, right:
-            # x + x -> 2*x
-            case l, r if l == r:
-                return Binary('*', Int(2), l)
-            # 3*x + x -> 4*x
-            case Binary('*', c, x), r if (cv := self._is_const(c)) and x == r:
-                return Binary('*', self._make_const(cv + 1), r)
-            # x + 3*x -> 4*x
-            case l, Binary('*', c, x) if (cv := self._is_const(c)) and l == x:
-                return Binary('*', self._make_const(cv + 1), l)
-            # x*y + y*x -> 2*(x*y)
-            case Binary('*', a, b), Binary('*', c, d) if a == d and b == c:
-                return Binary('*', Int(2), Binary('*', a, b))
-            # a/x + b/x -> (a + b)/x
-            case Binary('/', a, d1), Binary('/', b, d2) if d1 == d2:
-                return Binary('/', Binary('+', a, b), d1)
-            # 2*x + 3*x -> 5*x
-            case _:
-                nl, sl = self._strip_coeff(left)
-                nr, sr = self._strip_coeff(right)
-                if sl == sr and (nl != 1 or nr != 1):
-                    return self._scale_expr(nl + nr, sl)
-                else:
-                    return Binary('+', left, right)
+    def _scale(self, c, expr):
+        # Attach a coefficient to an expression, dropping a redundant one
+        if c < 0:
+            return Unary('-', self._scale(-c, expr))
+        elif c == 1 and (isinstance(c, int) or self._kind(expr) == 'float'):
+            return expr
+        else:
+            return Binary('*', self._literal(c), expr)
 
-    def _simplify_sub(self, left, right):
-        match left, right:
-            # x*y - y*x -> 0
-            case Binary('*', a, b), Binary('*', c, d) if a == d and b == c:
-                return Int(0)
-            # a/x - b/x -> (a - b)/x
-            case Binary('/', a, d1), Binary('/', b, d2) if d1 == d2:
-                return Binary('/', Binary('-', a, b), d1)
-            case _:
-                return Binary('-', left, right)
-
-    def _simplify_mul(self, left, right):
-        # Merge a constant factor with the coefficient on the other side
-        match left, right:
-            # (2*x)*3 -> 6*x
-            case Binary('*', c1, x), _:
-                v1, v2 = self._is_const(c1), self._is_const(right)
-                if v1 is not None and v2 is not None:
-                    return self._scale_expr(v1*v2, x)
-            # 2*(3*x) -> 6*x
-            case _, Binary('*', c2, x):
-                v1, v2 = self._is_const(left), self._is_const(c2)
-                if v1 is not None and v2 is not None:
-                    return self._scale_expr(v1*v2, x)
-
-        # Gather coefficients when the left is itself a scaled expression
-        match right:
-            # (2*a)*(3*y) -> 6*(a*y)
-            case Binary('*', k, y) if (kv := self._is_const(k)) is not None:
-                if c1 := self._get_const(left):
-                    new_c = c1[0]*kv
-                    if c1[1] is None:
-                        return self._scale_expr(new_c, y)
-                    else:
-                        return Binary('*', self._scale_expr(new_c, c1[1]), y)
-            # 3*(2*a + 2*b) -> 6*(a + b)
-            case Binary('+', ladd, radd):
-                cl, cr = self._get_const(ladd), self._get_const(radd)
-                if cl and cr and cl[0] == cr[0]:
-                    k, new_sum = cl[0], Binary('+', cl[1], cr[1])
-                    if c1 := self._get_const(left):
-                        new_c = c1[0]*k
-                        if c1[1] is None:
-                            return self._scale_expr(new_c, new_sum)
-                        else:
-                            sc = self._scale_expr(new_c, c1[1])
-                            return Binary('*', sc, new_sum)
-
-        return Binary('*', left, right)
-
-    def simplify(self, expr):
+    def _factors(self, expr):
+        # Split a product into its numeric coefficient and other factors
         match expr:
-            case Binary(op, left, right):
-                left, right = self.simplify(left), self.simplify(right)
-                match op, left, right:
-                    # Identity and zero rules for addition/subtraction
-                    case '+' | '-', l, Number(0):
-                        return l
-                    case '+', Number(0), r:
-                        return r
-                    case '-', Number(0), r:
-                        return Unary('-', r)
-                    case '-', l, r if l == r:
-                        return Int(0)
-                    # Sign simplifications
-                    case '-', l, Unary('-', r):
-                        return Binary('+', l, r)
-                    case '+', l, Unary('-', r):
-                        return Binary('-', l, r)
-                    case '+', Unary('-', l), r:
-                        return Binary('-', r, l)
-                    # Zero and identity rules for multiplication/division
-                    case '*' | '/', Number(0), _:
-                        return Int(0)
-                    case '*', _, Number(0):
-                        return Int(0)
-                    case '*', Number(1), r:
-                        return r
-                    case '*', l, Number(1):
-                        return l
-                    case '*', Number(-1), r:
-                        return Unary('-', r)
-                    case '*', l, Number(-1):
-                        return Unary('-', l)
-                    case '*', l, Unary('-', r):
-                        return Unary('-', Binary('*', l, r))
-                    case '*', Unary('-', l), r:
-                        return Unary('-', Binary('*', l, r))
-                    # Constant folding for integers
-                    case '+' | '-' | '*', Int(a), Int(b):
-                        return Int({'+': a + b, '-': a - b, '*': a*b}[op])
-                    case '/', Int(a), Int(b) if b != 0 and a % b == 0:
-                        return Int(a // b)
-                    # Power simplifications
-                    case '**', Int(a), Int(b) if b >= 0:
-                        return Int(a ** b)
-                    case '**', base, Number(v) as e:
-                        return reduce_pow(base, v) or Binary('**', base, e)
-                    # Constant folding for mixed int/float
-                    case '+' | '-' | '*', Number(a), Number(b):
-                        return Float({'+': a + b, '-': a - b, '*': a*b}[op])
-                    # Inexact integer division truncates in C; leave it be
-                    case '/', Int(), Int():
-                        return Binary(op, left, right)
-                    case '/', Number(a), Number(b) if b != 0:
-                        return Float(a/b)
-                    # Cancellation rules
-                    case '/', l, r if l == r:
-                        return Int(1)
-                    case '*', l, Binary('/', n, d) if l == d:
-                        return n
-                    case '*', Binary('/', n, d), r if d == r:
-                        return n
-                    # Advanced simplifications
-                    case '*', _, _:
-                        return self._simplify_mul(left, right)
-                    case '+', _, _:
-                        return self._simplify_add(left, right)
-                    case '-', _, _:
-                        return self._simplify_sub(left, right)
-                    case _:
-                        return Binary(op, left, right)
-            case Unary('-', Number(0)):
-                return Int(0)
-            case Unary('-', Unary('-', x)):
-                return self.simplify(x)
-            case Unary('-', Number(v)):
-                return self._make_const(-v)
-            case Unary('-', Binary('-', a, b)):
-                return Binary('-', self.simplify(b), self.simplify(a))
-            case Unary(op, operand):
-                return Unary(op, self.simplify(operand))
-            case Call(Var(func), args):
-                return call(func, [self.simplify(a) for a in args])
-            case Ternary(c, t, f):
-                sc = self.simplify(c)
-                st, sf = self.simplify(t), self.simplify(f)
-                return Ternary(sc, st, sf)
-            case Assign(left, right):
-                return Assign(left, self.simplify(right))
+            case Number(v):
+                return v, []
+            case Binary('*', l, r):
+                cl, fl = self._factors(l)
+                cr, fr = self._factors(r)
+                return cl*cr, fl + fr
+            case Unary('-', x):
+                c, f = self._factors(x)
+                return -c, f
+            case _:
+                return 1, [expr]
+
+    def _product(self, factors):
+        expr = None
+        for f in factors:
+            expr = f if expr is None else Binary('*', expr, f)
+
+        return expr
+
+    def _terms(self, expr, scale=1, terms=None):
+        # Collect the terms of a sum, keyed by their non-numeric factors
+        terms = {} if terms is None else terms
+        match expr:
+            case Binary('+', l, r):
+                self._terms(l, scale, terms)
+                self._terms(r, scale, terms)
+            case Binary('-', l, r):
+                self._terms(l, scale, terms)
+                self._terms(r, -scale, terms)
+            case Unary('-', x):
+                self._terms(x, -scale, terms)
+            case _:
+                c, factors = self._factors(expr)
+                key = tuple(sorted(map(repr, factors)))
+                coeff, t = terms.get(key, (0, self._product(factors)))
+                terms[key] = (coeff + scale*c, t)
+
+        return terms
+
+    def _sum(self, terms, ckind):
+        expr = None
+        for k, (c, t) in terms.items():
+            if not k or c == 0:
+                continue
+
+            # Fold the sign of each term into the operator joining it
+            node = self._scale(abs(c), t)
+            if expr is None:
+                expr = node if c > 0 else Unary('-', node)
+            else:
+                expr = Binary('+' if c > 0 else '-', expr, node)
+
+        # Append the numeric term, of the given kind if it stands alone
+        c = terms.get((), (0, None))[0]
+        if expr is None:
+            return self._const(c, ckind)
+        elif c == 0:
+            return expr
+        else:
+            return Binary('+' if c > 0 else '-', expr, self._literal(abs(c)))
+
+    def _is_fdiv(self, expr):
+        # Test for a floating point division
+        is_div = isinstance(expr, Binary) and expr.op == '/'
+
+        return is_div and self._kind(expr) == 'float'
+
+    def _merge_fractions(self, terms):
+        # Group the fractional terms by their denominator
+        bydenom = defaultdict(list)
+        for key, (c, t) in terms.items():
+            if c != 0 and self._is_fdiv(t):
+                bydenom[repr(t.right)].append(key)
+
+        # a/x + b/x -> (a + b)/x
+        for keys in bydenom.values():
+            if len(keys) > 1:
+                num, denom = {}, terms[keys[0]][1].right
+                for k in keys:
+                    c, t = terms.pop(k)
+                    self._terms(t.left, c, num)
+
+                frac = Binary('/', self._sum(num, 'float'), denom)
+                terms[(repr(frac),)] = (1, frac)
+
+    def _simplify_sum(self, expr):
+        terms = self._terms(expr)
+        self._merge_fractions(terms)
+
+        return self._sum(terms, self._kind(expr)) or expr
+
+    def _cancel(self, c, factors):
+        i = 0
+        while i < len(factors):
+            f = factors[i]
+            others = factors[:i] + factors[i + 1:]
+            if not self._is_fdiv(f):
+                i += 1
+                continue
+
+            match f.right:
+                # 2*(n/2) -> n
+                case Number(v) if v != 0 and c % v == 0:
+                    cn, fn = self._factors(f.left)
+                    c, factors, i = (c // v)*cn, others + fn, 0
+                # d*(n/d) -> n
+                case d if d in others:
+                    j = others.index(d)
+                    cn, fn = self._factors(f.left)
+                    c, factors, i = c*cn, others[:j] + others[j + 1:] + fn, 0
+                case _:
+                    i += 1
+
+        return c, factors
+
+    def _simplify_prod(self, expr):
+        c, factors = self._factors(expr)
+
+        # 3*(2*a + 2*b) -> 6*(a + b)
+        for i, f in enumerate(factors):
+            if isinstance(f, Binary) and f.op in ('+', '-'):
+                terms = {k: v for k, v in self._terms(f).items() if v[0] != 0}
+                coeffs = {v[0] for v in terms.values()}
+                if len(terms) > 1 and len(coeffs) == 1 and coeffs != {1}:
+                    k = coeffs.pop()
+                    unit = {kk: (1, t) for kk, (_, t) in terms.items()}
+                    c, factors[i] = c*k, self._sum(unit, self._kind(f))
+
+        c, factors = self._cancel(c, factors)
+
+        if c == 0:
+            return self._const(0, self._kind(expr)) or expr
+        elif not factors:
+            return self._literal(c)
+        else:
+            return self._scale(c, self._product(factors))
+
+    def _simplify_div(self, expr):
+        kind = self._kind(expr)
+
+        match expr.left, expr.right:
+            # Exact integer division folds
+            case Int(a), Int(b) if b != 0 and a % b == 0:
+                return Int(a // b)
+            case Number(a), Number(b) if b != 0 and kind == 'float':
+                return Float(a / b)
+            case Number(0), _:
+                return self._const(0, kind) or expr
+            case l, Number(1):
+                return l
+            # x/x -> 1 for floating point division
+            case l, r if l == r and kind == 'float':
+                return Float(1.0)
             case _:
                 return expr
+
+    def _simplify_pow(self, expr):
+        match expr.left, expr.right:
+            case _, Number(0):
+                return Float(1.0)
+            case Int(a), Int(b) if b > 0:
+                return Float(float(a**b))
+            case base, Number(v):
+                return reduce_pow(base, v) or expr
+            case _:
+                return expr
+
+    def _rewrite(self, expr):
+        match expr:
+            case Binary('+' | '-', _, _) | Unary('-', _):
+                return self._simplify_sum(expr)
+            case Binary('*', _, _):
+                return self._simplify_prod(expr)
+            case Binary('/', _, _):
+                return self._simplify_div(expr)
+            case Binary('**', _, _):
+                return self._simplify_pow(expr)
+            case _:
+                return expr
+
+    def simplify(self, expr):
+        # Simplify the operands before the node itself
+        expr = map_ast(expr, self.simplify)
+        new = self._rewrite(expr)
+
+        # Refuse any rewrite which would change the type of the result
+        if new is not expr and self._kind(new) != self._kind(expr):
+            return expr
+        else:
+            return new
 
     def simplify_fully(self, expr, max_iter=10):
         # One rewrite can expose another, so iterate to a fixed point
@@ -279,12 +293,26 @@ class Simplifier:
 
     def simplify_program(self, prog):
         def walk(node):
-            # Freeze the contents of regions which forbid rearrangement
-            if isinstance(node, Region) and node.kind in self.frozen_regions:
-                return node
-            elif isinstance(node, (Binary, Unary, Call, Ternary, Assign)):
-                return self.simplify_fully(node)
-            else:
-                return map_ast(node, walk)
+            match node:
+                # Freeze the contents of regions which forbid rearrangement
+                case Region(kind) if kind in self.frozen_regions:
+                    return node
+                # Open a scope for the declarations in this block
+                case Block() | Region() | For():
+                    outer, self.env = self.env, self.env.scope()
+                    node = map_ast(node, walk)
+                    self.env = outer
+                    return node
+                case VarDecl(_, vtype, name):
+                    node = map_ast(node, walk)
+                    self.env.define(name, vtype)
+                    return node
+                case Typedef(old, new):
+                    self.env.define(new, old)
+                    return node
+                case Binary() | Unary() | Call() | Ternary() | Assign():
+                    return self.simplify_fully(node)
+                case _:
+                    return map_ast(node, walk)
 
         return walk(prog)

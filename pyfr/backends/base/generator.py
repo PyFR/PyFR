@@ -9,9 +9,10 @@ from pyfr.dsl.codegen import CodeGenerator
 from pyfr.dsl.nodes import (Assign, Binary, Call, DslCall, DslVar, ExprStmt,
                             Float, Index, Int, Program, Unary, Var, VarDecl,
                             map_ast, region_kinds, unwrap_regions, walk_ast)
-from pyfr.dsl.rewriter import (FloatSuffixer, Rewriter, fold_indices,
-                               parse_expr, parse_program, rename_vars)
+from pyfr.dsl.rewriter import (FloatSuffixer, Rewriter, parse_expr,
+                               parse_program, rename_vars)
 from pyfr.dsl.simplifier import Simplifier
+from pyfr.dsl.types import Environment
 
 
 def _rule(tpl, **preconds):
@@ -198,7 +199,12 @@ class BaseKernelGenerator:
                 raise ValueError('2D kernels do not support MPI matrices')
 
         # Non-IEEE simplification is opted into by AD-generated kernels
-        self._simplify = 'simplify' in self.regions
+        if 'simplify' in self.regions:
+            env = Environment()
+            for v in sargs:
+                env.define(v.name, v.dtype)
+
+            self._ast = Simplifier(env).simplify_program(self._ast)
 
         # Math helpers required by the body, filled in by passes
         self._helper_calls = set()
@@ -311,7 +317,7 @@ class BaseKernelGenerator:
 
         for r in self._deref_rules():
             if (result := r(arg.name, ix, arg)) is not None:
-                return fold_indices(result)
+                return result
 
         raise ValueError(f'No matching rule for {arg.name}')
 
@@ -413,13 +419,6 @@ class BaseKernelGenerator:
         )
 
     def _render_body(self, ast, codegen):
-        # Fold constant arithmetic inside of array indices
-        ast = fold_indices(ast)
-
-        # Simplify kernels which have opted in
-        if self._simplify:
-            ast = Simplifier().simplify_program(ast)
-
         # Lower math functions to helper function calls
         ast, self._helper_calls = lower_math_fns(ast, self.lower_fns)
 

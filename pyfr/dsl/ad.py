@@ -10,6 +10,7 @@ from pyfr.dsl.nodes import (ArrayInit, Assign, Block, DoWhile, ExprStmt, For,
                             expr_children, map_ast, unwrap_index, walk_ast)
 from pyfr.dsl.rewriter import rename_vars
 from pyfr.dsl.simplifier import Simplifier
+from pyfr.dsl.types import DOUBLE, Environment
 
 
 def _collect_array_accesses(expr, array_name):
@@ -71,7 +72,7 @@ class DerivativeGenerator:
         self.force_arrays = force_arrays
         self.dependent_vars = defaultdict(set)
         self.dependent_arrays = defaultdict(set)
-        self.simplifier = Simplifier()
+        self.simplifier = Simplifier(Environment(default=DOUBLE))
         self.codegen = CodeGenerator()
         self.loop_var = None
 
@@ -80,8 +81,11 @@ class DerivativeGenerator:
         writes = []
         for node in walk_ast(program):
             match node:
-                case VarDecl(_, _, name, sizes, init) if init is not None:
-                    writes.append((name, sizes is not None, init))
+                case VarDecl(_, vtype, name, sizes, init):
+                    # Let the simplifier see the declared type of each name
+                    self.simplifier.env.define(name, vtype)
+                    if init is not None:
+                        writes.append((name, sizes is not None, init))
                 case Assign(lhs, rhs):
                     name, indices = unwrap_index(lhs)
                     if name is not None:
@@ -295,7 +299,7 @@ class DerivativeGenerator:
                                   dependent_arrays=darrs,
                                   loop_var=self.loop_var, seed_index=aidx)
             deriv = self.simplifier.simplify_fully(diff.diff(expr))
-            if deriv != Int(0):
+            if not _is_zero(deriv):
                 dlhs = build_index(Var(dname), indices + [aidx])
                 out.append(ExprStmt(Assign(dlhs, deriv)))
 
@@ -341,7 +345,7 @@ class JacobianGenerator:
 
         # Shapes of extern arrays written by the program
         self.sizes = sizes
-        self.simplifier = Simplifier()
+        self.simplifier = Simplifier(Environment(default=DOUBLE))
         self.codegen = CodeGenerator()
 
     def generate_tile_program(self, program):
@@ -377,6 +381,10 @@ class JacobianGenerator:
                 case MultiDecl(mdecls):
                     for d in mdecls:
                         decls[d.name] = (d.vtype, d.sizes)
+
+        # Let the simplifier see the declared type of each name
+        for name, (vt, _) in decls.items():
+            self.simplifier.env.define(name, vt)
 
         # Independent specialiser state per Jacobian column
         cols = [(arr, k, ik) for arr, shape in self._shapes.items()

@@ -1,14 +1,12 @@
 from dataclasses import dataclass
 
+from pyfr.dsl.types import SCALAR_TYPES
+
 
 _KEYWORDS = frozenset(
     'if else while for const break continue do typedef'.split()
 )
-TYPE_KEYWORDS = frozenset('int float double void'.split())
-_STDINT_TYPES = frozenset(
-    'int8_t int16_t int32_t int64_t uint8_t uint16_t '
-    'uint32_t uint64_t size_t ssize_t fpdtype_t ixdtype_t'.split()
-)
+_TYPES = frozenset(SCALAR_TYPES) | {'void'}
 _TWO_CHAR_OPS = frozenset(
     '== != <= >= && || ++ -- += -= *= /= %= &= |= ^= << >> **'.split()
 )
@@ -52,7 +50,7 @@ class Token:
 class Lexer:
     def __init__(self, src, types=()):
         self.src = src.encode() if isinstance(src, str) else src
-        self.types = TYPE_KEYWORDS | _STDINT_TYPES | set(types)
+        self.types = _TYPES | set(types)
         self.keywords = _KEYWORDS
 
     def tokenise(self):

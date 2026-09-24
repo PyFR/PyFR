@@ -275,52 +275,22 @@ def map_ast(node, t):
 
 
 def _map_ast(node, t):
-    match node:
-        case Program(body):
-            return Program([t(s) for s in body])
-        case Block(body):
-            return Block([t(s) for s in body])
-        case Region(kind, body, args):
-            return Region(kind, [t(s) for s in body], args)
-        case VarDecl(c, vt, n, sz, init):
-            return VarDecl(c, vt, n, [t(s) for s in sz] if sz else sz,
-                           t(init) if init else None)
-        case MultiDecl(decls):
-            return MultiDecl([t(d) for d in decls])
-        case If(c, th, el):
-            return If(t(c), t(th), t(el) if el else None)
-        case While(c, b):
-            return While(t(c), t(b))
-        case For(i, c, s, b):
-            return For(t(i) if i else None, t(c) if c else None,
-                       t(s) if s else None, t(b))
-        case DoWhile(b, c):
-            return DoWhile(t(b), t(c))
-        case ExprStmt(e):
-            return ExprStmt(t(e) if e else None)
-        case Binary(op, l, r):
-            return Binary(op, t(l), t(r))
-        case Unary(op, x):
-            return Unary(op, t(x))
-        case Postfix(op, x):
-            return Postfix(op, t(x))
-        case Index(a, i):
-            return Index(t(a), t(i))
-        case Call(f, args):
-            return Call(t(f), [t(a) for a in args])
-        case Ternary(c, tr, fa):
-            return Ternary(t(c), t(tr), t(fa))
-        case Assign(l, r):
-            return Assign(t(l), t(r))
-        case Cast(ty, e):
-            return Cast(ty, t(e))
-        case ArrayInit(vals):
-            return ArrayInit([t(v) for v in vals])
-        case DslCall(name, args):
-            return DslCall(name, [t(a) for a in args])
-        # Leaves and nodes with no children are handed back untouched
-        case _:
-            return node
+    # Leaves and nodes with no children are handed back untouched
+    if not any(_ast_children(node)):
+        return node
+
+    # Rebuild the node with each child field passed through t
+    kw = {}
+    for f in fields(node):
+        v = getattr(node, f.name)
+        if isinstance(v, list):
+            kw[f.name] = [t(c) if is_dataclass(c) else c for c in v]
+        elif is_dataclass(v):
+            kw[f.name] = t(v)
+        else:
+            kw[f.name] = v
+
+    return type(node)(**kw)
 
 
 def call(name, args):
@@ -328,17 +298,8 @@ def call(name, args):
 
 
 def expr_children(expr):
-    match expr:
-        case (Binary(_, left, right) | Index(left, right) |
-              Assign(left, right)):
-            return (left, right)
-        case Unary(_, child) | Cast(_, child) | Postfix(_, child):
-            return (child,)
-        case Call(_, args):
-            return tuple(args)
-        case ArrayInit(values):
-            return tuple(values)
-        case Ternary(a, b, c):
-            return (a, b, c)
-        case _:
-            return ()
+    # The callee of a call is a name rather than an operand
+    if isinstance(expr, Call):
+        return tuple(expr.args)
+    else:
+        return tuple(_ast_children(expr))
