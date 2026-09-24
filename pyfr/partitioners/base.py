@@ -168,7 +168,8 @@ class BasePartitioner:
         con = con[con[:, 0] != con[:, 1]]
 
         # Sort by the left hand side, removing any parallel edges
-        con = np.unique(con[:, 0]*len(emap) + con[:, 1])
+        con = np.sort(con[:, 0]*len(emap) + con[:, 1])
+        con = con[np.r_[True, con[1:] != con[:-1]]]
 
         # Left and right hand side global element numbers
         lhs, rhs = np.divmod(con, len(emap))
