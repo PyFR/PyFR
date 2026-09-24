@@ -9,6 +9,9 @@ from pyfr.solvers.base import BaseInters
 
 
 class BaseAdvectionIntInters(BaseInters):
+    # Number of elements per block when ordering the interface points
+    blksz = 256
+
     def __init__(self, be, lhs, rhs, elemap, cfg):
         super().__init__(be, lhs, elemap, cfg)
 
@@ -31,7 +34,7 @@ class BaseAdvectionIntInters(BaseInters):
     def _gen_perm(self, lhs, rhs, scal):
         # Arbitrarily, take the permutation which results in an optimal
         # memory access pattern for the LHS of the interface
-        self._perm = self._get_perm_for_field(lhs, scal)
+        self._perm = self._get_perm_for_field(lhs, scal, self.blksz)
 
     def _gen_rhs_reorder(self, lhs, rhs, tol=1e-6):
         # Faces which share a frame have their flux points paired already

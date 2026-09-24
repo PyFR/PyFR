@@ -74,7 +74,7 @@ class BaseInters:
 
         return np.argsort(mm[0][self.side_perm(inter, False)])
 
-    def _get_perm_for_field(self, inter, field):
+    def _get_perm_for_field(self, inter, field, blksz=None):
         matmap, rowmap, colmap, reorder = [], [], [], []
 
         for etype, fidx, eidxs, idx in inter.foreach():
@@ -94,7 +94,14 @@ class BaseInters:
         r = np.concatenate(rowmap)[ro]
         c = np.concatenate(colmap)[ro]
         mm = self._be.view(m, r, c, vshape=()).mapping.get()
-        return np.argsort(mm[0][self.side_perm(inter, False)])
+        sp = self.side_perm(inter, False)
+
+        # Group the points by element block so partner data stays cached
+        if blksz:
+            return np.lexsort((mm[0][sp], c[sp] // blksz))
+        # Otherwise order the points by their address
+        else:
+            return np.argsort(mm[0][sp])
 
     def _view(self, inter, meth, vshape=(), with_perm=True):
         perm = self.side_perm(inter, with_perm)

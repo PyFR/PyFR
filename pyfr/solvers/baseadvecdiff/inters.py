@@ -27,7 +27,7 @@ class BaseAdvectionDiffusionIntInters(BaseAdvectionIntInters):
         side = lhs if beta != -0.5 else rhs
 
         # Compute the relevant permutation
-        self._perm = self._get_perm_for_field(side, scal)
+        self._perm = self._get_perm_for_field(side, scal, self.blksz)
 
 
 class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
