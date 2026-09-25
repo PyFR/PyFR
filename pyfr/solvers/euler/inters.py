@@ -28,6 +28,8 @@ class EulerIntInters(TplargsMixin, BaseAdvectionIntInters):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        self._tplargs['rot'] = self._get_rotation()
+
         self._be.pointwise.register('pyfr.solvers.euler.kernels.intcflux')
 
         self.kernels['comm_flux'] = lambda: self._be.kernel(

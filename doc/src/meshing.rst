@@ -33,8 +33,7 @@ the following guidelines must be followed:
   physical name of "periodic-*name*-r" where *name* is an arbitrary
   identifier, with the periodic relationship defined via a
   ``$Periodic`` section (MSH 4.1). The ``$Periodic`` section is not
-  strictly necessary for translation periodicity. Note that only
-  translational periodicity is currently supported.
+  strictly necessary for translation periodicity.
 * Curved elements are supported up to quartic order. Such elements must
   be *complete* Lagrange elements as opposed to *incomplete* serendipity
   elements.
