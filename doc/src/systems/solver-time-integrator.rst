@@ -39,6 +39,12 @@ formulations:
 
     *int* (default: 10)
 
+#. ``compensated-accumulation`` --- use compensated arithmetic when
+    accumulating time steps; intended for single precision simulations
+    where weak features such as acoustic waves would otherwise freeze
+
+    ``true`` | ``false`` (default: ``false``)
+
 Explicit Formulation
 ====================
 
