@@ -70,25 +70,24 @@ class CleanToGrid:
         self.comm, _, _ = get_comm_rank_root()
         self.cnodemap = cnodemap
 
-        topos, edef, ktypes = {}, {}, set()
-        for etype, cnodes in cnodemap.items():
+        topos, ktypes = {}, set()
+        for etype in cnodemap:
             sdiv = get_subdiv(etype, divmap[etype])
             topos[etype] = sdiv.topology(nsvptsmap[etype])
-            edef[etype] = np.isin(cnodes, shared).any(axis=1)
             ktypes.update(topos[etype].kinds)
 
         # Reduce to obtain the global set of entities
         ktypes = set().union(*self.comm.allgather(ktypes))
 
         # Per-kind cross-etype dedup -> self.kinds (with emap populated)
-        self.kinds = {kind: self._init_kind(kind, topos, cnodemap, edef)
+        self.kinds = {kind: self._init_kind(kind, topos, cnodemap, shared)
                       for kind in sorted(ktypes)}
 
         self.layouts = {etype: self._build_layout(etype, topos[etype])
                         for etype in cnodemap}
 
-    def _init_kind(self, kind, topos, cnodemap, edef):
-        evdofs, klist, dlist, nint, ncols = {}, [], [], 0, 0
+    def _init_kind(self, kind, topos, cnodemap, shared):
+        evdofs, klist, nint, ncols = {}, [], 0, 0
         for etype, cn in cnodemap.items():
             if kind not in topos[etype].kinds:
                 continue
@@ -96,7 +95,6 @@ class CleanToGrid:
             keys, fsrc, cpos, nint = topos[etype].canonical_vdofs(kind, cn)
             evdofs[etype] = (keys, fsrc, cpos)
             klist.append(keys)
-            dlist.append(np.repeat(edef[etype], len(keys) // len(cn)))
             ncols = keys.shape[1]
 
         # Agree on nint and key width across ranks
@@ -105,10 +103,10 @@ class CleanToGrid:
 
         # Deduplicate canonical keys across all contributing etypes
         akeys = np.concatenate(klist or [np.empty((0, ncols), dtype=int)])
-        adefs = np.concatenate(dlist or [np.empty(0, dtype=bool)])
-
         uniq, inv = _unique_rows(akeys)
-        defidx = np.unique(inv[adefs])
+
+        # Select the classes which must be reduced across ranks
+        defidx = np.flatnonzero(np.isin(uniq, shared).all(axis=1))
 
         # Map each etype's vdofs to their global class indices
         emap, off = {}, 0
