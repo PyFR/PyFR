@@ -52,6 +52,28 @@ def constdot(context, a_, b_, /, **kwargs):
     return '(' + ' + '.join(ab) + ')'
 
 
+def constmatvec(context, mat, dst, src, dmap, smap):
+    def index(name, spec, var):
+        axis, fixed, offset = spec
+        var = f'{var} + {offset}' if offset else var
+
+        indices = [var] if axis is None else [fixed]*2
+        if axis is not None:
+            indices[axis] = var
+
+        return f'{name}[{"][".join(map(str, indices))}]'
+
+    lines = []
+    sexpr = index(src, smap, '{j}')
+
+    for i, row in enumerate(mat):
+        dexpr = index(dst, dmap, i)
+        expr = constdot(context, row, sexpr, j=len(row))
+        lines.append(f'{dexpr} = {expr};')
+
+    return '\n'.join(lines)
+
+
 def dot(context, a_, b_=None, /, **kwargs):
     ix, nd = util.first(kwargs.items())
     ab = '({})*({})'.format(a_, b_ or a_)

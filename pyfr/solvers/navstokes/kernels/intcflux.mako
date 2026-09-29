@@ -2,7 +2,6 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
 <%include file='pyfr.solvers.baseadvecdiff.kernels.artvisc'/>
-<%include file='pyfr.solvers.euler.kernels.periodic'/>
 <%include file='pyfr.solvers.euler.kernels.rsolvers.${rsolver}'/>
 <%include file='pyfr.solvers.navstokes.kernels.flux'/>
 
@@ -11,6 +10,7 @@ beta, tau = c['ldg-beta'], c['ldg-tau']
 urstate = 'ur' if rot is None else 'url'
 gradurstate = 'gradur' if rot is None else 'gradurl'
 rflux = 'ur' if rot is None else 'ficomm'
+vmap = (None, None, 1)
 %>
 
 <%pyfr:kernel name='intcflux' ndim='1'
@@ -26,12 +26,29 @@ rflux = 'ur' if rot is None else 'ficomm'
 % if rot is not None:
     // Rotate the RHS momentum into the LHS frame: R^T
     fpdtype_t url[${nvars}];
-    ${pyfr.expand('rotate_into_lhs', 'url', 'ur', rot)};
+    url[0] = ur[0];
+    url[${nvars - 1}] = ur[${nvars - 1}];
+    ${pyfr.constmatvec(rot.T, 'url', 'ur', vmap, vmap)}
 
 % if beta != 0.5:
     // Rotate the RHS gradient into the LHS frame
     fpdtype_t gradurl[${ndims}][${nvars}];
-    ${pyfr.expand('rotate_grad_into_lhs', 'gradurl', 'gradur', rot)};
+
+  % for v in (0, nvars - 1):
+<% cmap = (0, v, 0) %>
+    ${pyfr.constmatvec(rot.T, 'gradurl', 'gradur', cmap, cmap)}
+  % endfor
+
+    fpdtype_t gm[${ndims}][${ndims}];
+  % for v in range(ndims):
+<% dmap, smap = (0, v, 0), (0, v + 1, 0) %>
+    ${pyfr.constmatvec(rot.T, 'gm', 'gradur', dmap, smap)}
+  % endfor
+
+  % for d in range(ndims):
+<% dmap, smap = (1, d, 1), (1, d, 0) %>
+    ${pyfr.constmatvec(rot.T, 'gradurl', 'gm', dmap, smap)}
+  % endfor
 % endif
 % endif
 
@@ -73,6 +90,8 @@ rflux = 'ur' if rot is None else 'ficomm'
 
 % if rot is not None:
     // Rotate the common normal flux into the RHS frame
-    ${pyfr.expand('rotate_from_lhs', 'ur', 'ficomm', rot)};
+    ur[0] = ficomm[0];
+    ur[${nvars - 1}] = ficomm[${nvars - 1}];
+    ${pyfr.constmatvec(rot, 'ur', 'ficomm', vmap, vmap)}
 % endif
 </%pyfr:kernel>

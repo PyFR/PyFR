@@ -1,6 +1,6 @@
 <%inherit file='base'/>
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
-<%include file='pyfr.solvers.euler.kernels.periodic'/>
+<% vmap = (None, None, 1) %>
 
 <%pyfr:kernel name='intconu' ndim='1'
               ulin='in view fpdtype_t[${str(nvars)}]'
@@ -15,7 +15,9 @@
   % else:
     // Rotate u_L into the RHS frame
     fpdtype_t ulr[${nvars}];
-    ${pyfr.expand('rotate_from_lhs', 'ulr', 'ulin', rot)};
+    ulr[0] = ulin[0];
+    ulr[${nvars - 1}] = ulin[${nvars - 1}];
+    ${pyfr.constmatvec(rot, 'ulr', 'ulin', vmap, vmap)}
     % for i in range(nvars):
     urout[${i}] = ulr[${i}] - urin[${i}];
     % endfor
@@ -28,7 +30,9 @@
   % else:
     // Rotate u_R into the LHS frame
     fpdtype_t url[${nvars}];
-    ${pyfr.expand('rotate_into_lhs', 'url', 'urin', rot)};
+    url[0] = urin[0];
+    url[${nvars - 1}] = urin[${nvars - 1}];
+    ${pyfr.constmatvec(rot.T, 'url', 'urin', vmap, vmap)}
     % for i in range(nvars):
     ulout[${i}] = url[${i}] - ulin[${i}];
     % endfor
@@ -40,7 +44,9 @@
   % endfor
 % else:
     fpdtype_t url[${nvars}], du[${nvars}];
-    ${pyfr.expand('rotate_into_lhs', 'url', 'urin', rot)};
+    url[0] = urin[0];
+    url[${nvars - 1}] = urin[${nvars - 1}];
+    ${pyfr.constmatvec(rot.T, 'url', 'urin', vmap, vmap)}
 
     // Compute the common solution jumps in the LHS frame
   % for i in range(nvars):
@@ -50,6 +56,8 @@
   % endfor
 
     // Rotate the RHS jump into the RHS frame
-    ${pyfr.expand('rotate_from_lhs', 'urout', 'du', rot)};
+    urout[0] = du[0];
+    urout[${nvars - 1}] = du[${nvars - 1}];
+    ${pyfr.constmatvec(rot, 'urout', 'du', vmap, vmap)}
 % endif
 </%pyfr:kernel>
