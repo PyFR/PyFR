@@ -15,3 +15,13 @@
 % endfor
 % endif
 </%pyfr:macro>
+
+<%pyfr:macro name='artificial_viscosity_add_wall' params='grad_uin, fout, artvisc'>
+% if shock_capturing == 'artificial-viscosity':
+% for i, j in pyfr.ndrange(ndims, nvars):
+% if 0 < j < nvars - 1:
+    fout[${i}][${j}] -= artvisc*grad_uin[${i}][${j}];
+% endif
+% endfor
+% endif
+</%pyfr:macro>
