@@ -44,36 +44,6 @@ def fpcast(context, expr, src, dst):
         return f'({dst})({expr})'
 
 
-def constdot(context, a_, b_, /, **kwargs):
-    ix, nd = util.first(kwargs.items())
-    nd = nd if isinstance(nd, Iterable) else [nd]
-    ab = (f'({a})*({b_.format(**{ix: i})})' for a, i in zip(a_, range(*nd)))
-
-    return '(' + ' + '.join(ab) + ')'
-
-
-def constmatvec(context, mat, dst, src, dmap, smap):
-    def index(name, spec, var):
-        axis, fixed, offset = spec
-        var = f'{var} + {offset}' if offset else var
-
-        indices = [var] if axis is None else [fixed]*2
-        if axis is not None:
-            indices[axis] = var
-
-        return f'{name}[{"][".join(map(str, indices))}]'
-
-    lines = []
-    sexpr = index(src, smap, '{j}')
-
-    for i, row in enumerate(mat):
-        dexpr = index(dst, dmap, i)
-        expr = constdot(context, row, sexpr, j=len(row))
-        lines.append(f'{dexpr} = {expr};')
-
-    return '\n'.join(lines)
-
-
 def dot(context, a_, b_=None, /, **kwargs):
     ix, nd = util.first(kwargs.items())
     ab = '({})*({})'.format(a_, b_ or a_)
@@ -82,6 +52,16 @@ def dot(context, a_, b_=None, /, **kwargs):
     nd = nd if isinstance(nd, Iterable) else [nd]
 
     return '(' + ' + '.join(ab.format(**{ix: i}) for i in range(*nd)) + ')'
+
+
+def matvec(context, mat, vec, n, transpose=False):
+    def row(i):
+        if transpose:
+            return f'{mat}[{{j}}][{i}]'
+
+        return f'{mat}[{i}][{{j}}]'
+
+    return [dot(context, row(i), vec, j=n) for i in range(n)]
 
 
 def array(context, expr_, vals_={}, /, **kwargs):

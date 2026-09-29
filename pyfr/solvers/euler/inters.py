@@ -28,13 +28,14 @@ class EulerIntInters(TplargsMixin, BaseAdvectionIntInters):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self._tplargs['rot'] = self._get_rotation()
+        self._tplargs['rperiodic'] = self._rotmat is not None
 
         self._be.pointwise.register('pyfr.solvers.euler.kernels.intcflux')
 
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'intcflux', tplargs=self._tplargs, dims=[self.ninterfpts],
-            ul=self.scal_lhs, ur=self.scal_rhs, nl=self._pnorm_lhs
+            ul=self.scal_lhs, ur=self.scal_rhs, nl=self._pnorm_lhs,
+            rmat=self._rotmat
         )
 
 

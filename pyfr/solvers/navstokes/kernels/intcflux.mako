@@ -7,10 +7,9 @@
 
 <%
 beta, tau = c['ldg-beta'], c['ldg-tau']
-urstate = 'ur' if rot is None else 'url'
-gradurstate = 'gradur' if rot is None else 'gradurl'
-rflux = 'ur' if rot is None else 'ficomm'
-vmap = (None, None, 1)
+urstate = 'url' if rperiodic else 'ur'
+gradurstate = 'gradurl' if rperiodic else 'gradur'
+rflux = 'ficomm' if rperiodic else 'ur'
 %>
 
 <%pyfr:kernel name='intcflux' ndim='1'
@@ -19,35 +18,46 @@ vmap = (None, None, 1)
               gradul='in view fpdtype_t[${str(ndims)}][${str(nvars)}]'
               gradur='in view fpdtype_t[${str(ndims)}][${str(nvars)}]'
               artvisc='in view fpdtype_t'
-              nl='in fpdtype_t[${str(ndims)}]'>
+              nl='in fpdtype_t[${str(ndims)}]'
+              rmat='in broadcast fpdtype_t[${str(ndims)}][${str(ndims)}]'>
     fpdtype_t mag_nl = sqrt(${pyfr.dot('nl[{i}]', i=ndims)});
     fpdtype_t norm_nl[] = ${pyfr.array('(1 / mag_nl)*nl[{i}]', i=ndims)};
 
-% if rot is not None:
+% if rperiodic:
     // Rotate the RHS momentum into the LHS frame: R^T
-    fpdtype_t url[${nvars}];
-    url[0] = ur[0];
-    url[${nvars - 1}] = ur[${nvars - 1}];
-    ${pyfr.constmatvec(rot.T, 'url', 'ur', vmap, vmap)}
+<%
+rmom = pyfr.matvec('rmat', 'ur[{j} + 1]', ndims, transpose=True)
+url = ['ur[0]', *rmom, f'ur[{nvars - 1}]']
+%>
+    fpdtype_t url[] = ${pyfr.carray(url)};
 
 % if beta != 0.5:
     // Rotate the RHS gradient into the LHS frame
     fpdtype_t gradurl[${ndims}][${nvars}];
 
   % for v in (0, nvars - 1):
-<% cmap = (0, v, 0) %>
-    ${pyfr.constmatvec(rot.T, 'gradurl', 'gradur', cmap, cmap)}
+<% gv = f'gradur[{{j}}][{v}]' %>
+<% g = pyfr.matvec('rmat', gv, ndims, transpose=True) %>
+    % for d in range(ndims):
+    gradurl[${d}][${v}] = ${g[d]};
+    % endfor
   % endfor
 
     fpdtype_t gm[${ndims}][${ndims}];
-  % for v in range(ndims):
-<% dmap, smap = (0, v, 0), (0, v + 1, 0) %>
-    ${pyfr.constmatvec(rot.T, 'gm', 'gradur', dmap, smap)}
+  % for i in range(ndims):
+<% gv = f'gradur[{{j}}][{i + 1}]' %>
+<% g = pyfr.matvec('rmat', gv, ndims, transpose=True) %>
+    % for d in range(ndims):
+    gm[${d}][${i}] = ${g[d]};
+    % endfor
   % endfor
 
   % for d in range(ndims):
-<% dmap, smap = (1, d, 1), (1, d, 0) %>
-    ${pyfr.constmatvec(rot.T, 'gradurl', 'gm', dmap, smap)}
+<% gj = f'gm[{d}][{{j}}]' %>
+<% g = pyfr.matvec('rmat', gj, ndims, transpose=True) %>
+    % for i in range(ndims):
+    gradurl[${d}][${i + 1}] = ${g[i]};
+    % endfor
   % endfor
 % endif
 % endif
@@ -88,10 +98,14 @@ vmap = (None, None, 1)
     ${rflux}[${i}] = -mag_nl*ficomm[${i}];
 % endfor
 
-% if rot is not None:
+% if rperiodic:
     // Rotate the common normal flux into the RHS frame
-    ur[0] = ficomm[0];
-    ur[${nvars - 1}] = ficomm[${nvars - 1}];
-    ${pyfr.constmatvec(rot, 'ur', 'ficomm', vmap, vmap)}
+<%
+rmom = pyfr.matvec('rmat', 'ficomm[{j} + 1]', ndims)
+urvals = ['ficomm[0]', *rmom, f'ficomm[{nvars - 1}]']
+%>
+% for i in range(nvars):
+    ur[${i}] = ${urvals[i]};
+% endfor
 % endif
 </%pyfr:kernel>
