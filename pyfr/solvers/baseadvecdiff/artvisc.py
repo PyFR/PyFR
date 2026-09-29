@@ -156,16 +156,14 @@ class ArtificialViscosity:
         mode_degs = [max(d) for d in ubdegs]
         ndeg = uborder + 1
 
-        fit_degs = list(range(1, ndeg))
-        if len(fit_degs) >= 2:
-            x = np.log(np.array(fit_degs) + 1)
-            A = np.column_stack([np.ones(len(x)), x])
-            s_weights = np.linalg.pinv(A)[1].tolist()
+        if uborder >= 2:
+            fit_degs = np.arange(1.0, ndeg)
+            x = np.log(fit_degs)
+            s_weights = np.linalg.pinv(np.vander(x, 2))[0].tolist()
 
-            N = uborder
-            bd2 = np.array([1.0/(d + 1)**(2*N) for d in fit_degs])
-            bd2 /= bd2.sum()
-            baseline_decay = bd2.tolist()
+            # Perfect modal decay |b_d|^2 ~ d^-2p normalised to unit energy
+            bd2 = fit_degs**(-2*uborder)
+            baseline_decay = (bd2 / bd2.sum()).tolist()
         else:
             s_weights = None
             baseline_decay = None

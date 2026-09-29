@@ -25,7 +25,8 @@
 % endfor
 
     // Skyline pessimization (max from high to low degree)
-% for d in range(ndeg - 2, -1, -1):
+    en[${ndeg - 1}] = fmax(en[${ndeg - 1}], en[${ndeg - 2}]);
+% for d in range(ndeg - 2, 0, -1):
     en[${d}] = fmax(en[${d}], en[${d + 1}]);
 % endfor
 
