@@ -4,7 +4,6 @@ import re
 import numpy as np
 
 from pyfr.backends.base.mathfns import generate_helper, lower_math_fns
-from pyfr.cache import memoize
 from pyfr.dsl.codegen import CodeGenerator
 from pyfr.dsl.nodes import (Assign, Binary, Call, DslCall, DslVar, ExprStmt,
                             Float, Index, Int, Program, Unary, Var, VarDecl,
@@ -18,9 +17,13 @@ from pyfr.dsl.types import Environment
 def _rule(tpl, **preconds):
     proto = parse_expr(tpl)
     dvars = {n.name for n in walk_ast(proto) if isinstance(n, DslVar)}
-    ncdim = sum(1 for v in dvars if v.startswith('I'))
+    nidx = sum(1 for v in dvars if v.startswith('I'))
     nvars = frozenset(v for v in dvars if v.startswith('N'))
-    return proto, ncdim, nvars, preconds
+
+    # Rules which reference the view stride are for multi-indexed views
+    preconds['ismulti'] = 'VS' in dvars
+
+    return proto, nidx, nvars, preconds
 
 
 class Arg:
@@ -58,6 +61,10 @@ class Arg:
         # View stride (for multi-indexed views: view(N))
         m = re.search(r'view\((\d+)\)', self.attrs)
         self.viewstride = int(m[1]) if m else 1
+
+        # Multi-indexed views take an extra leading index in the body
+        self.ismulti = self.viewstride > 1
+        self.nidx = self.ncdim + self.ismulti
 
         # Attributes
         self.isbroadcast = self.attrs == 'broadcast'
@@ -113,6 +120,8 @@ class BaseKernelGenerator:
         _rule('@N_v[@N_vix[@xidx] + @soasz*@I0]', isview=True),
         _rule('@N_v[@N_vix[@xidx] + @N_vrstri[@xidx]*@I0 + @soasz*@I1]',
               isview=True),
+        # Multi-indexed views (viewstride > 1)
+        _rule('@N_v[@N_vix[@xidx*@VS + @I0]]', isview=True),
         # Arrays
         _rule('@N_v[@xidx]', isview=False),
         # MPI
@@ -130,13 +139,16 @@ class BaseKernelGenerator:
 
     _rules_2d = [
         # Views
-        _rule('@N_v[@N_vix[@xidx] + @N_vrstri*_y]', isview=True),
+        _rule('@N_v[@N_vix[@xidx] + @N_vrstri*_y]', isview=True,
+              isbroadcastc=False),
         _rule('@N_v[@N_vix[@xidx] + @N_vrstri*_y + @soasz*@I0]',
-              isview=True),
+              isview=True, isbroadcastc=False),
         _rule('@N_v[@N_vix[@xidx] + @N_vrstri*(@I0*_ny + _y) + @soasz*@I1]',
-              isview=True),
+              isview=True, isbroadcastc=False),
         # Broadcast-col views (no _y dependence)
         _rule('@N_v[@N_vix[@xidx]]', isview=True, isbroadcastc=True),
+        _rule('@N_v[@N_vix[@xidx*@VS + @I0]]', isview=True,
+              isbroadcastc=True),
         # Matrices
         _rule('@N_v[@xidx]', isview=False, isbroadcastc=True),
         _rule('@N_v[@S*_y + @xidx]', isview=False, isbroadcastc=False),
@@ -210,10 +222,8 @@ class BaseKernelGenerator:
         self._helper_calls = set()
 
         # Select the dereference rules appropriate to our dimensionality
-        if ndim == 1:
-            self._deref_rules = self._deref_rules_1d
-        else:
-            self._deref_rules = self._deref_rules_2d
+        rules = self._rules_1d if ndim == 1 else self._rules_2d
+        self._deref_rules = [self._bind_rule(r) for r in rules]
 
         # Render the main body of our kernel
         body, preamble, epilogue = self._render_body_preamble_epilogue()
@@ -271,14 +281,14 @@ class BaseKernelGenerator:
         pass
 
     def _bind_rule(self, compiled):
-        proto, ncdim, nvars, preconds = compiled
+        proto, nidx, nvars, preconds = compiled
 
         def apply(n, ix, arg):
-            match = arg.ncdim == ncdim and len(ix) == ncdim
-            if match and all(getattr(arg, a, None) == v
-                             for a, v in preconds.items()):
+            flags = all(getattr(arg, a) == v for a, v in preconds.items())
+            if len(ix) == nidx == arg.nidx and flags:
                 subs = {v: Var(n + v[1:]) for v in nvars}
                 subs['S'] = self.ldim_size(n)
+                subs['VS'] = Int(arg.viewstride)
                 for i, idx in enumerate(ix):
                     subs[f'I{i}'] = idx
                 for i, cd in enumerate(arg.cdims):
@@ -291,31 +301,12 @@ class BaseKernelGenerator:
 
         return apply
 
-    def _deref_view_multi(self, n, ix, arg):
-        # Multi-indexed views (viewstride > 1) bypass the rule tables
-        if arg.viewstride > 1 and len(ix) == 1:
-            vs = Int(arg.viewstride)
-            vix = Binary('+', Binary('*', DslVar('xidx'), vs), ix[0])
-            return Index(Var(f'{n}_v'), Index(Var(f'{n}_vix'), vix))
-        else:
-            return None
-
-    @memoize
-    def _deref_rules_1d(self):
-        return [self._deref_view_multi,
-                *(self._bind_rule(r) for r in self._rules_1d)]
-
-    @memoize
-    def _deref_rules_2d(self):
-        return [self._deref_view_multi,
-                *(self._bind_rule(r) for r in self._rules_2d)]
-
     def _deref_arg(self, arg, *ixs):
         # Convert the indices into AST nodes
         ix = [Int(i) if isinstance(i, int) else parse_expr(str(i))
               for i in ixs]
 
-        for r in self._deref_rules():
+        for r in self._deref_rules:
             if (result := r(arg.name, ix, arg)) is not None:
                 return result
 
@@ -445,7 +436,7 @@ class BaseKernelGenerator:
 
         # Substitute the dereference rules through the body
         args = {va.name: va for va in self.vectargs if not va.isreduce}
-        ast = Rewriter(self._deref_rules()).transform(self._ast, args)
+        ast = Rewriter(self._deref_rules).transform(self._ast, args)
 
         return self._render_body(ast, self.codegen_cls()), '', ''
 
@@ -582,7 +573,7 @@ class BaseGPUKernelGenerator(BaseKernelGenerator):
 
         # Substitute the rules through the body; preloads take priority
         args = {va.name: va for va in self.vectargs if not va.isreduce}
-        rules = preload_rules + self._deref_rules()
+        rules = preload_rules + self._deref_rules
         ast = Rewriter(rules).transform(self._ast, args)
 
         # Render the body

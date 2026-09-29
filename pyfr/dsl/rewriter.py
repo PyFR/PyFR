@@ -1,6 +1,6 @@
 from pyfr.dsl.lexer import Lexer
 from pyfr.dsl.nodes import (DslVar, Float, Var, VarDecl, map_ast,
-                            unwrap_index)
+                            unwrap_index, walk_ast)
 from pyfr.dsl.parser import Parser
 
 
@@ -51,7 +51,22 @@ class Rewriter:
         self.rules = rules
 
     def transform(self, node, args):
-        mapped = map_ast(node, lambda n: self.transform(n, args))
+        node = self._transform(node, args)
+
+        # Any argument reference which survives had no applicable rule
+        for n in walk_ast(node):
+            if isinstance(n, Var) and n.name in args:
+                raise ValueError(f'No matching rule for {n.name}')
+
+        return node
+
+    def _transform(self, node, args):
+        # Check the arity is consistent
+        n, ix = unwrap_index(node)
+        if n in args and len(ix) > args[n].nidx:
+            raise ValueError(f'Too many indices for {n}')
+
+        mapped = map_ast(node, lambda n: self._transform(n, args))
 
         # Extract the name and indices, then look up a matching arg
         n, ix = unwrap_index(mapped)

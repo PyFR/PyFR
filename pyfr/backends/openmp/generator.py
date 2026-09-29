@@ -35,7 +35,7 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
             node = map_ast(node, stage)
             match node:
                 # Rewrite name into _rv_name[@xidx]
-                case Var(name) if name == va.name and va.viewstride == 1:
+                case Var(name) if name == va.name and not va.ismulti:
                     return Index(rv, xidx)
                 # Rewrite name[i] into _rv_name[i][@xidx]
                 case Index(Var(name), ix) if name == va.name:
