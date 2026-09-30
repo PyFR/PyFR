@@ -25,10 +25,7 @@ rflux = 'ficomm' if rperiodic else 'ur'
 
 % if rperiodic:
     // Rotate the RHS momentum into the LHS frame: R^T
-<%
-rmom = pyfr.matvec('rmat', 'ur[{j} + 1]', ndims, transpose=True)
-url = ['ur[0]', *rmom, f'ur[{nvars - 1}]']
-%>
+<% url = pyfr.rotstate('rmat', 'ur', ndims, transpose=True) %>
     fpdtype_t url[] = ${pyfr.carray(url)};
 
 % if beta != 0.5:
@@ -100,10 +97,7 @@ url = ['ur[0]', *rmom, f'ur[{nvars - 1}]']
 
 % if rperiodic:
     // Rotate the common normal flux into the RHS frame
-<%
-rmom = pyfr.matvec('rmat', 'ficomm[{j} + 1]', ndims)
-urvals = ['ficomm[0]', *rmom, f'ficomm[{nvars - 1}]']
-%>
+<% urvals = pyfr.rotstate('rmat', 'ficomm', ndims) %>
 % for i, expr in enumerate(urvals):
     ur[${i}] = ${expr};
 % endfor

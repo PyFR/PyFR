@@ -15,10 +15,7 @@
 
 % if rperiodic:
     // Rotate the RHS momentum into the LHS frame: R^T
-<%
-rmom = pyfr.matvec('rmat', 'ur[{j} + 1]', ndims, transpose=True)
-url = ['ur[0]', *rmom, f'ur[{nvars - 1}]']
-%>
+<% url = pyfr.rotstate('rmat', 'ur', ndims, transpose=True) %>
     fpdtype_t url[] = ${pyfr.carray(url)};
 % endif
 
@@ -34,10 +31,7 @@ url = ['ur[0]', *rmom, f'ur[{nvars - 1}]']
 
 % if rperiodic:
     // Rotate the common normal flux into the RHS frame
-<%
-rmom = pyfr.matvec('rmat', 'fn[{j} + 1]', ndims)
-urvals = ['fn[0]', *rmom, f'fn[{nvars - 1}]']
-%>
+<% urvals = pyfr.rotstate('rmat', 'fn', ndims) %>
 % for i, expr in enumerate(urvals):
     ur[${i}] = ${expr};
 % endfor

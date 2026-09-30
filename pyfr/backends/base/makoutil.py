@@ -61,6 +61,11 @@ def matvec(context, mat, vec, n, transpose=False):
     return [dot(context, row(i), vec, j=n) for i in range(n)]
 
 
+def rotstate(context, mat, src, n, transpose=False):
+    mom = matvec(context, mat, f'{src}[{{j}} + 1]', n, transpose)
+    return [f'{src}[0]', *mom, f'{src}[{n + 1}]']
+
+
 def array(context, expr_, vals_={}, /, **kwargs):
     ix = util.first(kwargs)
     ni = kwargs.pop(ix)
