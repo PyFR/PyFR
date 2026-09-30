@@ -38,8 +38,8 @@ url = ['ur[0]', *rmom, f'ur[{nvars - 1}]']
 rmom = pyfr.matvec('rmat', 'fn[{j} + 1]', ndims)
 urvals = ['fn[0]', *rmom, f'fn[{nvars - 1}]']
 %>
-% for i in range(nvars):
-    ur[${i}] = ${urvals[i]};
+% for i, expr in enumerate(urvals):
+    ur[${i}] = ${expr};
 % endfor
 % endif
 </%pyfr:kernel>

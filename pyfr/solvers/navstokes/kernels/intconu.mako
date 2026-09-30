@@ -18,9 +18,8 @@
 rmom = pyfr.matvec('rmat', 'ulin[{j} + 1]', ndims)
 ulr = ['ulin[0]', *rmom, f'ulin[{nvars - 1}]']
 %>
-    fpdtype_t ulr[] = ${pyfr.carray(ulr)};
-    % for i in range(nvars):
-    urout[${i}] = ulr[${i}] - urin[${i}];
+    % for i, expr in enumerate(ulr):
+    urout[${i}] = ${expr} - urin[${i}];
     % endfor
   % endif
 % elif c['ldg-beta'] == 0.5:
@@ -34,9 +33,8 @@ ulr = ['ulin[0]', *rmom, f'ulin[{nvars - 1}]']
 lmom = pyfr.matvec('rmat', 'urin[{j} + 1]', ndims, transpose=True)
 url = ['urin[0]', *lmom, f'urin[{nvars - 1}]']
 %>
-    fpdtype_t url[] = ${pyfr.carray(url)};
-    % for i in range(nvars):
-    ulout[${i}] = url[${i}] - ulin[${i}];
+    % for i, expr in enumerate(url):
+    ulout[${i}] = ${expr} - ulin[${i}];
     % endfor
   % endif
 % elif not rperiodic:
@@ -49,12 +47,11 @@ url = ['urin[0]', *lmom, f'urin[{nvars - 1}]']
 lmom = pyfr.matvec('rmat', 'urin[{j} + 1]', ndims, transpose=True)
 url = ['urin[0]', *lmom, f'urin[{nvars - 1}]']
 %>
-    fpdtype_t url[] = ${pyfr.carray(url)};
     fpdtype_t du[${nvars}];
 
     // Compute the common solution jumps in the LHS frame
-  % for i in range(nvars):
-    du[${i}] = url[${i}] - ulin[${i}];
+  % for i, expr in enumerate(url):
+    du[${i}] = ${expr} - ulin[${i}];
     ulout[${i}] = ${0.5 + c['ldg-beta']}*du[${i}];
     du[${i}] *= ${c['ldg-beta'] - 0.5};
   % endfor
@@ -64,8 +61,8 @@ url = ['urin[0]', *lmom, f'urin[{nvars - 1}]']
 rmom = pyfr.matvec('rmat', 'du[{j} + 1]', ndims)
 urvals = ['du[0]', *rmom, f'du[{nvars - 1}]']
 %>
-  % for i in range(nvars):
-    urout[${i}] = ${urvals[i]};
+  % for i, expr in enumerate(urvals):
+    urout[${i}] = ${expr};
   % endfor
 % endif
 </%pyfr:kernel>

@@ -22,7 +22,10 @@ class BaseAdvectionIntInters(BaseInters):
         self.rhs = rhs
 
         # Store the periodic rotation matrix
-        rot = rhs.transform and rhs.transform[0]
+        if rhs.transform is not None:
+            rot = rhs.transform[0]
+        else:
+            rot = None
         rot = None if np.array_equal(rot, np.eye(self.ndims)) else rot
         self._rotmat = be.const_matrix(rot) if rot is not None else None
 
@@ -83,6 +86,7 @@ class BaseAdvectionIntInters(BaseInters):
             return self._rhs_reorder[perm]
         else:
             return perm
+
 
 class BaseAdvectionMPIInters(BaseInters):
     def __init__(self, be, lhs, rhsrank, elemap, cfg):

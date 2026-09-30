@@ -56,10 +56,7 @@ def dot(context, a_, b_=None, /, **kwargs):
 
 def matvec(context, mat, vec, n, transpose=False):
     def row(i):
-        if transpose:
-            return f'{mat}[{{j}}][{i}]'
-
-        return f'{mat}[{i}][{{j}}]'
+        return f'{mat}[{{j}}][{i}]' if transpose else f'{mat}[{i}][{{j}}]'
 
     return [dot(context, row(i), vec, j=n) for i in range(n)]
 

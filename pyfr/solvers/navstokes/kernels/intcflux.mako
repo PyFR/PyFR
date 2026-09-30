@@ -38,8 +38,8 @@ url = ['ur[0]', *rmom, f'ur[{nvars - 1}]']
   % for v in (0, nvars - 1):
 <% gv = f'gradur[{{j}}][{v}]' %>
 <% g = pyfr.matvec('rmat', gv, ndims, transpose=True) %>
-    % for d in range(ndims):
-    gradurl[${d}][${v}] = ${g[d]};
+    % for d, expr in enumerate(g):
+    gradurl[${d}][${v}] = ${expr};
     % endfor
   % endfor
 
@@ -47,16 +47,16 @@ url = ['ur[0]', *rmom, f'ur[{nvars - 1}]']
   % for i in range(ndims):
 <% gv = f'gradur[{{j}}][{i + 1}]' %>
 <% g = pyfr.matvec('rmat', gv, ndims, transpose=True) %>
-    % for d in range(ndims):
-    gm[${d}][${i}] = ${g[d]};
+    % for d, expr in enumerate(g):
+    gm[${d}][${i}] = ${expr};
     % endfor
   % endfor
 
   % for d in range(ndims):
 <% gj = f'gm[{d}][{{j}}]' %>
 <% g = pyfr.matvec('rmat', gj, ndims, transpose=True) %>
-    % for i in range(ndims):
-    gradurl[${d}][${i + 1}] = ${g[i]};
+    % for i, expr in enumerate(g):
+    gradurl[${d}][${i + 1}] = ${expr};
     % endfor
   % endfor
 % endif
@@ -104,8 +104,8 @@ url = ['ur[0]', *rmom, f'ur[{nvars - 1}]']
 rmom = pyfr.matvec('rmat', 'ficomm[{j} + 1]', ndims)
 urvals = ['ficomm[0]', *rmom, f'ficomm[{nvars - 1}]']
 %>
-% for i in range(nvars):
-    ur[${i}] = ${urvals[i]};
+% for i, expr in enumerate(urvals):
+    ur[${i}] = ${expr};
 % endfor
 % endif
 </%pyfr:kernel>
