@@ -14,8 +14,7 @@
     % endfor
   % else:
     // Rotate u_L into the RHS frame
-<% ulr = pyfr.rotstate('rmat', 'ulin', ndims) %>
-    % for i, expr in enumerate(ulr):
+    % for i, expr in enumerate(pyfr.rotstate('rmat', 'ulin', ndims)):
     urout[${i}] = ${expr} - urin[${i}];
     % endfor
   % endif
@@ -26,8 +25,7 @@
     % endfor
   % else:
     // Rotate u_R into the LHS frame
-<% url = pyfr.rotstate('rmat', 'urin', ndims, True) %>
-    % for i, expr in enumerate(url):
+    % for i, expr in enumerate(pyfr.rotstate('rmat', 'urin', ndims, True)):
     ulout[${i}] = ${expr} - ulin[${i}];
     % endfor
   % endif
@@ -40,16 +38,14 @@
     fpdtype_t du[${nvars}];
 
     // Compute the common solution jumps in the LHS frame
-<% url = pyfr.rotstate('rmat', 'urin', ndims, True) %>
-  % for i, expr in enumerate(url):
+  % for i, expr in enumerate(pyfr.rotstate('rmat', 'urin', ndims, True)):
     du[${i}] = ${expr} - ulin[${i}];
     ulout[${i}] = ${0.5 + c['ldg-beta']}*du[${i}];
     du[${i}] *= ${c['ldg-beta'] - 0.5};
   % endfor
 
     // Rotate the RHS jump into the RHS frame
-<% urvals = pyfr.rotstate('rmat', 'du', ndims) %>
-  % for i, expr in enumerate(urvals):
+  % for i, expr in enumerate(pyfr.rotstate('rmat', 'du', ndims)):
     urout[${i}] = ${expr};
   % endfor
 % endif

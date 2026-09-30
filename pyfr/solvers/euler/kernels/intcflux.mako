@@ -30,8 +30,7 @@
 
 % if rperiodic:
     // Rotate the common normal flux into the RHS frame
-<% urvals = pyfr.rotstate('rmat', 'fn', ndims) %>
-% for i, expr in enumerate(urvals):
+% for i, expr in enumerate(pyfr.rotstate('rmat', 'fn', ndims)):
     ur[${i}] = ${expr};
 % endfor
 % endif
