@@ -22,12 +22,11 @@ class BaseAdvectionIntInters(BaseInters):
         self.rhs = rhs
 
         # Store the periodic rotation matrix
-        if rhs.transform is not None:
-            rot = rhs.transform[0]
+        if (rhs.transform is not None and
+            not np.array_equal(rhs.transform[0], np.eye(self.ndims))):
+            self._rotmat = be.const_matrix(rhs.transform[0])
         else:
-            rot = None
-        rot = None if np.array_equal(rot, np.eye(self.ndims)) else rot
-        self._rotmat = be.const_matrix(rot) if rot is not None else None
+            self._rotmat = None
 
         # Permute the RHS flux points so they pair with those of the LHS
         self._rhs_reorder = self._gen_rhs_reorder(lhs, rhs)

@@ -25,16 +25,14 @@ rflux = 'ficomm' if rperiodic else 'ur'
 
 % if rperiodic:
     // Rotate the RHS momentum into the LHS frame: R^T
-<% url = pyfr.rotstate('rmat', 'ur', ndims, transpose=True) %>
-    fpdtype_t url[] = ${pyfr.carray(url)};
+    fpdtype_t url[] = ${pyfr.carray(pyfr.rotstate('rmat', 'ur', ndims, True))};
 
 % if beta != 0.5:
     // Rotate the RHS gradient into the LHS frame
     fpdtype_t gradurl[${ndims}][${nvars}];
 
   % for v in (0, nvars - 1):
-<% gv = f'gradur[{{j}}][{v}]' %>
-<% g = pyfr.matvec('rmat', gv, ndims, transpose=True) %>
+<% g = pyfr.matvec('rmat', f'gradur[{{j}}][{v}]', ndims, True) %>
     % for d, expr in enumerate(g):
     gradurl[${d}][${v}] = ${expr};
     % endfor
@@ -42,16 +40,14 @@ rflux = 'ficomm' if rperiodic else 'ur'
 
     fpdtype_t gm[${ndims}][${ndims}];
   % for i in range(ndims):
-<% gv = f'gradur[{{j}}][{i + 1}]' %>
-<% g = pyfr.matvec('rmat', gv, ndims, transpose=True) %>
+<% g = pyfr.matvec('rmat', f'gradur[{{j}}][{i + 1}]', ndims, True) %>
     % for d, expr in enumerate(g):
     gm[${d}][${i}] = ${expr};
     % endfor
   % endfor
 
   % for d in range(ndims):
-<% gj = f'gm[{d}][{{j}}]' %>
-<% g = pyfr.matvec('rmat', gj, ndims, transpose=True) %>
+<% g = pyfr.matvec('rmat', f'gm[{d}][{{j}}]', ndims, True) %>
     % for i, expr in enumerate(g):
     gradurl[${d}][${i + 1}] = ${expr};
     % endfor

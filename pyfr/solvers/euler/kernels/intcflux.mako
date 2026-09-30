@@ -15,8 +15,7 @@
 
 % if rperiodic:
     // Rotate the RHS momentum into the LHS frame: R^T
-<% url = pyfr.rotstate('rmat', 'ur', ndims, transpose=True) %>
-    fpdtype_t url[] = ${pyfr.carray(url)};
+    fpdtype_t url[] = ${pyfr.carray(pyfr.rotstate('rmat', 'ur', ndims, True))};
 % endif
 
     // Perform the Riemann solve in the LHS frame
