@@ -22,10 +22,9 @@ class BaseAdvectionIntInters(BaseInters):
         self.rhs = rhs
 
         # Store the periodic rotation matrix
-        if not np.array_equal(rhs.transform[0], np.eye(self.ndims)):
-            self._rotmat = be.const_matrix(rhs.transform[0])
-        else:
-            self._rotmat = None
+        rot = rhs.transform[0]
+        self._rperiodic = not np.allclose(rot, np.eye(self.ndims))
+        self._rotmat = be.const_matrix(rot) if self._rperiodic else None
 
         # Permute the RHS flux points so they pair with those of the LHS
         self._rhs_reorder = self._gen_rhs_reorder(lhs, rhs)
@@ -46,7 +45,7 @@ class BaseAdvectionIntInters(BaseInters):
         rot, shift = rhs.transform
 
         # Faces which share a frame have their flux points paired already
-        if np.array_equal(rot, np.eye(self.ndims)) and not np.any(shift):
+        if not self._rperiodic and not np.any(shift):
             return None
 
         # Map the LHS flux points into the RHS frame

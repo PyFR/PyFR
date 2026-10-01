@@ -32,7 +32,7 @@ class NavierStokesIntInters(TplargsMixin,
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self._tplargs['rperiodic'] = self._rotmat is not None
+        self._tplargs['rperiodic'] = self._rperiodic
 
         self._be.pointwise.register('pyfr.solvers.navstokes.kernels.intconu')
         self._be.pointwise.register('pyfr.solvers.navstokes.kernels.intcflux')

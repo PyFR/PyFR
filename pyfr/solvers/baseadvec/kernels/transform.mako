@@ -1,5 +1,21 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
+<%pyfr:macro name='rotate' params='R, u, off, py:transpose'>
+    fpdtype_t t[] = ${pyfr.carray(pyfr.matvec('R', 'u[off + {j}]', ndims, transpose))};
+% for i in range(ndims):
+    u[off + ${i}] = t[${i}];
+% endfor
+</%pyfr:macro>
+
+<%pyfr:macro name='rotate_grad' params='R, g, gl'>
+% for d, v in pyfr.ndrange(ndims, nvars):
+    gl[${d}][${v}] = ${pyfr.dot(f'R[{{j}}][{d}]', f'g[{{j}}][{v}]', j=ndims)};
+% endfor
+% for d in range(ndims):
+    ${pyfr.expand('rotate', 'R', f'gl[{d}]', off=1, transpose=True)};
+% endfor
+</%pyfr:macro>
+
 ## Transforms to [1, 0, 0]^T from n
 ## See Moler and Hughes 1999
 <%pyfr:macro name='transform_to' params='n, u, t, off'>

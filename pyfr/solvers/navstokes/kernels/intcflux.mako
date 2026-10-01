@@ -1,6 +1,7 @@
 <%inherit file='base'/>
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
+<%include file='pyfr.solvers.baseadvec.kernels.transform'/>
 <%include file='pyfr.solvers.baseadvecdiff.kernels.artvisc'/>
 <%include file='pyfr.solvers.euler.kernels.rsolvers.${rsolver}'/>
 <%include file='pyfr.solvers.navstokes.kernels.flux'/>
@@ -9,7 +10,6 @@
 beta, tau = c['ldg-beta'], c['ldg-tau']
 urstate = 'url' if rperiodic else 'ur'
 gradurstate = 'gradurl' if rperiodic else 'gradur'
-rflux = 'ficomm' if rperiodic else 'ur'
 %>
 
 <%pyfr:kernel name='intcflux' ndim='1'
@@ -25,34 +25,17 @@ rflux = 'ficomm' if rperiodic else 'ur'
 
 % if rperiodic:
     // Rotate the RHS momentum into the LHS frame: R^T
-    fpdtype_t url[] = ${pyfr.carray(['ur[0]', *pyfr.matvec('rmat', 'ur[{j} + 1]', ndims, True), f'ur[{nvars - 1}]'])};
+    fpdtype_t url[] = ${pyfr.array('ur[{i}]', i=nvars)};
+    ${pyfr.expand('rotate', 'rmat', 'url', off=1, transpose=True)};
+% endif
 
-% if beta != 0.5:
+% if rperiodic and beta != 0.5:
     // Rotate the RHS gradient into the LHS frame
     fpdtype_t gradurl[${ndims}][${nvars}];
-
-  % for v in (0, nvars - 1):
-    % for d, expr in enumerate(pyfr.matvec('rmat', f'gradur[{{j}}][{v}]', ndims, True)):
-    gradurl[${d}][${v}] = ${expr};
-    % endfor
-  % endfor
-
-    fpdtype_t gm[${ndims}][${ndims}];
-  % for i in range(ndims):
-    % for d, expr in enumerate(pyfr.matvec('rmat', f'gradur[{{j}}][{i + 1}]', ndims, True)):
-    gm[${d}][${i}] = ${expr};
-    % endfor
-  % endfor
-
-  % for d in range(ndims):
-    % for i, expr in enumerate(pyfr.matvec('rmat', f'gm[{d}][{{j}}]', ndims, True)):
-    gradurl[${d}][${i + 1}] = ${expr};
-    % endfor
-  % endfor
-% endif
+    ${pyfr.expand('rotate_grad', 'rmat', 'gradur', 'gradurl')};
 % endif
 
-    // Perform the Riemann solve in the LHS frame
+    // Perform the Riemann solve
     fpdtype_t ficomm[${nvars}], fvcomm;
     ${pyfr.expand('rsolve', 'ul', urstate, 'norm_nl', 'ficomm')};
 
@@ -84,14 +67,15 @@ rflux = 'ficomm' if rperiodic else 'ur'
 % endif
 
     ficomm[${i}] += fvcomm;
-    ul[${i}] =  mag_nl*ficomm[${i}];
-    ${rflux}[${i}] = -mag_nl*ficomm[${i}];
+    ul[${i}] = mag_nl*ficomm[${i}];
 % endfor
 
 % if rperiodic:
     // Rotate the common normal flux into the RHS frame
-% for i, expr in enumerate(['ficomm[0]', *pyfr.matvec('rmat', 'ficomm[{j} + 1]', ndims), f'ficomm[{nvars - 1}]']):
-    ur[${i}] = ${expr};
-% endfor
+    ${pyfr.expand('rotate', 'rmat', 'ficomm', off=1, transpose=False)};
 % endif
+
+% for i in range(nvars):
+    ur[${i}] = -mag_nl*ficomm[${i}];
+% endfor
 </%pyfr:kernel>
