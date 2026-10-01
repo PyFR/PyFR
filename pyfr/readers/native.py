@@ -567,7 +567,8 @@ class NativeReader:
         g2l = self._build_g2l()
         lcidx, leidx, lgidx, rcidx, rgidx = self._flatten_faces(g2l)
 
-        con = lambda c, e, t=None: Connectivity(c, e, cidxmap, t)
+        ident = np.eye(self.mesh.ndims), np.zeros(self.mesh.ndims)
+        con = lambda c, e, t=ident: Connectivity(c, e, cidxmap, t)
 
         # Start by constructing the boundary connectivity
         for bccidx in np.unique(rcidx[rgidx == -1]):

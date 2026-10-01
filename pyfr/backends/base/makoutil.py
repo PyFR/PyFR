@@ -54,6 +54,13 @@ def dot(context, a_, b_=None, /, **kwargs):
     return '(' + ' + '.join(ab.format(**{ix: i}) for i in range(*nd)) + ')'
 
 
+def matvec(context, mat, vec, n, transpose=False):
+    def row(i):
+        return f'{mat}[{{j}}][{i}]' if transpose else f'{mat}[{i}][{{j}}]'
+
+    return [dot(context, row(i), vec, j=n) for i in range(n)]
+
+
 def array(context, expr_, vals_={}, /, **kwargs):
     ix = util.first(kwargs)
     ni = kwargs.pop(ix)

@@ -32,19 +32,21 @@ class NavierStokesIntInters(TplargsMixin,
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        self._tplargs['rperiodic'] = self._rperiodic
+
         self._be.pointwise.register('pyfr.solvers.navstokes.kernels.intconu')
         self._be.pointwise.register('pyfr.solvers.navstokes.kernels.intcflux')
 
         self.kernels['con_u'] = lambda: self._be.kernel(
             'intconu', tplargs=self._tplargs, dims=[self.ninterfpts],
             ulin=self.scal_lhs, urin=self.scal_rhs,
-            ulout=self._comm_lhs, urout=self._comm_rhs
+            ulout=self._comm_lhs, urout=self._comm_rhs, rmat=self._rotmat
         )
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'intcflux', tplargs=self._tplargs, dims=[self.ninterfpts],
             ul=self.scal_lhs, ur=self.scal_rhs,
             gradul=self._vect_lhs, gradur=self._vect_rhs,
-            artvisc=self.artvisc, nl=self._pnorm_lhs
+            artvisc=self.artvisc, nl=self._pnorm_lhs, rmat=self._rotmat
         )
 
 

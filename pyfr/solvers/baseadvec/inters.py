@@ -21,6 +21,11 @@ class BaseAdvectionIntInters(BaseInters):
         self.lhs = lhs
         self.rhs = rhs
 
+        # Store the periodic rotation matrix
+        rot = rhs.transform[0]
+        self._rperiodic = not np.allclose(rot, np.eye(self.ndims))
+        self._rotmat = be.const_matrix(rot) if self._rperiodic else None
+
         # Permute the RHS flux points so they pair with those of the LHS
         self._rhs_reorder = self._gen_rhs_reorder(lhs, rhs)
 
@@ -37,13 +42,11 @@ class BaseAdvectionIntInters(BaseInters):
         self._perm = self._get_perm_for_field(lhs, scal, self.blksz)
 
     def _gen_rhs_reorder(self, lhs, rhs, tol=1e-6):
-        # Faces which share a frame have their flux points paired already
-        if rhs.transform is None:
-            return None
-
         rot, shift = rhs.transform
-        if not np.allclose(rot, np.eye(len(shift))):
-            raise ValueError('Rotational periodicity is not supported')
+
+        # Faces which share a frame have their flux points paired already
+        if not self._rperiodic and not np.any(shift):
+            return None
 
         # Map the LHS flux points into the RHS frame
         lpts = self._inter_ploc(lhs) @ rot.T + shift
