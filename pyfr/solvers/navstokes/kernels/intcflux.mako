@@ -25,7 +25,8 @@ rflux = 'ficomm' if rperiodic else 'ur'
 
 % if rperiodic:
     // Rotate the RHS momentum into the LHS frame: R^T
-    fpdtype_t url[] = ${pyfr.carray(pyfr.rotstate('rmat', 'ur', ndims, True))};
+<% mom = pyfr.matvec('rmat', 'ur[{j} + 1]', ndims, True) %>
+    fpdtype_t url[] = ${pyfr.carray(['ur[0]', *mom, f'ur[{nvars - 1}]'])};
 
 % if beta != 0.5:
     // Rotate the RHS gradient into the LHS frame
@@ -93,7 +94,8 @@ rflux = 'ficomm' if rperiodic else 'ur'
 
 % if rperiodic:
     // Rotate the common normal flux into the RHS frame
-% for i, expr in enumerate(pyfr.rotstate('rmat', 'ficomm', ndims)):
+<% mom = pyfr.matvec('rmat', 'ficomm[{j} + 1]', ndims) %>
+% for i, expr in enumerate(['ficomm[0]', *mom, f'ficomm[{nvars - 1}]']):
     ur[${i}] = ${expr};
 % endfor
 % endif

@@ -15,7 +15,8 @@
 
 % if rperiodic:
     // Rotate the RHS momentum into the LHS frame: R^T
-    fpdtype_t url[] = ${pyfr.carray(pyfr.rotstate('rmat', 'ur', ndims, True))};
+<% mom = pyfr.matvec('rmat', 'ur[{j} + 1]', ndims, True) %>
+    fpdtype_t url[] = ${pyfr.carray(['ur[0]', *mom, f'ur[{nvars - 1}]'])};
 % endif
 
     // Perform the Riemann solve in the LHS frame
@@ -30,7 +31,8 @@
 
 % if rperiodic:
     // Rotate the common normal flux into the RHS frame
-% for i, expr in enumerate(pyfr.rotstate('rmat', 'fn', ndims)):
+<% mom = pyfr.matvec('rmat', 'fn[{j} + 1]', ndims) %>
+% for i, expr in enumerate(['fn[0]', *mom, f'fn[{nvars - 1}]']):
     ur[${i}] = ${expr};
 % endfor
 % endif
