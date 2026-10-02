@@ -1,6 +1,7 @@
 from pyfr.cache import memoize
 from pyfr.integrators.explicit.base import BaseExplicitIntegrator
-from pyfr.integrators.registers import (DynamicVectorRegister, ScalarRegister,
+from pyfr.integrators.registers import (DynamicScalarRegister,
+                                        DynamicVectorRegister, ScalarRegister,
                                         VectorRegister)
 
 
@@ -11,6 +12,7 @@ class BaseExplicitStepper(BaseExplicitIntegrator):
 class ExplicitEulerStepper(BaseExplicitStepper):
     stepper_name = 'euler'
     stepper_has_errest = False
+    stepper_has_comp_accum = True
     stepper_order = 1
 
     _ut = ScalarRegister()
@@ -18,7 +20,11 @@ class ExplicitEulerStepper(BaseExplicitStepper):
 
     def step(self, t, dt):
         self._rhs(t, self._ut, self._f)
-        self._add(1.0, self._ut, dt, self._f)
+
+        if self.comp_accum:
+            self._add_with_comp(self._ut, self._ut, dt, self._f)
+        else:
+            self._add(1.0, self._ut, dt, self._f)
 
         return self._ut
 
@@ -26,90 +32,152 @@ class ExplicitEulerStepper(BaseExplicitStepper):
 class TVDRK3Stepper(BaseExplicitStepper):
     stepper_name = 'tvd-rk3'
     stepper_has_errest = False
+    stepper_has_comp_accum = True
     stepper_order = 3
 
     _regidx = VectorRegister(n=3)
 
     def step(self, t, dt):
-        add, rhs = self._add, self._rhs
+        add, add_with_comp, rhs = self._add, self._add_with_comp, self._rhs
 
-        # Get the bank indices for each register (n, n+1, rhs)
-        r0, r1, r2 = self._regidx
+        if self.comp_accum:
+            # Get the bank indices (n, stage, flux sum); u(t) is held in r0
+            r0, r1, r2 = self._regidx
 
-        # Ensure r0 references the bank containing u(t)
-        if r0 != self.idxcurr:
-            r0, r1 = r1, r0
+            # First stage; r2 = -∇·f(r0); r1 = r0 + dt*r2
+            rhs(t, r0, r2)
+            add_with_comp(r1, r0, dt, r2)
 
-        # First stage; r2 = -∇·f(r0); r1 = r0 + dt*r2
-        rhs(t, r0, r2)
-        add(0.0, r1, 1.0, r0, dt, r2)
+            # Second stage; r1 = -∇·f(r1); r2 = r2 + r1; r1 = r0 + 0.25*dt*r2
+            rhs(t + dt, r1, r1)
+            add(1.0, r2, 1.0, r1)
+            add_with_comp(r1, r0, 0.25*dt, r2)
 
-        # Second stage; r2 = -∇·f(r1); r1 = 0.75*r0 + 0.25*r1 + 0.25*dt*r2
-        rhs(t + dt, r1, r2)
-        add(0.25, r1, 0.75, r0, 0.25*dt, r2)
+            # Third stage; r1 = -∇·f(r1); r0 = r0 + dt/6*r2 + 2/3*dt*r1
+            rhs(t + 0.5*dt, r1, r1)
+            add_with_comp(r0, r0, dt/6.0, r2, 2.0/3.0*dt, r1)
 
-        # Third stage; r2 = -∇·f(r1);
-        #              r1 = 1.0/3.0*r0 + 2.0/3.0*r1 + 2.0/3.0*dt*r2
-        rhs(t + 0.5*dt, r1, r2)
-        add(2.0/3.0, r1, 1.0/3.0, r0, 2.0/3.0*dt, r2)
+            # Return the index of the bank containing u(t + dt)
+            return r0
+        else:
+            # Get the bank indices for each register (n, n+1, rhs)
+            r0, r1, r2 = self._regidx
 
-        # Return the index of the bank containing u(t + dt)
-        return r1
+            # Ensure r0 references the bank containing u(t)
+            if r0 != self.idxcurr:
+                r0, r1 = r1, r0
+
+            # First stage; r2 = -∇·f(r0); r1 = r0 + dt*r2
+            rhs(t, r0, r2)
+            add(0.0, r1, 1.0, r0, dt, r2)
+
+            # Second stage; r2 = -∇·f(r1); r1 = 0.75*r0 + 0.25*r1 + 0.25*dt*r2
+            rhs(t + dt, r1, r2)
+            add(0.25, r1, 0.75, r0, 0.25*dt, r2)
+
+            # Third stage; r2 = -∇·f(r1);
+            #              r1 = 1.0/3.0*r0 + 2.0/3.0*r1 + 2.0/3.0*dt*r2
+            rhs(t + 0.5*dt, r1, r2)
+            add(2.0/3.0, r1, 1.0/3.0, r0, 2.0/3.0*dt, r2)
+
+            # Return the index of the bank containing u(t + dt)
+            return r1
 
 
 class RK4Stepper(BaseExplicitStepper):
     stepper_name = 'rk4'
     stepper_has_errest = False
+    stepper_has_comp_accum = True
     stepper_order = 4
 
     _regidx = VectorRegister(n=3)
 
     def step(self, t, dt):
-        add, rhs = self._add, self._rhs
+        add, add_with_comp, rhs = self._add, self._add_with_comp, self._rhs
 
-        # Get the bank indices for each register
-        r0, r1, r2 = self._regidx
+        if self.comp_accum:
+            # Get the bank indices (n, increment, stage); u(t) is held in r0
+            r0, r1, r2 = self._regidx
 
-        # Ensure r0 references the bank containing u(t)
-        if r0 != self.idxcurr:
-            r0, r1 = r1, r0
+            # First stage; r1 = -∇·f(r0)
+            rhs(t, r0, r1)
 
-        # First stage; r1 = -∇·f(r0)
-        rhs(t, r0, r1)
+            # Second stage; r2 = r0 + dt/2*r1; r2 = -∇·f(r2)
+            add_with_comp(r2, r0, dt/2.0, r1)
+            rhs(t + dt/2.0, r2, r2)
 
-        # Second stage; r2 = r0 + dt/2*r1; r2 = -∇·f(r2)
-        add(0.0, r2, 1.0, r0, dt/2.0, r1)
-        rhs(t + dt/2.0, r2, r2)
+            # Start the step increment in r1; r1 = dt/6*r1 + dt/3*r2
+            add(dt/6.0, r1, dt/3.0, r2)
 
-        # As no subsequent stages depend on the first stage we can
-        # reuse its register to start accumulating the solution with
-        # r1 = r0 + dt/6*r1 + dt/3*r2
-        add(dt/6.0, r1, 1.0, r0, dt/3.0, r2)
+            # Third stage; r2 = r0 + dt/2*r2; r2 = -∇·f(r2)
+            add_with_comp(r2, r0, dt/2.0, r2)
+            rhs(t + dt/2.0, r2, r2)
 
-        # Third stage; here we reuse the r2 register
-        # r2 = r0 + dt/2*r2
-        # r2 = -∇·f(r2)
-        add(dt/2.0, r2, 1.0, r0)
-        rhs(t + dt/2.0, r2, r2)
+            # Accumulate; r1 = r1 + dt/3*r2
+            add(1.0, r1, dt/3.0, r2)
 
-        # Accumulate; r1 = r1 + dt/3*r2
-        add(1.0, r1, dt/3.0, r2)
+            # Fourth stage; r2 = r0 + dt*r2; r2 = -∇·f(r2)
+            add_with_comp(r2, r0, dt, r2)
+            rhs(t + dt, r2, r2)
 
-        # Fourth stage; again we reuse r2
-        # r2 = r0 + dt*r2
-        # r2 = -∇·f(r2)
-        add(dt, r2, 1.0, r0)
-        rhs(t + dt, r2, r2)
+            # Add the increment to the solution; r0 = r0 + r1 + dt/6*r2
+            add_with_comp(r0, r0, 1.0, r1, dt/6.0, r2)
 
-        # Final accumulation r1 = r1 + dt/6*r2 = u(t + dt)
-        add(1.0, r1, dt/6.0, r2)
+            # Return the index of the bank containing u(t + dt)
+            return r0
+        else:
+            # Get the bank indices for each register
+            r0, r1, r2 = self._regidx
 
-        # Return the index of the bank containing u(t + dt)
-        return r1
+            # Ensure r0 references the bank containing u(t)
+            if r0 != self.idxcurr:
+                r0, r1 = r1, r0
+
+            # First stage; r1 = -∇·f(r0)
+            rhs(t, r0, r1)
+
+            # Second stage; r2 = r0 + dt/2*r1; r2 = -∇·f(r2)
+            add(0.0, r2, 1.0, r0, dt/2.0, r1)
+            rhs(t + dt/2.0, r2, r2)
+
+            # As no subsequent stages depend on the first stage we can
+            # reuse its register to start accumulating the solution with
+            # r1 = r0 + dt/6*r1 + dt/3*r2
+            add(dt/6.0, r1, 1.0, r0, dt/3.0, r2)
+
+            # Third stage; here we reuse the r2 register
+            # r2 = r0 + dt/2*r2
+            # r2 = -∇·f(r2)
+            add(dt/2.0, r2, 1.0, r0)
+            rhs(t + dt/2.0, r2, r2)
+
+            # Accumulate; r1 = r1 + dt/3*r2
+            add(1.0, r1, dt/3.0, r2)
+
+            # Fourth stage; again we reuse r2
+            # r2 = r0 + dt*r2
+            # r2 = -∇·f(r2)
+            add(dt, r2, 1.0, r0)
+            rhs(t + dt, r2, r2)
+
+            # Final accumulation r1 = r1 + dt/6*r2 = u(t + dt)
+            add(1.0, r1, dt/6.0, r2)
+
+            # Return the index of the bank containing u(t + dt)
+            return r1
 
 
 class RKVdH2RStepper(BaseExplicitStepper):
+    stepper_has_comp_accum = True
+
+    # Solution, stage, and, if not compensated, old solution registers
     _regidx = DynamicVectorRegister()
+
+    # Step increment for compensated stepping
+    _rinc = DynamicScalarRegister()
+
+    # Error estimate
+    _rerr = DynamicScalarRegister()
 
     # Coefficients
     a = []
@@ -117,8 +185,6 @@ class RKVdH2RStepper(BaseExplicitStepper):
     bhat = []
 
     def __init__(self, *args, **kwargs):
-        self._size_register(self._regidx, 4 if self.stepper_has_errest else 2)
-
         super().__init__(*args, **kwargs)
 
         # Register our pointwise kernel
@@ -132,41 +198,66 @@ class RKVdH2RStepper(BaseExplicitStepper):
 
         self._nstages = len(self.c)
 
+    def _size_registers(self):
+        comp_accum, errest = self.comp_accum, self.stepper_has_errest
+
+        # Keep a copy of the solution for rejected steps unless compensated
+        nregs = 3 if errest and not comp_accum else 2
+        self._size_register(self._regidx, nregs)
+        self._size_register(self._rinc, int(comp_accum))
+        self._size_register(self._rerr, int(errest))
+
     @memoize
-    def _get_rkvdh2_kerns(self, stage, r1, r2, rold=None, rerr=None):
+    def _get_rkvdh2_kerns(self, stage, r1, r2, rold=None):
         kerns = []
+        errest, comp_accum = self.stepper_has_errest, self.comp_accum
         tplargs = {
             'a': self.a, 'b': self.b, 'e': self.e,
             'stage': stage, 'nstages': self._nstages,
-            'nvars': self.system.nvars, 'errest': rold is not None
+            'nvars': self.system.nvars, 'errest': errest,
+            'comp_accum': comp_accum
         }
 
-        for dims, em in zip(self.system.ele_shapes.values(),
-                            self.system.ele_banks):
-            if rold is not None:
-                kern = self.backend.kernel(
-                    'rkvdh2', tplargs=tplargs, dims=[dims[0], dims[2]],
-                    r1=em[r1], r2=em[r2], rold=em[rold], rerr=em[rerr],
-                )
-            else:
-                kern = self.backend.kernel(
-                    'rkvdh2', tplargs=tplargs, dims=[dims[0], dims[2]],
-                    r1=em[r1], r2=em[r2],
-                )
+        # Renormalise into the solution bank unless the step may be rejected
+        rout = r2 if errest else r1
 
+        shapes, banks = self.system.ele_shapes.values(), self.system.ele_banks
+        for (nupts, _, neles), em, cm in zip(shapes, banks, self._comp):
+            kargs = {'r1': em[r1], 'r2': em[r2]}
+
+            if errest:
+                kargs['rerr'] = em[self._rerr]
+
+            if rold is not None:
+                kargs['rold'] = em[rold]
+
+            if comp_accum:
+                kargs |= {'rinc': em[self._rinc], 'r1c': cm[r1],
+                          'routc': cm[rout]}
+
+            kern = self.backend.kernel('rkvdh2', tplargs=tplargs,
+                                       dims=[nupts, neles], **kargs)
             kerns.append(kern)
 
         return kerns
 
     @property
     def stepper_has_errest(self):
-        return self.controller_needs_errest and len(self.bhat)
+        return self.controller_needs_errest and bool(self.bhat)
+
+    def _comp_accum_banks(self):
+        # Compensate both solution banks when steps may be rejected
+        if self.stepper_has_errest:
+            return self._regidx
+        else:
+            return super()._comp_accum_banks()
 
     def step(self, t, dt):
         run_kernels = self.backend.run_kernels
 
+        # Solution bank followed by the stage bank and any old solution bank
         r1 = self.idxcurr
-        r2, *rs = set(self._regidx) - {r1}
+        r2, *rold = (r for r in self._regidx if r != r1)
 
         # Evaluate the stages in the scheme
         for i, ci in enumerate(self.c):
@@ -174,7 +265,7 @@ class RKVdH2RStepper(BaseExplicitStepper):
             self._rhs(t + ci*dt, r2 if i > 0 else r1, r2)
 
             # Fetch the appropriate RK accumulation kernels
-            kerns = self._get_rkvdh2_kerns(i, r1, r2, *rs)
+            kerns = self._get_rkvdh2_kerns(i, r1, r2, *rold)
 
             # Bind the arguments
             for k in kerns:
@@ -183,11 +274,19 @@ class RKVdH2RStepper(BaseExplicitStepper):
             # Execute
             run_kernels(kerns)
 
-            # Swap
-            r1, r2 = r2, r1
+            # Swap unless the solution is held fixed for compensation
+            if not self.comp_accum:
+                r1, r2 = r2, r1
 
-        # Return
-        return (r2, *rs) if len(rs) else r2
+        # Return the bank containing u(t + dt)
+        if not self.stepper_has_errest:
+            return r1 if self.comp_accum else r2
+        # Return u(t + dt), the retained u(t), and the error estimate
+        elif self.comp_accum:
+            return (r2, r1, self._rerr)
+        # Return u(t + dt), the copy of u(t), and the error estimate
+        else:
+            return (r2, *rold, self._rerr)
 
 
 class RK34Stepper(RKVdH2RStepper):
