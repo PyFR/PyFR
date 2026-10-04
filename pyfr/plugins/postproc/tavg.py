@@ -97,7 +97,7 @@ class TavgDataMixin:
         # Mean fields stand in for the primitives at export time
         try:
             return [self.avg(v) for v in privars]
-        except ValueError:
+        except KeyError:
             raise RuntimeError('Postproc on averages requires mean '
                                'statistics for all primitive variables')
 
