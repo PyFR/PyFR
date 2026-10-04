@@ -127,7 +127,8 @@ class NavierStokesNoSlpIsotWallBCInters(NavierStokesBaseBCInters):
         # Mirrors bc_ldg_state in no-slp-isot-wall.mako
         consts = cfg.items_as('constants', float)
 
-        c = {'gamma': consts['gamma'], 'cpTw': cfg.getfloat(cfgsect, 'cpTw')}
+        c = {'gamma': consts['gamma'],
+             'cpTw': npeval(cfg.getexpr(cfgsect, 'cpTw'), consts)}
         for v in 'uvw'[:ndims]:
             c[v] = npeval(cfg.getexpr(cfgsect, v, '0'), consts)
 
