@@ -76,7 +76,7 @@ class ConduitError(Exception): pass
 class ConduitWrappers(LibWrapper):
     _libname = 'conduit'
     _errtype = c_void_p
-    _mode = RTLD_GLOBAL
+    _libmode = RTLD_GLOBAL
 
     # Functions
     _functions = [
