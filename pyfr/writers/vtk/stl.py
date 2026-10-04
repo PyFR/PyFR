@@ -140,7 +140,7 @@ class VTKSTLWriter(BaseVTKWriter):
         mesh, soln = self.mesh, self.soln
         pts, pinv, spts, slocs = self._stl_pts
         _, rank, root = get_comm_rank_root()
-        nsoln = len(self._soln_fields)
+        nsoln = len(soln.layout)
 
         # STL carries no per-element cell data; keep only point fields
         self._extra_fields = {n: m for n, m in self._extra_fields.items()

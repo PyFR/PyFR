@@ -3,6 +3,8 @@ from functools import cached_property
 
 import numpy as np
 
+from pyfr.plugins.common import get_elementscls
+from pyfr.readers.native import block_names
 from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where
 
@@ -12,24 +14,20 @@ FaceInfo = namedtuple('FaceInfo', 'etype fidx svpts norm')
 class PostProcData:
     kind = 'volume'
 
-    def __init__(self, cfg, pris, ploc=None, grad_pris=None):
+    def __init__(self, cfg, pvars, ploc=None):
         self.cfg = cfg
-        self.pris = list(pris)
-        self.grad_pris = grad_pris
+        self.pvars = pvars
         self.ploc = ploc
         self.fields = {}
 
     @classmethod
     def from_soln(cls, soln, samples, ploc, *args):
-        # Split stacked samples into fields and per-field gradient blocks
-        nv, ng = len(soln.fields), len(soln.fields)*(1 + len(ploc))
-        grads = np.split(samples[nv:ng], nv) if len(samples) >= ng else None
+        # Name the primitive variables and any gradients and residuals
+        ndims, cfg = len(ploc), soln.config
+        privars = get_elementscls(cfg).privars(ndims, cfg)
+        names = privars + block_names(privars, ndims, soln.blocks)
 
-        return cls(soln.config, samples[:nv], ploc, grads, *args)
-
-    @property
-    def nvars(self):
-        return len(self.pris)
+        return cls(cfg, dict(zip(names, samples)), ploc, *args)
 
     @property
     def ndims(self):
@@ -37,14 +35,17 @@ class PostProcData:
 
     @property
     def has_grads(self):
-        return self.grad_pris is not None
+        return any(n.startswith('grad_') for n in self.pvars)
+
+    def __getitem__(self, name):
+        return self.pvars[name]
 
 
 class BoundaryPostProcData(PostProcData):
     kind = 'boundary'
 
-    def __init__(self, cfg, pris, ploc, grad_pris, elementscls, spts, finfo):
-        super().__init__(cfg, pris, ploc, grad_pris)
+    def __init__(self, cfg, pvars, ploc, elementscls, spts, finfo):
+        super().__init__(cfg, pvars, ploc)
 
         self._elementscls = elementscls
         self._spts = spts

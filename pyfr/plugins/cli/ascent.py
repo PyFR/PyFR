@@ -6,8 +6,7 @@ from pyfr.inifile import Inifile
 from pyfr.mpiutil import init_mpi
 from pyfr.plugins.base import BaseCLIPlugin
 from pyfr.plugins.common import cli_external
-from pyfr.plugins.soln.ascent import (AscentRenderer, con_psolns_pgrads,
-                                      face_shape_ops)
+from pyfr.plugins.soln.ascent import AscentRenderer, con_pvars, face_shape_ops
 from pyfr.readers.native import NativeReader
 from pyfr.shapes import BaseShape
 from pyfr.stats import tavg_exprs
@@ -67,11 +66,12 @@ class _CLIAdapter:
                        for v in 'uvw'[:self.mesh.ndims]
                        for d in 'xyz'[:self.mesh.ndims])
         else:
-            return bool(self._soln.grad_data)
+            return 'grad' in self._soln.blocks
 
     @property
     def soln(self):
-        return {et: self._soln.data[et] for et in self.mesh.eidxs}
+        nv = len(self._soln.fields)
+        return {et: self._soln.data[et][:, :nv] for et in self.mesh.eidxs}
 
     @property
     def grad_soln(self):
@@ -79,39 +79,29 @@ class _CLIAdapter:
         if self.is_tavg:
             return None
         else:
-            return {et: self._soln.grad_data[et] for et in self.mesh.eidxs}
+            nv, nd = len(self._soln.fields), self.mesh.ndims
+            grads = {}
+            for et in self.mesh.eidxs:
+                g = self._soln.data[et][:, nv:nv*(nd + 1)]
+                grads[et] = g.reshape(len(g), nv, nd, -1).transpose(2, 0, 1, 3)
 
-    def psolns_pgrads(self, csolns, cgrads):
+            return grads
+
+    def pvars(self, csolns, cgrads):
         if self.is_tavg:
-            return self._tavg_psolns_pgrads(csolns)
+            return self._tavg_pvars(csolns)
         else:
-            ecls, scfg = self.elementscls, self.scfg
-            return con_psolns_pgrads(ecls, scfg, csolns, cgrads)
+            return con_pvars(self.elementscls, self.scfg, self.mesh.ndims,
+                             csolns, cgrads)
 
-    def _tavg_psolns_pgrads(self, csolns):
-        ndims = self.mesh.ndims
-        privars = self.elementscls.privars(ndims, self.scfg)
+    def _tavg_pvars(self, csolns):
+        privars = self.elementscls.privars(self.mesh.ndims, self.scfg)
         idx = self._tavg_indices
 
         if missing := [pn for pn in privars if pn not in idx]:
             raise KeyError(f'Tavg missing primitives: {missing}')
 
-        psolns = [csolns[idx[pn]] for pn in privars]
-
-        # Per-variable grad list; vars with any missing dim become None
-        pgrads = []
-        for pn in privars:
-            ks = [f'grad_{pn}_{d}' for d in 'xyz'[:ndims]]
-            if all(k in idx for k in ks):
-                pgrads.append(np.stack([csolns[idx[k]] for k in ks]))
-            else:
-                pgrads.append(None)
-
-        # Collapse to None so downstream postproc skips grads entirely
-        if not any(g is not None for g in pgrads):
-            pgrads = None
-
-        return psolns, pgrads
+        return {s: csolns[i] for s, i in idx.items()}
 
     def soln_op_vpts(self, etype, divisor):
         meshf = self.mesh.spts[etype]

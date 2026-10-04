@@ -29,13 +29,9 @@ class TavgDataMixin:
         return self.soln.config
 
     @property
-    def nvars(self):
-        return len(self.soln.fields)
-
-    @property
     def has_grads(self):
         # The layout expansion appends rows for the gradients
-        return any(n.startswith('grad_') for n in self.soln.layout)
+        return 'grad' in self.soln.blocks
 
     @cached_property
     def elementscls(self):
@@ -90,23 +86,17 @@ class TavgDataMixin:
     def grid_h(self, i):
         return self._samples[self._rows['grid_hmin'] + i]
 
-    @cached_property
-    def pris(self):
-        privars = self.elementscls.privars(self.ndims, self.cfg)
-
-        # Mean fields stand in for the primitives at export time
-        try:
-            return [self.avg(v) for v in privars]
-        except KeyError:
-            raise RuntimeError('Postproc on averages requires mean '
-                               'statistics for all primitive variables')
-
-    @cached_property
-    def grad_pris(self):
-        privars = self.elementscls.privars(self.ndims, self.cfg)
-
+    def __getitem__(self, name):
         # Gradients of the mean fields stand in for those of the primitives
-        return [self.grad_avg(v) for v in privars]
+        if m := re.fullmatch(r'grad_(\w+?)_([xyz])', name):
+            return self.grad_avg(m[1])['xyz'.index(m[2])]
+        else:
+            # Mean fields stand in for the primitives at export time
+            try:
+                return self.avg(name)
+            except KeyError:
+                raise RuntimeError('Postproc on averages requires mean '
+                                   'statistics for all primitive variables')
 
 
 class TavgPostProcData(TavgDataMixin, PostProcData):

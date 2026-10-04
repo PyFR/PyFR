@@ -16,7 +16,7 @@ from pyfr.plugins.base import BaseCLIPlugin
 from pyfr.plugins.common import cli_external, get_elementscls
 from pyfr.plugins.postproc import get_source
 from pyfr.points import PointLocator, PointSampler
-from pyfr.readers.native import NativeReader
+from pyfr.readers.native import NativeReader, block_names
 from pyfr.series import (acf, csd, mean_ci, mser, psd, structfun, tone,
                          tw_mean_var, xcf)
 from pyfr.stats import eval_algebraic, expand_exprs, soln_exprs
@@ -822,21 +822,10 @@ class SamplerCLIPlugin(BaseCLIPlugin):
         source.prepare(mesh, soln, pipe.plugins)
 
         # Determine if gradient and residual data are present
-        has_grads = bool(soln.grad_data)
-        has_resid = bool(soln.resid_data)
+        blocks = soln.blocks
 
-        # If gradients or residuals exist, stack them into the solution
-        sdata = []
-        for etype in mesh.eidxs:
-            d = soln.data[etype]
-            if has_grads:
-                g = soln.grad_data[etype].transpose(1, 2, 0, 3)
-                g = g.reshape(g.shape[0], -1, g.shape[3])
-                d = np.concatenate([d, g], axis=1)
-            if has_resid:
-                d = np.concatenate([d, soln.resid_data[etype]], axis=1)
-
-            sdata.append(d)
+        # Gather the solution data for each element type
+        sdata = [soln.data[etype] for etype in mesh.eidxs]
 
         # Handle conversion from conservative to primitive variables
         if args.format == 'primitive':
@@ -848,22 +837,13 @@ class SamplerCLIPlugin(BaseCLIPlugin):
             elementscls = get_elementscls(soln.config)
             vmap = elementscls.privars(mesh.ndims, soln.config)
 
-            fields = list(vmap)
-            if has_grads:
-                fields.extend(f'grad_{v}_{d}' for v in vmap for d in dims)
-            if has_resid:
-                fields.extend(f'resid_{v}' for v in vmap)
+            fields = [*vmap, *block_names(vmap, mesh.ndims, blocks)]
 
             process = partial(con_block_to_pri, elementscls, soln.config,
-                              mesh.ndims, grads=has_grads, resid=has_resid)
+                              mesh.ndims, blocks=blocks)
         else:
             process = None
             fields = list(soln.layout)
-            if has_grads:
-                fields.extend(f'grad_{v}_{d}'
-                              for v in soln.fields for d in dims)
-            if has_resid:
-                fields.extend(f'resid_{v}' for v in soln.fields)
 
         # Construct and configure the point sampler
         sampler = PointSampler(mesh, pts, locs)

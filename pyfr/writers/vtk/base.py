@@ -6,6 +6,7 @@ import numpy as np
 from pyfr.cache import clear_memoize, memoize
 from pyfr.fields import CleanToGrid, FieldRecovery, con_block_to_pri
 from pyfr.mpiutil import get_comm_rank_root, mpi
+from pyfr.readers.native import block_names
 from pyfr.shapes import BaseShape, interp_pts
 from pyfr.subdiv import get_subdiv
 from pyfr.util import first, subclass_where
@@ -132,7 +133,7 @@ class BaseVTKWriter(BaseWriter):
 
     def _pre_proc_fields_soln(self, soln):
         return con_block_to_pri(self.elementscls, self.cfg, self.ndims,
-                                soln, grads=self._gradients, resid=self._resid)
+                                soln, self.soln.blocks)
 
     def _pre_proc_fields_scal(self, soln):
         return soln
@@ -228,10 +229,6 @@ class BaseVTKWriter(BaseWriter):
             self._vtk_vars = self.elementscls.visvars(self.ndims, self.cfg)
             self.tcurr = self.stats.getfloat('solver-time-integrator', 'tcurr')
 
-            # See if our solution contains gradient or residual data
-            self._gradients = bool(self.soln.grad_data)
-            self._resid = bool(self.soln.resid_data)
-
             # Gradients are only defined for systems which compute them
             self._can_grads = self.elementscls.has_grad_soln
         # Otherwise we're dealing with simple scalar data (e.g., tavg)
@@ -241,7 +238,7 @@ class BaseVTKWriter(BaseWriter):
             self._soln_fields = list(self.soln.fields)
             self._vtk_vars = {k: [k] for k in self._soln_fields}
             self.tcurr = None
-            self._gradients = self._resid = self._can_grads = False
+            self._can_grads = False
 
         # Classify aux + register pp output fields
         self._build_extra_fields()
@@ -251,14 +248,13 @@ class BaseVTKWriter(BaseWriter):
             self._subset_fields(want)
 
         # Synthesise corrected gradients for files without stored ones
-        if self._can_grads and not self._gradients:
+        if self._can_grads and 'grad' not in self.soln.blocks:
             if (any(f.startswith('grad ') for f in want) or
                 self.pp_pipe.needs_grads):
                 self._synth_grads()
 
         # Stack any gradient and residual blocks needed for the output
-        if self._gradients or self._resid:
-            self._stack_blocks(want)
+        self._stack_blocks(want)
 
         # Give the data source a chance to augment the solution
         self.source.prepare(self.mesh, self.soln, self.pp_pipe.plugins)
@@ -271,9 +267,9 @@ class BaseVTKWriter(BaseWriter):
     def _subset_fields(self, want):
         # Validate the request against everything the file can provide
         known = self._vtk_vars.keys() | self._extra_fields.keys()
-        if self._gradients or self._can_grads:
+        if self._can_grads:
             known |= {f'grad {v}' for v in self._vtk_vars}
-        if self._resid:
+        if 'resid' in self.soln.blocks:
             known |= {f'resid {v}' for v in self._vtk_vars}
 
         if missing := want - known:
@@ -285,54 +281,48 @@ class BaseVTKWriter(BaseWriter):
 
     def _synth_grads(self):
         rec = FieldRecovery(self.mesh, self.elementscls, self.cfg)
-        bcrows = ('con', list(range(len(self._soln_fields))))
+        nvars = len(self.soln.fields)
+        bcvars = ('con', list(range(nvars)))
+        data = self.soln.data
 
-        for et, g in rec.grad_corrected(self.soln.data, bcrows).items():
-            self.soln.grad_data[et] = g.transpose(2, 0, 1, 3)
+        # Insert the gradients between the fields and any residuals
+        fmap = {et: d[:, :nvars] for et, d in data.items()}
+        for et, g in rec.grad_corrected(fmap, bcvars).items():
+            d = data[et]
+            g = g.reshape(len(d), -1, d.shape[-1])
+            data[et] = np.concatenate([d[:, :nvars], g, d[:, nvars:]], axis=1)
 
-        self._gradients = True
+        gnames = block_names(self.soln.fields, self.ndims, {'grad'})
+        self.soln.layout[nvars:nvars] = gnames
 
     def _stack_blocks(self, want):
-        pnames = list(self._soln_fields)
+        pnames, vitems = list(self._soln_fields), list(self._vtk_vars.items())
 
-        # Stack a data block and derive its field and VTK names
-        def stack_block(data, prefix, nmap):
-            for et in list(self.soln.data):
-                self.soln.data[et] = np.concatenate(
-                    [self.soln.data[et], data(et)], axis=1
-                )
+        # Derive the field and VTK names of a data block
+        def name_block(prefix):
+            self._soln_fields += block_names(pnames, self.ndims, {prefix})
+            for var, vfields in vitems:
+                vnames = block_names(vfields, self.ndims, {prefix})
+                self._vtk_vars[f'{prefix} {var}'] = vnames
 
-            self._soln_fields.extend(nmap(pnames))
-            for var, vfields in list(self._vtk_vars.items()):
-                if not var.startswith(('grad ', 'resid ')):
-                    self._vtk_vars[f'{prefix} {var}'] = nmap(vfields)
-
-        def wanted(p):
-            return not want or any(f.startswith(f'{p} ') for f in want)
-
-        if self._gradients:
-            # Postproc plugins consume the gradient block positionally
-            if wanted('grad') or self.pp_pipe.needs_grads:
-                def gdata(et):
-                    g = self.soln.grad_data[et].transpose(1, 2, 0, 3)
-                    return g.reshape(g.shape[0], -1, g.shape[3])
-
-                stack_block(gdata, 'grad',
-                            lambda fs: [f'{f}-{d}' for f in fs
-                                        for d in range(self.ndims)])
+        def needed(p):
+            if p == 'grad' and self.pp_pipe.needs_grads:
+                return True
             else:
-                self._gradients = False
+                return not want or any(f.startswith(f'{p} ') for f in want)
 
-            self.soln.grad_data = {}
+        # Remove the unneeded blocks from the solution
+        drop = tuple(f'{p}_' for p in ('grad', 'resid') if not needed(p))
+        keep = [not n.startswith(drop) for n in self.soln.layout]
+        if not all(keep):
+            self.soln.layout = [n for n, k in zip(self.soln.layout, keep) if k]
+            for et, d in self.soln.data.items():
+                self.soln.data[et] = d[:, keep]
 
-        if self._resid:
-            if wanted('resid'):
-                stack_block(lambda et: self.soln.resid_data[et], 'resid',
-                            lambda fs: [f'resid-{f}' for f in fs])
-            else:
-                self._resid = False
-
-            self.soln.resid_data = {}
+        # See if our solution contains gradient or residual data
+        for p in ('grad', 'resid'):
+            if p in self.soln.blocks:
+                name_block(p)
 
     def list_fields(self, solnf):
         self._load_soln(solnf)

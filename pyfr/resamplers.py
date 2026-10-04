@@ -772,7 +772,7 @@ class NativeCloudResampler(BaseCloudResampler):
             pts.append(ploc.reshape(-1, mesh.ndims))
 
             # Extract the solution at the solution points
-            supts = soln.data[etype].swapaxes(1, 2)
+            supts = soln.data[etype][:, :len(soln.fields)].swapaxes(1, 2)
             solns.append(supts.reshape(-1, supts.shape[2]))
 
         return np.vstack(pts), np.vstack(solns)

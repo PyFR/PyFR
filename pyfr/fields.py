@@ -243,14 +243,13 @@ class CleanToGrid:
         return out
 
 
-def con_block_to_pri(elementscls, cfg, ndims, block, *, grads=False,
-                     resid=False):
+def con_block_to_pri(elementscls, cfg, ndims, block, blocks=()):
     # Fields-first conservative block (+grads, +resid) to primitives
     nvars = len(elementscls.convars(ndims, cfg))
     fields = elementscls.con_to_pri(block[:nvars], cfg)
 
     # Solution gradients convert via the chain rule
-    if grads:
+    if 'grad' in blocks:
         ng = nvars*(1 + ndims)
         dcon = block[nvars:ng].reshape(nvars, ndims, *block.shape[1:])
         dpri = elementscls.diff_con_to_pri(block[:nvars], dcon, cfg)
@@ -258,7 +257,7 @@ def con_block_to_pri(elementscls, cfg, ndims, block, *, grads=False,
         fields += [f for gf in dpri for f in gf]
 
     # Residuals convert to primitive rates
-    if resid:
+    if 'resid' in blocks:
         fields += elementscls.diff_con_to_pri(block[:nvars], block[-nvars:],
                                               cfg)
 

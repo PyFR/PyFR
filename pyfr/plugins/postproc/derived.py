@@ -1,3 +1,4 @@
+from functools import cached_property
 import re
 
 from pyfr.plugins.common import get_elementscls
@@ -44,15 +45,17 @@ class TableDerivedPostProc(BasePostProcPlugin):
     def needs_grads(self):
         return any(re.search(r'\bgrad_', e) for e in self._exprs)
 
-    def _process(self, data):
+    @cached_property
+    def _pnames(self):
         privars = self.elementscls.privars(self.ndims, self.cfg)
-        ns = dict(zip(privars, data.pris))
+        words = {w for e in self._exprs for w in re.findall(r'\w+', e)}
+        grads = sorted(w for w in words if w.startswith('grad_'))
 
+        return [v for v in privars if v in words] + grads
+
+    def _process(self, data):
         # Gradient symbols reference the primitive variable gradients
-        if self.needs_grads:
-            for v, dv in zip(privars, data.grad_pris):
-                for x, dvx in zip('xyz', dv):
-                    ns[f'grad_{v}_{x}'] = dvx
+        ns = {v: data[v] for v in self._pnames}
 
         # Surface geometry symbols on boundary exports
         if self._on_boundary:

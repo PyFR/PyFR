@@ -95,6 +95,17 @@ class Mesh:
         return sects
 
 
+def block_names(fields, ndims, blocks):
+    # Name the gradient and residual variables of some fields
+    names = []
+    if 'grad' in blocks:
+        names += [f'grad_{f}_{x}' for f in fields for x in 'xyz'[:ndims]]
+    if 'resid' in blocks:
+        names += [f'resid_{f}' for f in fields]
+
+    return names
+
+
 @dataclass
 class Solution:
     config: object
@@ -102,12 +113,14 @@ class Solution:
     fields: list
     layout: list = None
     data: dict = field(default_factory=dict)
-    grad_data: dict = field(default_factory=dict)
-    resid_data: dict = field(default_factory=dict)
     aux: dict = field(default_factory=dict)
     dtypes: dict = field(default_factory=dict)
     prevcfgs: dict = field(default_factory=dict)
     state: dict = field(default_factory=dict)
+
+    @property
+    def blocks(self):
+        return {n.split('_')[0] for n in self.layout} & {'grad', 'resid'}
 
 
 class Connectivity:
@@ -248,28 +261,30 @@ class NativeReader:
 
             prefix = '' if g == 'soln' else f'{g}-'
             fields.extend(f'{prefix}{n}' for n in dtype[g].names)
-        return fields
+
+        # Append any gradient and residual variables to the layout
+        layout = fields + block_names(fields, self.mesh.ndims, dtype.names)
+
+        return fields, layout
 
     def _unpack_esoln(self, soln, etype, esoln, dtype):
         dgroups = [g for g in dtype.names if g not in ('grad', 'resid', 'aux')]
-        ne, nd = len(esoln), self.mesh.ndims
+        ne = len(esoln)
 
         def unpack(g):
-            arr = s2u(esoln[g]).reshape(ne, len(dtype[g].names), -1)
+            arr = s2u(esoln[g]).reshape(ne, -1, dtype[g][0].shape[-1])
             return np.ascontiguousarray(arr.transpose(2, 1, 0))
-
-        # Unpack all data groups into a single array
-        soln.data[etype] = np.concatenate([unpack(g) for g in dgroups], axis=1)
 
         # Gradient data
         if 'grad' in dtype.names:
-            gv = len(dtype['grad'].names)
-            g = s2u(esoln['grad']).reshape(ne, gv, nd, -1)
-            soln.grad_data[etype] = g.transpose(2, 3, 1, 0)
+            dgroups.append('grad')
 
         # Residual data has the same layout as the solution
         if 'resid' in dtype.names:
-            soln.resid_data[etype] = unpack('resid')
+            dgroups.append('resid')
+
+        # Unpack all data groups into a single array
+        soln.data[etype] = np.concatenate([unpack(g) for g in dgroups], axis=1)
 
         # Auxiliary fields
         if 'aux' in dtype.names:
@@ -314,8 +329,7 @@ class NativeReader:
 
                 # Build field list from the first dataset encountered
                 if soln.fields is None:
-                    soln.fields = self._soln_fields(f[ek].dtype)
-                    soln.layout = soln.fields
+                    soln.fields, soln.layout = self._soln_fields(f[ek].dtype)
 
                 esoln = escatter(f[ek])
                 if escatter.cnt:

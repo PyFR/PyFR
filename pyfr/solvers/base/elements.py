@@ -149,7 +149,7 @@ class BaseElements:
 
         # Interpolate its solution onto our solution points
         interp = solnb.ubasis.nodal_basis_at(self.basis.upts)
-        return interp_pts(interp, solnmat)
+        return interp_pts(interp, solnmat[:, :self.nvars])
 
     @cached_property
     def plocfpts(self):

@@ -618,7 +618,7 @@ class VTKSpanwiseWriter(BaseVTKWriter):
         shapes = {et: self._get_shape(et, self.cfg)
                   for et in self.reader.mesh.etypes}
 
-        nfields = len(self.soln.layout or self._soln_fields)
+        nfields = len(self.soln.layout)
         kwargs = dict(mesh=self.mesh, cfg=self.cfg, shapes=shapes,
                       axis=self.axis, nfields=nfields,
                       vis_pts_2d=self._vis_pts_2d())

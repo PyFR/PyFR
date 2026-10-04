@@ -21,13 +21,17 @@ from pyfr.util import (file_path_gen, first, paren_depths,
                        subclass_where)
 
 
-def con_psolns_pgrads(elementscls, scfg, csolns, cgrads):
-    psolns = elementscls.con_to_pri(csolns, scfg)
+def con_pvars(elementscls, scfg, ndims, csolns, cgrads):
+    privars = elementscls.privars(ndims, scfg)
+    pvars = dict(zip(privars, elementscls.con_to_pri(csolns, scfg)))
 
-    if cgrads is None:
-        return psolns, None
-    else:
-        return psolns, elementscls.grad_con_to_pri(csolns, cgrads, scfg)
+    # Name the primitive gradients by variable and direction
+    if cgrads is not None:
+        pgrads = elementscls.grad_con_to_pri(csolns, cgrads, scfg)
+        for v, g in zip(privars, pgrads):
+            pvars |= {f'grad_{v}_{x}': gx for x, gx in zip('xyz', g)}
+
+    return pvars
 
 
 def face_shape_ops(etype, fidx, divisor, nspts, scfg):
@@ -197,8 +201,9 @@ class _IntegratorAdapter:
     def grad_soln(self):
         return dict(zip(self.intg.system.ele_types, self.intg.grad_soln))
 
-    def psolns_pgrads(self, csolns, cgrads):
-        return con_psolns_pgrads(self.elementscls, self.scfg, csolns, cgrads)
+    def pvars(self, csolns, cgrads):
+        return con_pvars(self.elementscls, self.scfg, self.mesh.ndims,
+                         csolns, cgrads)
 
     def soln_op_vpts(self, etype, divisor):
         eles = self.intg.system.ele_map[etype]
@@ -293,8 +298,8 @@ class _VolumeAscentOutput:
         else:
             return csolns, None
 
-    def run_postproc(self, plugins, etype, psolns, pgrads):
-        data = PostProcData(self.renderer.scfg, psolns, grad_pris=pgrads)
+    def run_postproc(self, plugins, etype, pvars):
+        data = PostProcData(self.renderer.scfg, pvars)
         for pp in plugins:
             pp.run(data)
 
@@ -419,7 +424,7 @@ class _BoundaryAscentOutput(_VolumeAscentOutput):
         cgrads = np.concatenate(cgs, axis=3) if cgs else None
         return csolns, cgrads
 
-    def run_postproc(self, plugins, itype, psolns, pgrads):
+    def run_postproc(self, plugins, itype, pvars):
         r = self.renderer
         spts, elementscls = r.mesh.spts, r.adapter.elementscls
 
@@ -428,11 +433,7 @@ class _BoundaryAscentOutput(_VolumeAscentOutput):
         offset = 0
         for eidxs, etype, mop, _, fidx, svpts in self.patches[itype]:
             sl = slice(offset, offset + len(eidxs))
-            ppris = [p[..., sl] for p in psolns]
-            if pgrads is None:
-                ppgrads = None
-            else:
-                ppgrads = [g[..., sl] for g in pgrads]
+            ppvars = {k: v[..., sl] for k, v in pvars.items()}
             offset = sl.stop
 
             # Physical locations of the face visualisation points
@@ -442,8 +443,8 @@ class _BoundaryAscentOutput(_VolumeAscentOutput):
 
             norm = subclass_where(BaseShape, name=etype).faces[fidx][2]
             finfo = FaceInfo(etype, fidx, svpts, norm)
-            data = BoundaryPostProcData(r.scfg, ppris, ploc, ppgrads,
-                                        elementscls, psp, finfo)
+            data = BoundaryPostProcData(r.scfg, ppvars, ploc, elementscls,
+                                        psp, finfo)
             for pp in plugins:
                 pp.run(data)
 
@@ -683,23 +684,18 @@ class AscentRenderer:
                     self._register_user_field(sname, fname)
 
     def _init_gradients(self):
-        privars = self.elementscls.privars(self.mesh.ndims, self.scfg)
         pp_plugins = self._postproc_plugins.values()
 
         # First, see what gradient terms are used by expressions
-        g_pnames = set()
-        for _, comps in self._exprs:
-            for c in comps:
-                g_pnames.update(re.findall(r'\bgrad_(.+?)_[xyz]\b', c))
+        comps = [c for _, cs in self._exprs for c in cs]
+        egrads = any(re.search(r'\bgrad_.+?_[xyz]\b', c) for c in comps)
 
         # Then, see if any post-processing plugins require gradients
-        if any(pp.needs_grads for ppl in pp_plugins for pp in ppl):
-            g_pnames.update(privars)
+        ppgrads = any(pp.needs_grads for ppl in pp_plugins for pp in ppl)
 
-        if g_pnames and not self.adapter.has_grads:
+        self._need_grads = egrads or ppgrads
+        if self._need_grads and not self.adapter.has_grads:
             raise AscentError('Gradients required but not available')
-
-        self._gradpinfo = [(pname, privars.index(pname)) for pname in g_pnames]
 
     def _init_pipelines(self):
         self.pipelines = pl = ConduitNode(self.conduit)
@@ -777,17 +773,12 @@ class AscentRenderer:
                 self.scenes[f's_{sn}/plots/{pname}/{_bp_key(kc)}'] = vc
 
     def _evaluate_exprs(self, adapter):
-        elementscls = self.elementscls
-
-        # Get the primitive variable names
-        pnames = elementscls.privars(self.mesh.ndims, self.scfg)
-
         tcurr = adapter.tcurr
         cycle = adapter.cycle
 
         # Obtain the solution (and gradients if needed)
         soln = adapter.soln
-        grad_soln = adapter.grad_soln if self._gradpinfo else None
+        grad_soln = adapter.grad_soln if self._need_grads else None
 
         # out[sname] = {key: [(field, arr)]} for per-source publish
         out = defaultdict(dict)
@@ -802,18 +793,10 @@ class AscentRenderer:
             csolns, cgrads = source.csolns_cgrads(soln, grad_soln, key)
 
             # Adapter chooses conservative->primitive vs name-mapped (tavg)
-            psolns, pgrads = adapter.psolns_pgrads(csolns, cgrads)
+            pvars = adapter.pvars(csolns, cgrads)
 
             # Prepare the substitutions dictionary
-            subs = dict(zip(pnames, psolns), t=tcurr)
-
-            # Prepare any required gradients; None slots are skipped
-            if self._gradpinfo and pgrads is not None:
-                for pname, pidx in self._gradpinfo:
-                    if pgrads[pidx] is None:
-                        continue
-                    for dim, grad in zip('xyz', pgrads[pidx]):
-                        subs[f'grad_{pname}_{dim}'] = grad
+            subs = pvars | {'t': tcurr}
 
             items = []
 
@@ -824,7 +807,7 @@ class AscentRenderer:
 
             # Postproc plugins for this source/key
             if plugins := self._postproc_plugins.get(sname):
-                pp_fields = source.run_postproc(plugins, key, psolns, pgrads)
+                pp_fields = source.run_postproc(plugins, key, pvars)
                 for field, arr in pp_fields.items():
                     items.append((self._field_name(sname, field),
                                   np.atleast_3d(arr)))
