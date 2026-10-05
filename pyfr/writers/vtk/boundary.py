@@ -3,7 +3,7 @@ from collections import defaultdict
 import numpy as np
 
 from pyfr.cache import memoize
-from pyfr.plugins.postproc.adapters import FaceInfo
+from pyfr.plugins.postproc import FaceInfo
 from pyfr.polys import get_polybasis
 from pyfr.shapes import BaseShape, interp_pts, proj_pts
 from pyfr.subdiv import get_subdiv
@@ -59,7 +59,7 @@ class VTKBoundaryWriter(BaseVTKWriter):
         shape = self._get_shape(etype, cfg)
 
         # Get the information about our face
-        itype, proj, norm = shape.faces[fidx]
+        itype, proj, _ = shape.faces[fidx]
 
         # Obtain the visualisation points on this face
         svpts = proj_pts(proj, self._svpts(itype))
@@ -72,7 +72,7 @@ class VTKBoundaryWriter(BaseVTKWriter):
         lbasis = get_polybasis(etype, 1, linspts)
         lin_op = lbasis.nodal_basis_at(svpts)
 
-        finfo = FaceInfo(etype, fidx, svpts, norm)
+        finfo = FaceInfo(etype, fidx, svpts)
 
         return itype, mesh_op, soln_op, lin_op, finfo
 
@@ -110,10 +110,9 @@ class VTKBoundaryWriter(BaseVTKWriter):
             etype = finfo.etype
             spts = self.mesh.spts[etype][:, idxs]
             soln = self.soln.data[etype][..., idxs]
-            soln = soln.swapaxes(0, 1).astype(self.dtype)
 
             # Pre-process the solution
-            soln = self._pre_proc_fields(soln).swapaxes(0, 1)
+            soln = self.source.to_pvars(soln, self.soln.groups)
 
             face_vpts = interp_pts(mesh_op, spts)
             face_vsoln = interp_pts(soln_op, soln)
@@ -136,10 +135,7 @@ class VTKBoundaryWriter(BaseVTKWriter):
                     op = lin_op if data.shape[0] == nlpts else soln_op
                     pointf[f.name].append(interp_pts(op, data))
 
-            soln_t = face_vsoln.transpose(1, 0, 2)
-            ploc = face_vpts.transpose(2, 0, 1)
-
-            fields = self._postproc(soln_t, ploc, self.elementscls, spts, finfo)
+            fields = self._postproc(face_vsoln, face_vpts, spts, finfo)
             for fname, arr in fields.items():
                 pointf[fname].append(arr)
 

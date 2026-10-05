@@ -278,7 +278,7 @@ class ExtrudedSpanwise(_SpanwiseBase, AlltoallMixin):
             sel = np.flatnonzero(bot == fidx)
 
             # Interpolate to the bottom face lattice and span-integrate
-            v = (ei.spanop @ soln_pre[..., sel]).transpose(2, 1, 0)
+            v = interp_pts(ei.spanop, soln_pre[..., sel]).transpose(2, 0, 1)
 
             # Canonically order the lattice by its physical position
             sp = interp_pts(ei.smpop, spts[:, sel])
@@ -372,8 +372,6 @@ class SampledSpanwise(_SpanwiseBase, AlltoallMixin):
             return self._periodic_faces(self.periodic)
 
     def average(self, soln):
-        soln = {etype: data.swapaxes(0, 1) for etype, data in soln.items()}
-
         # Perform the sampling for each face group
         pts = [spts.reshape(-1, 3) for _, _, spts, _ in self.fgroups]
         pts2d = np.concatenate(pts or [np.empty((0, 3))])
@@ -542,7 +540,7 @@ class VTKSpanwiseWriter(BaseVTKWriter):
         vpts[..., self.axis] = 0
 
         # Derive quantities from the span-averaged means at the 2D footprint
-        pointf = self._postproc(means.swapaxes(0, 1), vpts.transpose(2, 0, 1))
+        pointf = self._postproc(means, vpts)
 
         return vpts, means, np.ones(vpts.shape[1], dtype=bool), {}, pointf
 
@@ -555,7 +553,7 @@ class VTKSpanwiseWriter(BaseVTKWriter):
         return cnodes, svpts
 
     def _soln_pre(self, etype):
-        return self._pre_proc_fields(self.soln.data[etype].swapaxes(0, 1))
+        return self.source.to_pvars(self.soln.data[etype], self.soln.groups)
 
 
     @memoize
@@ -618,7 +616,7 @@ class VTKSpanwiseWriter(BaseVTKWriter):
         shapes = {et: self._get_shape(et, self.cfg)
                   for et in self.reader.mesh.etypes}
 
-        nfields = len(self.soln.layout)
+        nfields = len(self.soln.rownames)
         kwargs = dict(mesh=self.mesh, cfg=self.cfg, shapes=shapes,
                       axis=self.axis, nfields=nfields,
                       vis_pts_2d=self._vis_pts_2d())

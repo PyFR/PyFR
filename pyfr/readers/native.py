@@ -95,12 +95,12 @@ class Mesh:
         return sects
 
 
-def block_names(fields, ndims, blocks):
+def group_names(fields, ndims, groups):
     # Name the gradient and residual variables of some fields
     names = []
-    if 'grad' in blocks:
+    if 'grad' in groups:
         names += [f'grad_{f}_{x}' for f in fields for x in 'xyz'[:ndims]]
-    if 'resid' in blocks:
+    if 'resid' in groups:
         names += [f'resid_{f}' for f in fields]
 
     return names
@@ -111,16 +111,13 @@ class Solution:
     config: object
     stats: object
     fields: list
-    layout: list = None
+    rownames: list = None
+    groups: set = field(default_factory=set)
     data: dict = field(default_factory=dict)
     aux: dict = field(default_factory=dict)
     dtypes: dict = field(default_factory=dict)
     prevcfgs: dict = field(default_factory=dict)
     state: dict = field(default_factory=dict)
-
-    @property
-    def blocks(self):
-        return {n.split('_')[0] for n in self.layout} & {'grad', 'resid'}
 
 
 class Connectivity:
@@ -262,10 +259,13 @@ class NativeReader:
             prefix = '' if g == 'soln' else f'{g}-'
             fields.extend(f'{prefix}{n}' for n in dtype[g].names)
 
-        # Append any gradient and residual variables to the layout
-        layout = fields + block_names(fields, self.mesh.ndims, dtype.names)
+        # Note which gradient and residual groups are present
+        groups = {'grad', 'resid'} & set(dtype.names)
 
-        return fields, layout
+        # Append any gradient and residual variables to the row names
+        rownames = fields + group_names(fields, self.mesh.ndims, groups)
+
+        return fields, groups, rownames
 
     def _unpack_esoln(self, soln, etype, esoln, dtype):
         dgroups = [g for g in dtype.names if g not in ('grad', 'resid', 'aux')]
@@ -329,7 +329,8 @@ class NativeReader:
 
                 # Build field list from the first dataset encountered
                 if soln.fields is None:
-                    soln.fields, soln.layout = self._soln_fields(f[ek].dtype)
+                    sfields = self._soln_fields(f[ek].dtype)
+                    soln.fields, soln.groups, soln.rownames = sfields
 
                 esoln = escatter(f[ek])
                 if escatter.cnt:

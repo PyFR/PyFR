@@ -10,11 +10,12 @@ class BasePostProcPlugin(BasePlugin):
     needs_gridh = False
     fields = {}
 
-    def __init__(self, source, cfg, export_type=None, want=None):
+    def __init__(self, source, cfg, export_type=None, kind=None, want=None):
         cfgsect = f'postproc-plugin-{self.name}'
         super().__init__(cfg=cfg, cfgsect=cfgsect, ndims=source.ndims)
 
         self.source = source
+        self.kind = kind
 
         if export_type is not None:
             if not re.fullmatch(self.export_types, export_type):

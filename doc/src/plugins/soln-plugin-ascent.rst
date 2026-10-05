@@ -134,15 +134,17 @@ Render
    source like any other field (``volume_mach``, ``airfoil_yplus``).
    Postprocs that need gradients (``vorticity``, ``yplus``, ``cf``)
    work directly in-situ; via ``pyfr ascent render`` they need a
-   snapshot carrying gradients (``write-gradients = true`` for
-   ``soln`` snapshots, matching ``avg-grad_{var}_{dim}`` entries for
-   ``tavg``):
+   ``soln`` snapshot carrying gradients (``write-gradients = true``),
+   whereas for ``tavg`` snapshots the gradients of the averages are
+   recovered on demand:
 
    *string* (, *string*)
 
 When rendering a ``tavg`` snapshot, only ``cp`` and ``vorticity``
 give the true time average; the others give the postproc of the
-averaged state.
+averaged state.  The ``stats`` postproc publishes the derived
+statistics of the snapshot (Reynolds stresses, dissipation,
+Kolmogorov scales, and so on), as with ``pyfr export``.
 
 Example:
 
@@ -237,11 +239,12 @@ are available
   configuration changes between files, so mixed solver orders and a
   mix of ``soln``/``tavg`` snapshots are supported in one invocation.
 
-  Time-averaged ``tavg`` snapshots are detected automatically and the
-  mapping from tavg field names to canonical primitive variables
-  (``rho``, ``u``, ``v``, ``w``, ``p``, and the corresponding
-  ``grad_{var}_{x,y,z}`` entries when present) is inferred from the
-  tavg configuration embedded in the snapshot.
+  Time-averaged ``tavg`` snapshots are detected automatically.  Field
+  expressions may reference any averaged field by name (such as
+  ``uu`` or ``gux``), with the mean primitives available as ``rho``,
+  ``u``, ``v``, ``w``, and ``p``.  Adding ``postproc-stats`` publishes
+  the derived statistics; for example ``postproc-stats = volume`` with
+  a plot of ``eps`` renders the mean dissipation rate.
 
   Example:
 

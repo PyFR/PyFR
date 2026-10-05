@@ -243,13 +243,13 @@ class CleanToGrid:
         return out
 
 
-def con_block_to_pri(elementscls, cfg, ndims, block, blocks=()):
+def con_block_to_pri(elementscls, cfg, ndims, block, groups=()):
     # Fields-first conservative block (+grads, +resid) to primitives
     nvars = len(elementscls.convars(ndims, cfg))
     fields = elementscls.con_to_pri(block[:nvars], cfg)
 
     # Solution gradients convert via the chain rule
-    if 'grad' in blocks:
+    if 'grad' in groups:
         ng = nvars*(1 + ndims)
         dcon = block[nvars:ng].reshape(nvars, ndims, *block.shape[1:])
         dpri = elementscls.diff_con_to_pri(block[:nvars], dcon, cfg)
@@ -257,7 +257,7 @@ def con_block_to_pri(elementscls, cfg, ndims, block, blocks=()):
         fields += [f for gf in dpri for f in gf]
 
     # Residuals convert to primitive rates
-    if 'resid' in blocks:
+    if 'resid' in groups:
         fields += elementscls.diff_con_to_pri(block[:nvars], block[-nvars:],
                                               cfg)
 
@@ -466,7 +466,7 @@ def expand_stats_fields(mesh, soln, pp_plugins, elementscls):
     grads = any(pp.needs_grads for pp in pp_plugins)
 
     if not grads and not gridh:
-        return
+        return []
 
     fields = list(soln.fields)
 
@@ -491,14 +491,17 @@ def expand_stats_fields(mesh, soln, pp_plugins, elementscls):
 
         soln.data[et] = np.concatenate(stack, axis=1)
 
-    # Row names for the augmented layout; names are the contract
+    # Row names for the augmented data
     dims = 'xyz'[:mesh.ndims]
     canon = [f.removeprefix('avg-') for f in fields] + derived
-    layout = [*fields, *derived,
-               *(f'grad_{n}_{x}' for n in canon for x in dims),
-               *(f'lap_{n}' for n in canon)]
+    rownames = [*fields, *derived,
+                *(f'grad_{n}_{x}' for n in canon for x in dims),
+                *(f'lap_{n}' for n in canon)]
     if gridh:
-        layout += ['grid_hmin', 'grid_hmax']
+        rownames += ['grid_hmin', 'grid_hmax']
 
     soln.derived = derived
-    soln.layout = layout
+    soln.rownames = rownames
+
+    # Report the names of the rows appended to the stored fields
+    return rownames[len(fields):]

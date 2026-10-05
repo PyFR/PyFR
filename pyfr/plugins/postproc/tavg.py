@@ -5,86 +5,64 @@ import numpy as np
 
 from pyfr.exprs import npeval
 from pyfr.fields import expand_stats_fields
-from pyfr.plugins.common import get_elementscls
 from pyfr.plugins.postproc.adapters import BoundaryPostProcData, PostProcData
 from pyfr.plugins.postproc.base import BasePostProcPlugin
 from pyfr.plugins.postproc.source import BaseDataSource
-from pyfr.stats import eval_algebraic_avgs, eval_exports, tavg_exprs
+from pyfr.stats import eval_exports, tavg_exprs
 from pyfr.stats.provider import name_tokens
 
 
 class TavgDataMixin:
-    def __init__(self, soln, samples, ploc):
-        self.soln = soln
-        self._samples = samples
-        self.ploc = ploc
-        self.fields = {}
+    def __init__(self, source, pvars, ploc, *args):
+        self.texprs = source.texprs
 
-    @classmethod
-    def from_soln(cls, soln, samples, ploc, *args):
-        return cls(soln, samples, ploc, *args)
+        # Keep the stored rows under their row names
+        self._stored = pvars
 
-    @property
-    def cfg(self):
-        return self.soln.config
-
-    @property
-    def has_grads(self):
-        # The layout expansion appends rows for the gradients
-        return 'grad' in self.soln.blocks
-
-    @cached_property
-    def elementscls(self):
-        return get_elementscls(self.cfg)
+        super().__init__(source, self._pvars(), ploc, *args)
 
     @cached_property
     def porder(self):
         return self.cfg.getint('solver', 'order')
 
-    @cached_property
-    def texprs(self):
-        soln = self.soln
-        cfgsect = soln.stats.get('tavg', 'cfg-section')
-
-        # Re-derive the expression lists from the stored configuration
-        return tavg_exprs(soln.config, cfgsect, self.ndims, self.elementscls)
-
     @property
     def aliases(self):
         return self.texprs.aliases
 
-    @cached_property
-    def _rows(self):
-        # Row indices come from the named layout of the data
-        return {n: i for i, n in enumerate(self.soln.layout)}
+    def _pvars(self):
+        # Expose each field under its name without the average prefix
+        pvars = {n.removeprefix('avg-'): v for n, v in self._stored.items()}
 
-    def funavg(self, name):
-        # Evaluate an algebraic derived quantity from the fields
-        te = self.texprs
-        fields = {n: self.avg(n) for n in te.avgs}
+        # Deduplicated moments resolve through their alias
+        pvars |= {c: pvars[s] for c, s in self.aliases.items()}
 
-        return eval_algebraic_avgs(te, fields)[name]
+        # Primitive (or grad_X_Y) name -> index in soln.fields for tavg
+        for name, expr in self.texprs.avgs.items():
+            if (var := expr.strip('() \t')).isidentifier():
+                pvars.setdefault(var, pvars[name])
+
+        return pvars
 
     def avg(self, name):
         # Resolve canonical moment names through the alias map
         name = self.aliases.get(name, name)
 
-        return self._samples[self._rows[f'avg-{name}']]
+        return self._stored[f'avg-{name}']
 
     def grad_avg(self, name):
         # Gradient components are stacked contiguously per field
         name = self.aliases.get(name, name)
-        i = self._rows[f'grad_{name}_x']
+        dims = 'xyz'[:self.ndims]
 
-        return self._samples[i:i + self.ndims]
+        return [self._stored[f'grad_{name}_{x}'] for x in dims]
 
     def lap_avg(self, name):
         name = self.aliases.get(name, name)
 
-        return self._samples[self._rows[f'lap_{name}']]
+        return self._stored[f'lap_{name}']
 
     def grid_h(self, i):
-        return self._samples[self._rows['grid_hmin'] + i]
+        return self._stored[('grid_hmin', 'grid_hmax')[i]]
 
     def __getitem__(self, name):
         # Gradients of the mean fields stand in for those of the primitives
@@ -104,12 +82,7 @@ class TavgPostProcData(TavgDataMixin, PostProcData):
 
 
 class TavgBoundaryPostProcData(TavgDataMixin, BoundaryPostProcData):
-    def __init__(self, soln, samples, ploc, elementscls, spts, finfo):
-        super().__init__(soln, samples, ploc)
-
-        self._elementscls = elementscls
-        self._spts = spts
-        self._finfo = finfo
+    pass
 
 
 class StatsFinalisePostProc(BasePostProcPlugin):
@@ -118,13 +91,11 @@ class StatsFinalisePostProc(BasePostProcPlugin):
     dimensions = '2|3'
     export_types = '.*'
 
-    def __init__(self, source, cfg, export_type=None, want=None):
-        super().__init__(source, cfg, export_type, want)
-
-        cfgsect = source.stats.get('tavg', 'cfg-section')
+    def __init__(self, source, cfg, export_type=None, kind=None, want=None):
+        super().__init__(source, cfg, export_type, kind, want)
 
         # Derive the output expressions from the configuration
-        te = tavg_exprs(cfg, cfgsect, source.ndims, get_elementscls(cfg))
+        te = source.texprs
         self.hidden = te.hidden
         self.derived = dict(te.derived)
 
@@ -137,7 +108,7 @@ class StatsFinalisePostProc(BasePostProcPlugin):
         self.boundary_only = {n for n, b in onb.items() if b}
 
         # Boundary-only quantities are unavailable off a boundary export
-        if export_type != 'boundary':
+        if kind != 'boundary':
             self.derived = {n: e for n, e in self.derived.items()
                             if n not in self.boundary_only}
 
@@ -179,14 +150,7 @@ class StatsFinalisePostProc(BasePostProcPlugin):
             return {n: npeval(e, subs) for n, e in self.hidden.items()}
 
     def _process(self, data):
-        # Boundary-only quantities require the surface geometry
-        if hasattr(data, 'normals'):
-            derived = self.derived
-        else:
-            derived = {n: e for n, e in self.derived.items()
-                       if n not in self.boundary_only}
-
-        out = eval_exports(derived, data, self.hidden)
+        out = eval_exports(self.derived, data, self.hidden)
         data.fields |= out
 
 
@@ -196,7 +160,19 @@ class TavgDataSource(BaseDataSource):
                 'boundary': TavgBoundaryPostProcData}
     plugins = {'stats': StatsFinalisePostProc}
 
+    @cached_property
+    def texprs(self):
+        cfgsect = self.stats.get('tavg', 'cfg-section')
+
+        # Re-derive the expression lists from the stored configuration
+        return tavg_exprs(self.cfg, cfgsect, self.ndims, self.elementscls)
+
+    def pvar_names(self, rownames, groups):
+        return list(rownames)
+
+    def to_pvars(self, block, groups):
+        return block.astype(float)
+
     def prepare(self, mesh, soln, pp_plugins):
         # Averaged data lacks stored gradients; compute them on demand
-        expand_stats_fields(mesh, soln, pp_plugins,
-                            get_elementscls(soln.config))
+        return expand_stats_fields(mesh, soln, pp_plugins, self.elementscls)

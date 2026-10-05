@@ -7,29 +7,17 @@ import numpy as np
 
 from pyfr.ctypesutil import LibWrapper
 from pyfr.exprs import npeval
-from pyfr.fields import CleanToGrid, con_block_to_pri
+from pyfr.fields import CleanToGrid
 from pyfr.inifile import process_expr
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.plugins.common import region_data
-from pyfr.plugins.postproc.adapters import (BoundaryPostProcData, FaceInfo,
-                                            PostProcData)
-from pyfr.plugins.postproc import get_source
+from pyfr.plugins.postproc import FaceInfo, get_source
 from pyfr.plugins.soln.base import BaseSolnPlugin
-from pyfr.readers.native import block_names
-from pyfr.shapes import BaseShape, proj_pts
+from pyfr.readers.native import group_names
+from pyfr.shapes import BaseShape, interp_pts, proj_pts
 from pyfr.subdiv import get_subdiv
 from pyfr.util import (file_path_gen, first, paren_depths,
                        subclass_where)
-
-
-def pri_block(elementscls, scfg, ndims, block, grads):
-    blocks = {'grad'} if grads else set()
-
-    # Name the primitive variables and any gradients
-    privars = elementscls.privars(ndims, scfg)
-    names = privars + block_names(privars, ndims, blocks)
-
-    return names, con_block_to_pri(elementscls, scfg, ndims, block, blocks)
 
 
 def face_shape_ops(etype, fidx, divisor, nspts, scfg):
@@ -179,8 +167,8 @@ class _IntegratorAdapter:
         self.acfg = acfg
         self.cfgsect = cfgsect
         self.dtype = intg.system.backend.fpdtype
-        self.elementscls = intg.system.elementscls
-        self.has_grads = self.elementscls.has_grad_soln
+        self.has_grads = intg.system.elementscls.has_grad_soln
+        self.source = get_source('soln', self.scfg, None, self.mesh.ndims)
 
     @property
     def tcurr(self):
@@ -200,13 +188,18 @@ class _IntegratorAdapter:
 
     def block(self, etype, eidxs, grads):
         # Stack the solution and any gradients as the reader does
-        block = self.soln[etype][..., eidxs].swapaxes(0, 1)
+        block = self.soln[etype][..., eidxs]
+        convars = self.source.elementscls.convars(self.mesh.ndims, self.scfg)
+        rownames = list(convars)
+        groups = {'grad'} if grads else set()
         if grads:
-            g = self.grad_soln[etype][..., eidxs].transpose(2, 0, 1, 3)
-            block = np.concatenate([block, g.reshape(-1, *block.shape[1:])])
+            g = self.grad_soln[etype][..., eidxs].transpose(1, 2, 0, 3)
+            g = g.reshape(len(g), -1, g.shape[-1])
+            block = np.concatenate([block, g], axis=1)
+            rownames += group_names(rownames, self.mesh.ndims, groups)
 
-        return pri_block(self.elementscls, self.scfg, self.mesh.ndims, block,
-                         grads)
+        names = self.source.pvar_names(rownames, groups)
+        return names, self.source.to_pvars(block, groups)
 
     def soln_op_vpts(self, etype, divisor):
         eles = self.intg.system.ele_map[etype]
@@ -214,15 +207,13 @@ class _IntegratorAdapter:
         shape = shapecls(eles.nspts, self.scfg)
 
         svpts = shape.std_ele(divisor)
-        soln_op = shape.ubasis.nodal_basis_at(svpts).astype(self.dtype)
+        soln_op = shape.ubasis.nodal_basis_at(svpts)
 
-        return soln_op, eles.ploc_at_np(svpts)
+        return soln_op, eles.ploc_at_np(svpts).swapaxes(1, 2)
 
     def face_soln_op_vpts(self, etype, fidx, divisor):
         nspts = self.intg.system.ele_map[etype].nspts
-        ops = face_shape_ops(etype, fidx, divisor, nspts, self.scfg)
-        itype, mop, sop, svpts = ops
-        return itype, mop, sop.astype(self.dtype), svpts
+        return face_shape_ops(etype, fidx, divisor, nspts, self.scfg)
 
 
 class _VolumeAscentOutput:
@@ -232,7 +223,7 @@ class _VolumeAscentOutput:
         self.renderer = renderer
         self.sname = sname
         self.rdata = renderer.rdata
-        self.soln_ops = {}
+        self.soln_ops, self.plocs = {}, {}
         self._setup_clean(clean)
 
     def _setup_clean(self, clean):
@@ -276,10 +267,11 @@ class _VolumeAscentOutput:
         dom = f'domain_{domid}'
 
         soln_op, xd = renderer.adapter.soln_op_vpts(etype, renderer.divisor)
-        xd = xd[..., self.rdata[etype]].transpose(0, 2, 1)
+        xd = xd[:, self.rdata[etype]]
         nsvpts, neles, _ = xd.shape
 
         self.soln_ops[etype] = soln_op
+        self.plocs[etype] = xd
 
         snodes = get_subdiv(etype, renderer.divisor).subnodes
         conn = self._connectivity(etype, snodes, neles, nsvpts)
@@ -288,12 +280,12 @@ class _VolumeAscentOutput:
                                self._points(etype, xd), conn)
         return dom
 
-    def postproc_data(self, adapter, etype, grads):
+    def samples(self, adapter, etype, grads):
         names, block = adapter.block(etype, self.rdata[etype], grads)
 
         # Interpolate the primitives to the subdiv points
-        samples = self.soln_ops[etype] @ block
-        yield PostProcData(self.renderer.scfg, dict(zip(names, samples)))
+        samples = interp_pts(self.soln_ops[etype], block)
+        yield names, samples, self.plocs[etype]
 
     def _emit(self, mesh_n, dom, fname, arr):
         # Scalars publish at values; vectors split into values/x, /y, /z
@@ -305,10 +297,12 @@ class _VolumeAscentOutput:
                 mesh_n[f'{path}/{x}'] = sl
 
     def _publish_direct(self, mesh_n, fields):
+        dtype = self.renderer.dtype
+
         for key, items in fields.items():
             dom = self.renderer.dinfo[self.sname, key]
             for fname, arr in items:
-                self._emit(mesh_n, dom, fname, arr)
+                self._emit(mesh_n, dom, fname, arr.astype(dtype, copy=False))
 
     def _publish_clean(self, mesh_n, fields):
         comm, _, _ = get_comm_rank_root()
@@ -402,25 +396,21 @@ class _BoundaryAscentOutput(_VolumeAscentOutput):
                                self._points(itype, xd), conn)
         return dom
 
-    def postproc_data(self, adapter, itype, grads):
-        r = self.renderer
-        spts, elementscls = r.mesh.spts, r.adapter.elementscls
+    def samples(self, adapter, itype, grads):
+        spts = self.renderer.mesh.spts
 
         for eidxs, etype, mop, sop, fidx, svpts in self.patches[itype]:
             names, block = adapter.block(etype, eidxs, grads)
 
             # Interpolate the primitives to the face visualisation points
-            ppvars = dict(zip(names, sop @ block))
+            samples = interp_pts(sop, block)
 
             # Physical locations of the face visualisation points
             psp = spts[etype][:, eidxs]
-            vp = mop @ psp.reshape(len(psp), -1)
-            ploc = vp.reshape(-1, *psp.shape[1:]).transpose(2, 0, 1)
+            ploc = interp_pts(mop, psp)
 
-            norm = subclass_where(BaseShape, name=etype).faces[fidx][2]
-            finfo = FaceInfo(etype, fidx, svpts, norm)
-            yield BoundaryPostProcData(r.scfg, ppvars, ploc, elementscls,
-                                       psp, finfo)
+            finfo = FaceInfo(etype, fidx, svpts)
+            yield names, samples, ploc, psp, finfo
 
 
 class AscentRenderer:
@@ -437,7 +427,6 @@ class AscentRenderer:
         self.cfgsect = cfgsect = adapter.cfgsect
 
         self.scfg = adapter.scfg
-        self.elementscls = adapter.elementscls
         self.dtype = adapter.dtype
 
         # Set order for subdivision
@@ -631,7 +620,7 @@ class AscentRenderer:
 
     def _init_postproc(self):
         # Parse postproc-{name} = <sources>; one plugin list per source
-        groups = defaultdict(list)
+        groups = {sname: [] for sname in self.sources}
         for k in self.acfg.items(self.cfgsect, prefix='postproc-'):
             name = k.removeprefix('postproc-')
             for s in self.acfg.get(self.cfgsect, k).split(','):
@@ -641,26 +630,32 @@ class AscentRenderer:
                                       f'{sname!r}')
                 groups[sname].append(name)
 
-        self._postproc_plugins = {}
-        dsrc = get_source('soln', self.scfg, None, self.mesh.ndims)
+        # Build a post-processing pipeline for each source
+        self._pipelines = {}
+        dsrc, ppcfg = self.adapter.source, self.adapter.ppcfg
         for sname, names in groups.items():
             kind = self.sources[sname].kind
-            plugins = dsrc.quantities(names, kind, self.adapter.ppcfg)
-            self._postproc_plugins[sname] = plugins
+            pipe = dsrc.pipeline(names, kind, ppcfg)
+            self._pipelines[sname] = pipe
 
-            for pp in plugins:
-                for fname in pp.fields:
-                    self._register_user_field(sname, fname)
+            for fname in pipe.fields:
+                self._register_user_field(sname, fname)
+
+    @property
+    def postproc_plugins(self):
+        return [pp for pipe in self._pipelines.values() for pp in pipe.plugins]
+
+    @property
+    def need_grads(self):
+        return self._need_grads
 
     def _init_gradients(self):
-        pp_plugins = self._postproc_plugins.values()
-
         # First, see what gradient terms are used by expressions
         comps = [c for _, cs in self._exprs for c in cs]
         egrads = any(re.search(r'\bgrad_.+?_[xyz]\b', c) for c in comps)
 
         # Then, see if any post-processing plugins require gradients
-        ppgrads = any(pp.needs_grads for ppl in pp_plugins for pp in ppl)
+        ppgrads = any(pipe.needs_grads for pipe in self._pipelines.values())
 
         self._need_grads = egrads or ppgrads
         if self._need_grads and not self.adapter.has_grads:
@@ -755,22 +750,23 @@ class AscentRenderer:
             self.mesh_n[f'{dom}/state/cycle'] = cycle
 
             source = self.sources[sname]
-            plugins = self._postproc_plugins.get(sname, [])
+            pipe = self._pipelines[sname]
 
             # Run each patch, merge by field across patches
             merged = defaultdict(list)
-            for data in source.postproc_data(adapter, key, self._need_grads):
+            for args in source.samples(adapter, key, self._need_grads):
+                # Run the postproc plugins for this source/key
+                data = pipe(*args)
+
                 # Prepare the substitutions dictionary
                 subs = data.pvars | {'t': tcurr}
 
                 # Field expressions
+                shape = data.ploc.shape[:-1]
                 for field, comps in self._exprs:
-                    arr = np.stack([npeval(c, subs) for c in comps], axis=-1)
-                    merged[field].append(arr)
-
-                # Postproc plugins for this source/key
-                for pp in plugins:
-                    pp.run(data)
+                    vals = [np.broadcast_to(npeval(c, subs), shape)
+                            for c in comps]
+                    merged[field].append(np.stack(vals, axis=-1))
 
                 for field, arr in data.fields.items():
                     merged[field].append(np.atleast_3d(arr))

@@ -4,9 +4,9 @@ from pathlib import Path
 import numpy as np
 
 from pyfr.cache import clear_memoize, memoize
-from pyfr.fields import CleanToGrid, FieldRecovery, con_block_to_pri
+from pyfr.fields import CleanToGrid, FieldRecovery
 from pyfr.mpiutil import get_comm_rank_root, mpi
-from pyfr.readers.native import block_names
+from pyfr.readers.native import group_names
 from pyfr.shapes import BaseShape, interp_pts
 from pyfr.subdiv import get_subdiv
 from pyfr.util import first, subclass_where
@@ -125,18 +125,13 @@ class BaseVTKWriter(BaseWriter):
             self._extra_fields[fname] = extra_field(fname, 'point',
                                                     len(varnames), dtype)
 
-    def _postproc(self, soln_t, ploc, *extra):
+    def _postproc(self, soln, ploc, *extra):
         if self.pp_pipe.plugins:
-            return self.pp_pipe(self.soln, soln_t, ploc, *extra)
+            rownames, groups = self.soln.rownames, self.soln.groups
+            names = self.source.pvar_names(rownames, groups)
+            return self.pp_pipe(names, soln, ploc, *extra).fields
         else:
             return {}
-
-    def _pre_proc_fields_soln(self, soln):
-        return con_block_to_pri(self.elementscls, self.cfg, self.ndims,
-                                soln, self.soln.blocks)
-
-    def _pre_proc_fields_scal(self, soln):
-        return soln
 
     def _post_proc_fields_soln(self, vsoln):
         # Prepare the fields
@@ -223,7 +218,6 @@ class BaseVTKWriter(BaseWriter):
 
         # Solutions need a separate processing pipeline to other data
         if self.dataprefix == 'soln':
-            self._pre_proc_fields = self._pre_proc_fields_soln
             self._post_proc_fields = self._post_proc_fields_soln
             self._soln_fields = self.elementscls.privars(self.ndims, self.cfg)
             self._vtk_vars = self.elementscls.visvars(self.ndims, self.cfg)
@@ -233,7 +227,6 @@ class BaseVTKWriter(BaseWriter):
             self._can_grads = self.elementscls.has_grad_soln
         # Otherwise we're dealing with simple scalar data (e.g., tavg)
         else:
-            self._pre_proc_fields = self._pre_proc_fields_scal
             self._post_proc_fields = self._post_proc_fields_scal
             self._soln_fields = list(self.soln.fields)
             self._vtk_vars = {k: [k] for k in self._soln_fields}
@@ -248,13 +241,13 @@ class BaseVTKWriter(BaseWriter):
             self._subset_fields(want)
 
         # Synthesise corrected gradients for files without stored ones
-        if self._can_grads and 'grad' not in self.soln.blocks:
+        if self._can_grads and 'grad' not in self.soln.groups:
             if (any(f.startswith('grad ') for f in want) or
                 self.pp_pipe.needs_grads):
                 self._synth_grads()
 
-        # Stack any gradient and residual blocks needed for the output
-        self._stack_blocks(want)
+        # Stack any gradient and residual groups needed for the output
+        self._stack_groups(want)
 
         # Give the data source a chance to augment the solution
         self.source.prepare(self.mesh, self.soln, self.pp_pipe.plugins)
@@ -269,7 +262,7 @@ class BaseVTKWriter(BaseWriter):
         known = self._vtk_vars.keys() | self._extra_fields.keys()
         if self._can_grads:
             known |= {f'grad {v}' for v in self._vtk_vars}
-        if 'resid' in self.soln.blocks:
+        if 'resid' in self.soln.groups:
             known |= {f'resid {v}' for v in self._vtk_vars}
 
         if missing := want - known:
@@ -292,17 +285,18 @@ class BaseVTKWriter(BaseWriter):
             g = g.reshape(len(d), -1, d.shape[-1])
             data[et] = np.concatenate([d[:, :nvars], g, d[:, nvars:]], axis=1)
 
-        gnames = block_names(self.soln.fields, self.ndims, {'grad'})
-        self.soln.layout[nvars:nvars] = gnames
+        gnames = group_names(self.soln.fields, self.ndims, {'grad'})
+        self.soln.rownames[nvars:nvars] = gnames
+        self.soln.groups.add('grad')
 
-    def _stack_blocks(self, want):
+    def _stack_groups(self, want):
         pnames, vitems = list(self._soln_fields), list(self._vtk_vars.items())
 
-        # Derive the field and VTK names of a data block
-        def name_block(prefix):
-            self._soln_fields += block_names(pnames, self.ndims, {prefix})
+        # Derive the field and VTK names of a data group
+        def name_group(prefix):
+            self._soln_fields += group_names(pnames, self.ndims, {prefix})
             for var, vfields in vitems:
-                vnames = block_names(vfields, self.ndims, {prefix})
+                vnames = group_names(vfields, self.ndims, {prefix})
                 self._vtk_vars[f'{prefix} {var}'] = vnames
 
         def needed(p):
@@ -311,18 +305,21 @@ class BaseVTKWriter(BaseWriter):
             else:
                 return not want or any(f.startswith(f'{p} ') for f in want)
 
-        # Remove the unneeded blocks from the solution
-        drop = tuple(f'{p}_' for p in ('grad', 'resid') if not needed(p))
-        keep = [not n.startswith(drop) for n in self.soln.layout]
+        # Remove the unneeded groups from the solution
+        dropped = {p for p in ('grad', 'resid') if not needed(p)}
+        drop = tuple(f'{p}_' for p in dropped)
+        keep = [not n.startswith(drop) for n in self.soln.rownames]
         if not all(keep):
-            self.soln.layout = [n for n, k in zip(self.soln.layout, keep) if k]
+            rownames = self.soln.rownames
+            self.soln.rownames = [n for n, k in zip(rownames, keep) if k]
             for et, d in self.soln.data.items():
                 self.soln.data[et] = d[:, keep]
+        self.soln.groups -= dropped
 
         # See if our solution contains gradient or residual data
         for p in ('grad', 'resid'):
-            if p in self.soln.blocks:
-                name_block(p)
+            if p in self.soln.groups:
+                name_group(p)
 
     def list_fields(self, solnf):
         self._load_soln(solnf)

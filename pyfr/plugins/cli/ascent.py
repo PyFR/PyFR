@@ -1,22 +1,18 @@
-from functools import cached_property
-
 import numpy as np
 
 from pyfr.inifile import Inifile
 from pyfr.mpiutil import init_mpi
 from pyfr.plugins.base import BaseCLIPlugin
 from pyfr.plugins.common import cli_external
-from pyfr.plugins.soln.ascent import AscentRenderer, face_shape_ops, pri_block
+from pyfr.plugins.postproc import get_source
+from pyfr.plugins.soln.ascent import AscentRenderer, face_shape_ops
 from pyfr.readers.native import NativeReader
 from pyfr.shapes import BaseShape
-from pyfr.stats import tavg_exprs
 from pyfr.util import subclass_where
 
 
 class _CLIAdapter:
     def __init__(self, mesh, soln, acfg, cfgsect):
-        from pyfr.solvers.base import BaseSystem
-
         self.mesh = mesh
         self._soln = soln
         self.scfg = soln.config
@@ -30,8 +26,8 @@ class _CLIAdapter:
             for k, v in acfg.items(sect).items():
                 ppcfg.set(sect, k, v)
 
-        sname = self.scfg.get('solver', 'system')
-        self.elementscls = subclass_where(BaseSystem, name=sname).elementscls
+        prefix = soln.stats.get('data', 'prefix')
+        self.source = get_source(prefix, self.scfg, soln.stats, mesh.ndims)
 
     @property
     def tcurr(self):
@@ -42,61 +38,28 @@ class _CLIAdapter:
         stats = self._soln.stats
         return stats.getint('solver-time-integrator', 'nacptsteps', 0)
 
-    @cached_property
-    def is_tavg(self):
-        return self._soln.stats.get('data', 'prefix') == 'tavg'
-
-    @cached_property
-    def _tavg_indices(self):
-        # Primitive (or grad_X_Y) name -> index in soln.fields for tavg
-        section = self._soln.stats.get('tavg', 'cfg-section')
-        te = tavg_exprs(self._soln.config, section, self.mesh.ndims,
-                        self.elementscls)
-
-        fields = self._soln.fields
-        mapping = {}
-        for name, expr in te.avgs.items():
-            if (sym := expr.strip('() \t')).isidentifier():
-                mapping[sym] = fields.index(f'avg-{name}')
-
-        # Deduplicated moments resolve through their alias
-        for cname, sname in te.aliases.items():
-            mapping[cname] = fields.index(f'avg-{sname}')
-
-        return mapping
-
     @property
     def has_grads(self):
-        if self.is_tavg:
-            return all(f'grad_{v}_{d}' in self._tavg_indices
-                       for v in 'uvw'[:self.mesh.ndims]
-                       for d in 'xyz'[:self.mesh.ndims])
-        else:
-            return 'grad' in self._soln.blocks
+        return self.source.prefix == 'tavg' or 'grad' in self._soln.groups
+
+    def prepare(self, pp_plugins, grads):
+        soln, ndims = self._soln, self.mesh.ndims
+        nvars = len(soln.fields)
+
+        # Discard the residual group and, unless needed, the gradient group
+        soln.groups &= {'grad'} if grads else set()
+        nrows = nvars*(1 + ndims) if 'grad' in soln.groups else nvars
+        soln.rownames = soln.rownames[:nrows]
+        soln.data = {et: d[:, :nrows] for et, d in soln.data.items()}
+
+        self.source.prepare(self.mesh, soln, pp_plugins)
 
     def block(self, etype, eidxs, grads):
-        data, nd = self._soln.data[etype], self.mesh.ndims
+        soln = self._soln
+        block = soln.data[etype][..., eidxs]
+        names = self.source.pvar_names(soln.rownames, soln.groups)
 
-        # Tavg grads live in _soln.data and are pulled via _tavg_indices
-        if self.is_tavg:
-            names, rows = self._tavg_rows()
-            return names, data[:, rows][..., eidxs].swapaxes(0, 1)
-        else:
-            nv = len(self._soln.fields)
-            nb = nv*(nd + 1) if grads else nv
-            # Promote to double precision ahead of the conversion
-            block = data[:, :nb][..., eidxs].swapaxes(0, 1).astype(np.float64)
-
-            return pri_block(self.elementscls, self.scfg, nd, block, grads)
-
-    def _tavg_rows(self):
-        privars = self.elementscls.privars(self.mesh.ndims, self.scfg)
-        idx = self._tavg_indices
-
-        if missing := [pn for pn in privars if pn not in idx]:
-            raise KeyError(f'Tavg missing primitives: {missing}')
-
-        return list(idx), list(idx.values())
+        return names, self.source.to_pvars(block, soln.groups)
 
     def soln_op_vpts(self, etype, divisor):
         meshf = self.mesh.spts[etype]
@@ -111,7 +74,7 @@ class _CLIAdapter:
         vpts = mesh_op @ meshf.reshape(len(meshf), -1)
         vpts = vpts.reshape(-1, *meshf.shape[1:])
 
-        return soln_op, vpts.swapaxes(1, 2)
+        return soln_op, vpts
 
     def face_soln_op_vpts(self, etype, fidx, divisor):
         nspts = len(self.mesh.spts[etype])
@@ -164,6 +127,9 @@ class AscentCLIPlugin(BaseCLIPlugin):
             if not renderer or rcfg != soln.config:
                 renderer = AscentRenderer(adapter, isrestart=True)
                 rcfg = soln.config
+
+            # Augment the data with any fields the plugins require
+            adapter.prepare(renderer.postproc_plugins, renderer.need_grads)
 
             # Perform the rendering
             renderer.render(adapter)

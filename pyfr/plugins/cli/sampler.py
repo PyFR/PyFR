@@ -1,5 +1,5 @@
 import csv
-from functools import cached_property, partial
+from functools import cached_property
 import io
 from pathlib import Path
 import re
@@ -9,14 +9,13 @@ import h5py
 import numpy as np
 
 from pyfr.exprs import expr_vars, npeval
-from pyfr.fields import con_block_to_pri
 from pyfr.inifile import Inifile
 from pyfr.mpiutil import get_comm_rank_root, init_mpi
 from pyfr.plugins.base import BaseCLIPlugin
 from pyfr.plugins.common import cli_external, get_elementscls
 from pyfr.plugins.postproc import get_source
 from pyfr.points import PointLocator, PointSampler
-from pyfr.readers.native import NativeReader, block_names
+from pyfr.readers.native import NativeReader
 from pyfr.series import (acf, csd, mean_ci, mser, psd, structfun, tone,
                          tw_mean_var, xcf)
 from pyfr.stats import eval_algebraic, expand_exprs, soln_exprs
@@ -818,11 +817,7 @@ class SamplerCLIPlugin(BaseCLIPlugin):
         pipe = source.pipeline(names, 'volume', pp_cfg)
 
         # Give the data source a chance to augment the solution
-        nstored = len(soln.layout)
-        source.prepare(mesh, soln, pipe.plugins)
-
-        # Determine if gradient and residual data are present
-        blocks = soln.blocks
+        extra = source.prepare(mesh, soln, pipe.plugins)
 
         # Gather the solution data for each element type
         sdata = [soln.data[etype] for etype in mesh.eidxs]
@@ -833,40 +828,35 @@ class SamplerCLIPlugin(BaseCLIPlugin):
                 raise ValueError('Primitive output only supported for '
                                  'solution files')
 
-            # Obtain the element class associated with the solution
-            elementscls = get_elementscls(soln.config)
-            vmap = elementscls.privars(mesh.ndims, soln.config)
+            fields = source.pvar_names(soln.rownames, soln.groups)
 
-            fields = [*vmap, *block_names(vmap, mesh.ndims, blocks)]
-
-            process = partial(con_block_to_pri, elementscls, soln.config,
-                              mesh.ndims, blocks=blocks)
+            # Convert the solution point data to primitive variables
+            sdata = [source.to_pvars(d, soln.groups) for d in sdata]
         else:
-            process = None
-            fields = list(soln.layout)
+            fields = list(soln.rownames)
 
         # Construct and configure the point sampler
         sampler = PointSampler(mesh, pts, locs)
         sampler.configure_with_cfg_nvars(soln.config, len(fields))
 
         # Sample the solution
-        samps = sampler.sample(sdata, process=process)
+        samps = sampler.sample(sdata)
 
         # Have the root rank post-process and write the samples
         if rank == root:
             # Run any requested post-processing plugins
             if pipe.plugins:
                 # Adapt the raw samples for any post-processing plugins
-                out = pipe(soln, samps.T, pts.T)
+                out = pipe(fields, samps, pts).fields
 
                 # Drop any working rows appended by the data source
-                if nextra := len(soln.layout) - nstored:
-                    fields = fields[:-nextra]
+                if extra:
+                    fields = fields[:-len(extra)]
                     samps = samps[:, :len(fields)]
 
                 extra_cols = []
                 for name, arr in out.items():
-                    if name.startswith('_') or name in fields:
+                    if name in fields:
                         continue
 
                     fields.extend(pipe.fields[name])

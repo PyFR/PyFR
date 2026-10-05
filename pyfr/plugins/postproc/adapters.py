@@ -3,35 +3,24 @@ from functools import cached_property
 
 import numpy as np
 
-from pyfr.plugins.common import get_elementscls
-from pyfr.readers.native import block_names
 from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where
 
-FaceInfo = namedtuple('FaceInfo', 'etype fidx svpts norm')
+
+FaceInfo = namedtuple('FaceInfo', 'etype fidx svpts')
 
 
 class PostProcData:
-    kind = 'volume'
-
-    def __init__(self, cfg, pvars, ploc=None):
-        self.cfg = cfg
+    def __init__(self, source, pvars, ploc):
+        self.source = source
+        self.cfg = source.cfg
         self.pvars = pvars
         self.ploc = ploc
         self.fields = {}
 
-    @classmethod
-    def from_soln(cls, soln, samples, ploc, *args):
-        # Name the primitive variables and any gradients and residuals
-        ndims, cfg = len(ploc), soln.config
-        privars = get_elementscls(cfg).privars(ndims, cfg)
-        names = privars + block_names(privars, ndims, soln.blocks)
-
-        return cls(cfg, dict(zip(names, samples)), ploc, *args)
-
     @property
     def ndims(self):
-        return len(self.ploc)
+        return self.source.ndims
 
     @property
     def has_grads(self):
@@ -42,12 +31,9 @@ class PostProcData:
 
 
 class BoundaryPostProcData(PostProcData):
-    kind = 'boundary'
+    def __init__(self, source, pvars, ploc, spts, finfo):
+        super().__init__(source, pvars, ploc)
 
-    def __init__(self, cfg, pvars, ploc, elementscls, spts, finfo):
-        super().__init__(cfg, pvars, ploc)
-
-        self._elementscls = elementscls
         self._spts = spts
         self._finfo = finfo
 
@@ -58,12 +44,14 @@ class BoundaryPostProcData(PostProcData):
 
     @cached_property
     def _eles(self):
-        return self._elementscls(type(self._shape), self._spts, self.cfg)
+        elementscls = self.source.elementscls
+        return elementscls(type(self._shape), self._spts, self.cfg)
 
     @cached_property
     def pnorm(self):
         svpts = self._finfo.svpts
-        norm_tiled = np.tile(self._finfo.norm, (len(svpts), 1))
+        norm = self._shape.faces[self._finfo.fidx][2]
+        norm_tiled = np.tile(norm, (len(svpts), 1))
         pn = self._eles.pnorm_at(svpts, norm_tiled)
 
         return pn.transpose(2, 0, 1)
@@ -88,7 +76,7 @@ class BoundaryPostProcData(PostProcData):
         x_upt = r.reshape(op.shape[0], *self._spts.shape[1:])
 
         # Offset of each interior point from each surface point
-        dx = x_upt[:, None] - np.moveaxis(self.ploc, 0, -1)[None]
+        dx = x_upt[:, None] - self.ploc[None]
 
         # Distance along the local surface normal at each surface point
         dist = np.abs(np.einsum('ipek,kpe->ipe', dx, self.normals))

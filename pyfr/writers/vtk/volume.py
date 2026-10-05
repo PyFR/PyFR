@@ -81,7 +81,7 @@ class VTKVolumeWriter(BaseVolumeVTKWriter):
 
     def _prepare_pts(self, etype):
         spts = self.mesh.spts[etype].astype(self.dtype)
-        soln = self.soln.data[etype].swapaxes(0, 1).astype(self.dtype)
+        soln = self.soln.data[etype]
         curved = self.mesh.spts_curved[etype]
 
         # Initialise extra field dicts
@@ -94,14 +94,13 @@ class VTKVolumeWriter(BaseVolumeVTKWriter):
         vpts = interp_pts(self._mesh_op(etype), spts)
 
         # Pre-process the solution at upts
-        soln = self._pre_proc_fields(soln).swapaxes(0, 1)
+        soln = self.source.to_pvars(soln, self.soln.groups)
 
         # Interpolate the solution to the vis points
         vsoln = interp_pts(soln_vtu_op, soln)
 
         # Run postproc plugins at svpts (views into vsoln/vpts)
-        pointf |= self._postproc(vsoln.transpose(1, 0, 2),
-                                 vpts.transpose(2, 0, 1))
+        pointf |= self._postproc(vsoln, vpts)
 
         # Append dummy z dimension for points in 2D (post-pp)
         if self.ndims == 2:

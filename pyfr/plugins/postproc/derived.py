@@ -1,7 +1,8 @@
 from functools import cached_property
 import re
 
-from pyfr.plugins.common import get_elementscls
+import numpy as np
+
 from pyfr.plugins.postproc.base import BasePostProcPlugin
 from pyfr.stats import eval_algebraic, soln_exprs
 
@@ -11,12 +12,13 @@ class TableDerivedPostProc(BasePostProcPlugin):
     dimensions = '2|3'
     export_types = '.*'
 
-    def __init__(self, name, source, cfg, export_type=None, want=None):
+    def __init__(self, name, source, cfg, export_type=None, kind=None,
+                 want=None):
         self.name = name
 
-        super().__init__(source, cfg, export_type, want)
+        super().__init__(source, cfg, export_type, kind, want)
 
-        self.elementscls = get_elementscls(cfg)
+        self.elementscls = source.elementscls
         self.derived, self.support = soln_exprs(self.elementscls, source.ndims,
                                                 cfg, [name])
 
@@ -28,7 +30,7 @@ class TableDerivedPostProc(BasePostProcPlugin):
         self.fields = {n: [n] for n in self.derived}
 
         # Quantities using surface geometry are boundary-export only
-        if self._on_boundary and export_type != 'boundary':
+        if self._on_boundary and kind != 'boundary':
             raise RuntimeError(f'Postproc {name} is only available for '
                                'boundary exports')
 
@@ -63,4 +65,11 @@ class TableDerivedPostProc(BasePostProcPlugin):
             ns['boundary_dist'] = data.boundary_dist
 
         out = eval_algebraic(self.derived, ns, self.support)
+
+        # Broadcast any constant-valued quantities over the points
+        shape = data.ploc.shape[:-1]
+        for n, v in out.items():
+            if np.shape(v) != shape:
+                out[n] = np.full(shape, v)
+
         data.fields |= out

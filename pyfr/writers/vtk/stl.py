@@ -140,7 +140,7 @@ class VTKSTLWriter(BaseVTKWriter):
         mesh, soln = self.mesh, self.soln
         pts, pinv, spts, slocs = self._stl_pts
         _, rank, root = get_comm_rank_root()
-        nsoln = len(soln.layout)
+        nsoln = len(soln.rownames)
 
         # STL carries no per-element cell data; keep only point fields
         self._extra_fields = {n: m for n, m in self._extra_fields.items()
@@ -159,7 +159,10 @@ class VTKSTLWriter(BaseVTKWriter):
         for etype in mesh.eidxs:
             nupts, nvars, neles = soln.data[etype].shape
             arr = np.empty((nupts, nvars + naux, neles))
-            arr[:, :nvars] = soln.data[etype]
+
+            # Pre-process the solution fields only
+            arr[:, :nvars] = self.source.to_pvars(soln.data[etype],
+                                                  soln.groups)
 
             off = nvars
             for name, n in aux_info:
@@ -178,14 +181,12 @@ class VTKSTLWriter(BaseVTKWriter):
 
         # If we are the root rank then write out the triangle list
         if rank == root:
-            samps = samps.swapaxes(0, 1)
+            svars = samps[:, :nsoln]
 
-            # Pre-process the solution fields only
-            svars = self._pre_proc_fields(samps[:nsoln].astype(self.dtype))
-
-            # Run postproc plugins at welded sample points
+            # Run postproc plugins at the sample points
             if self.pp_pipe.plugins:
-                ppfields = self.pp_pipe(self.soln, svars, spts.T)
+                names = self.source.pvar_names(soln.rownames, soln.groups)
+                ppfields = self.pp_pipe(names, svars, spts).fields
             else:
                 ppfields = {}
 
@@ -193,15 +194,14 @@ class VTKSTLWriter(BaseVTKWriter):
             pts = spts[pinv].reshape(pts.shape)
 
             # Unpack and reshape solution onto STL triangles
-            svars = svars[:, pinv].reshape(-1, *pts.shape[:2])
-            svars = svars.swapaxes(0, 1)
+            svars = svars[pinv].reshape(*pts.shape[:2], -1).swapaxes(1, 2)
 
             # Unpack aux fields onto STL triangles
             pointf = {}
             off = nsoln
             for name, n in aux_info:
-                a = samps[off:off + n, pinv].astype(self.dtype)
-                pointf[name] = a.reshape(n, *pts.shape[:2]).swapaxes(0, 1)
+                a = samps[pinv, off:off + n].astype(self.dtype)
+                pointf[name] = a.reshape(*pts.shape[:2], -1).swapaxes(1, 2)
                 off += n
 
             # Unpack postproc fields onto STL triangles
