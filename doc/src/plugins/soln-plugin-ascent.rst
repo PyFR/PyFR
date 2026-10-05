@@ -227,8 +227,12 @@ are available
   will use settings from the first section of the settings file which
   defines a scene; as such a simulation configuration file with a
   ``[soln-plugin-ascent]`` section can be passed directly.
-  Alternatively, a specific section name can be provided. In both
-  cases all other sections are ignored.  Multiple solution files can
+  Alternatively, a specific section name can be provided.  Parameters
+  for ``postproc-{name}`` quantities, such as the ``rho-inf``,
+  ``u-inf``, and ``p-inf`` constants required by ``cp``, are read from
+  the solution file's embedded config with any options in the settings
+  file, such as a ``[constants]`` section, taking precedence.  All
+  other sections are otherwise ignored.  Multiple solution files can
   be passed; the renderer is rebuilt when the embedded solver
   configuration changes between files, so mixed solver orders and a
   mix of ``soln``/``tavg`` snapshots are supported in one invocation.

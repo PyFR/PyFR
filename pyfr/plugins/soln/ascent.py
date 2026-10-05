@@ -179,7 +179,7 @@ class _IntegratorAdapter:
     def __init__(self, intg, acfg, cfgsect):
         self.intg = intg
         self.mesh = intg.system.mesh
-        self.scfg = intg.cfg
+        self.scfg = self.ppcfg = intg.cfg
         self.acfg = acfg
         self.cfgsect = cfgsect
         self.dtype = intg.system.backend.fpdtype
@@ -676,7 +676,8 @@ class AscentRenderer:
         self._postproc_plugins = {}
         dsrc = get_source('soln', self.scfg, None, self.mesh.ndims)
         for sname, names in groups.items():
-            plugins = dsrc.quantities(names, self.sources[sname].kind)
+            kind = self.sources[sname].kind
+            plugins = dsrc.quantities(names, kind, self.adapter.ppcfg)
             self._postproc_plugins[sname] = plugins
 
             for pp in plugins:

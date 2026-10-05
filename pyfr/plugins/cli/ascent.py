@@ -24,6 +24,12 @@ class _CLIAdapter:
         self.cfgsect = cfgsect
         self.dtype = np.float32
 
+        # Overlay the ascent config onto the solution config for postproc
+        self.ppcfg = ppcfg = Inifile(self.scfg.tostr())
+        for sect in acfg.sections():
+            for k, v in acfg.items(sect).items():
+                ppcfg.set(sect, k, v)
+
         sname = self.scfg.get('solver', 'system')
         self.elementscls = subclass_where(BaseSystem, name=sname).elementscls
 
