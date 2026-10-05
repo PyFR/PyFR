@@ -6,7 +6,7 @@ from pyfr.inifile import Inifile
 from pyfr.mpiutil import init_mpi
 from pyfr.plugins.base import BaseCLIPlugin
 from pyfr.plugins.common import cli_external
-from pyfr.plugins.soln.ascent import AscentRenderer, con_pvars, face_shape_ops
+from pyfr.plugins.soln.ascent import AscentRenderer, face_shape_ops, pri_block
 from pyfr.readers.native import NativeReader
 from pyfr.shapes import BaseShape
 from pyfr.stats import tavg_exprs
@@ -74,40 +74,29 @@ class _CLIAdapter:
         else:
             return 'grad' in self._soln.blocks
 
-    @property
-    def soln(self):
-        nv = len(self._soln.fields)
-        return {et: self._soln.data[et][:, :nv] for et in self.mesh.eidxs}
+    def block(self, etype, eidxs, grads):
+        data, nd = self._soln.data[etype], self.mesh.ndims
 
-    @property
-    def grad_soln(self):
         # Tavg grads live in _soln.data and are pulled via _tavg_indices
         if self.is_tavg:
-            return None
+            names, rows = self._tavg_rows()
+            return names, data[:, rows][..., eidxs].swapaxes(0, 1)
         else:
-            nv, nd = len(self._soln.fields), self.mesh.ndims
-            grads = {}
-            for et in self.mesh.eidxs:
-                g = self._soln.data[et][:, nv:nv*(nd + 1)]
-                grads[et] = g.reshape(len(g), nv, nd, -1).transpose(2, 0, 1, 3)
+            nv = len(self._soln.fields)
+            nb = nv*(nd + 1) if grads else nv
+            # Promote to double precision ahead of the conversion
+            block = data[:, :nb][..., eidxs].swapaxes(0, 1).astype(np.float64)
 
-            return grads
+            return pri_block(self.elementscls, self.scfg, nd, block, grads)
 
-    def pvars(self, csolns, cgrads):
-        if self.is_tavg:
-            return self._tavg_pvars(csolns)
-        else:
-            return con_pvars(self.elementscls, self.scfg, self.mesh.ndims,
-                             csolns, cgrads)
-
-    def _tavg_pvars(self, csolns):
+    def _tavg_rows(self):
         privars = self.elementscls.privars(self.mesh.ndims, self.scfg)
         idx = self._tavg_indices
 
         if missing := [pn for pn in privars if pn not in idx]:
             raise KeyError(f'Tavg missing primitives: {missing}')
 
-        return {s: csolns[i] for s, i in idx.items()}
+        return list(idx), list(idx.values())
 
     def soln_op_vpts(self, etype, divisor):
         meshf = self.mesh.spts[etype]

@@ -7,7 +7,7 @@ import numpy as np
 
 from pyfr.ctypesutil import LibWrapper
 from pyfr.exprs import npeval
-from pyfr.fields import CleanToGrid
+from pyfr.fields import CleanToGrid, con_block_to_pri
 from pyfr.inifile import process_expr
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.plugins.common import region_data
@@ -15,23 +15,21 @@ from pyfr.plugins.postproc.adapters import (BoundaryPostProcData, FaceInfo,
                                             PostProcData)
 from pyfr.plugins.postproc import get_source
 from pyfr.plugins.soln.base import BaseSolnPlugin
+from pyfr.readers.native import block_names
 from pyfr.shapes import BaseShape, proj_pts
 from pyfr.subdiv import get_subdiv
 from pyfr.util import (file_path_gen, first, paren_depths,
                        subclass_where)
 
 
-def con_pvars(elementscls, scfg, ndims, csolns, cgrads):
+def pri_block(elementscls, scfg, ndims, block, grads):
+    blocks = {'grad'} if grads else set()
+
+    # Name the primitive variables and any gradients
     privars = elementscls.privars(ndims, scfg)
-    pvars = dict(zip(privars, elementscls.con_to_pri(csolns, scfg)))
+    names = privars + block_names(privars, ndims, blocks)
 
-    # Name the primitive gradients by variable and direction
-    if cgrads is not None:
-        pgrads = elementscls.grad_con_to_pri(csolns, cgrads, scfg)
-        for v, g in zip(privars, pgrads):
-            pvars |= {f'grad_{v}_{x}': gx for x, gx in zip('xyz', g)}
-
-    return pvars
+    return names, con_block_to_pri(elementscls, scfg, ndims, block, blocks)
 
 
 def face_shape_ops(etype, fidx, divisor, nspts, scfg):
@@ -174,8 +172,6 @@ class AscentWrappers(LibWrapper):
 
 
 class _IntegratorAdapter:
-    has_grads = True
-
     def __init__(self, intg, acfg, cfgsect):
         self.intg = intg
         self.mesh = intg.system.mesh
@@ -184,6 +180,7 @@ class _IntegratorAdapter:
         self.cfgsect = cfgsect
         self.dtype = intg.system.backend.fpdtype
         self.elementscls = intg.system.elementscls
+        self.has_grads = self.elementscls.has_grad_soln
 
     @property
     def tcurr(self):
@@ -201,9 +198,15 @@ class _IntegratorAdapter:
     def grad_soln(self):
         return dict(zip(self.intg.system.ele_types, self.intg.grad_soln))
 
-    def pvars(self, csolns, cgrads):
-        return con_pvars(self.elementscls, self.scfg, self.mesh.ndims,
-                         csolns, cgrads)
+    def block(self, etype, eidxs, grads):
+        # Stack the solution and any gradients as the reader does
+        block = self.soln[etype][..., eidxs].swapaxes(0, 1)
+        if grads:
+            g = self.grad_soln[etype][..., eidxs].transpose(2, 0, 1, 3)
+            block = np.concatenate([block, g.reshape(-1, *block.shape[1:])])
+
+        return pri_block(self.elementscls, self.scfg, self.mesh.ndims, block,
+                         grads)
 
     def soln_op_vpts(self, etype, divisor):
         eles = self.intg.system.ele_map[etype]
@@ -285,25 +288,12 @@ class _VolumeAscentOutput:
                                self._points(etype, xd), conn)
         return dom
 
-    def csolns_cgrads(self, soln, grad_soln, etype):
-        soln_op = self.soln_ops[etype]
-        rgn = self.rdata[etype]
+    def postproc_data(self, adapter, etype, grads):
+        names, block = adapter.block(etype, self.rdata[etype], grads)
 
-        # Subset and transpose the solution, then interpolate to subdiv points
-        csolns = soln_op @ soln[etype][..., rgn].swapaxes(0, 1)
-        if grad_soln is not None:
-            # Interpolate the gradients to the points
-            cg = np.rollaxis(grad_soln[etype], 2)[..., rgn]
-            return csolns, soln_op @ cg
-        else:
-            return csolns, None
-
-    def run_postproc(self, plugins, etype, pvars):
-        data = PostProcData(self.renderer.scfg, pvars)
-        for pp in plugins:
-            pp.run(data)
-
-        return data.fields
+        # Interpolate the primitives to the subdiv points
+        samples = self.soln_ops[etype] @ block
+        yield PostProcData(self.renderer.scfg, dict(zip(names, samples)))
 
     def _emit(self, mesh_n, dom, fname, arr):
         # Scalars publish at values; vectors split into values/x, /y, /z
@@ -412,29 +402,15 @@ class _BoundaryAscentOutput(_VolumeAscentOutput):
                                self._points(itype, xd), conn)
         return dom
 
-    def csolns_cgrads(self, soln, grad_soln, itype):
-        css, cgs = [], []
-        for eidxs, etype, _, sop, _, _ in self.patches[itype]:
-            css.append(sop @ soln[etype][..., eidxs].swapaxes(0, 1))
-            if grad_soln is not None:
-                cg = np.rollaxis(grad_soln[etype], 2)[..., eidxs]
-                cgs.append(sop @ cg)
-
-        csolns = np.concatenate(css, axis=2)
-        cgrads = np.concatenate(cgs, axis=3) if cgs else None
-        return csolns, cgrads
-
-    def run_postproc(self, plugins, itype, pvars):
+    def postproc_data(self, adapter, itype, grads):
         r = self.renderer
         spts, elementscls = r.mesh.spts, r.adapter.elementscls
 
-        # Slice per-patch views, run postprocs, merge by field across patches
-        merged = defaultdict(list)
-        offset = 0
-        for eidxs, etype, mop, _, fidx, svpts in self.patches[itype]:
-            sl = slice(offset, offset + len(eidxs))
-            ppvars = {k: v[..., sl] for k, v in pvars.items()}
-            offset = sl.stop
+        for eidxs, etype, mop, sop, fidx, svpts in self.patches[itype]:
+            names, block = adapter.block(etype, eidxs, grads)
+
+            # Interpolate the primitives to the face visualisation points
+            ppvars = dict(zip(names, sop @ block))
 
             # Physical locations of the face visualisation points
             psp = spts[etype][:, eidxs]
@@ -443,16 +419,8 @@ class _BoundaryAscentOutput(_VolumeAscentOutput):
 
             norm = subclass_where(BaseShape, name=etype).faces[fidx][2]
             finfo = FaceInfo(etype, fidx, svpts, norm)
-            data = BoundaryPostProcData(r.scfg, ppvars, ploc, elementscls,
-                                        psp, finfo)
-            for pp in plugins:
-                pp.run(data)
-
-            for fname, arr in data.fields.items():
-                merged[fname].append(arr)
-
-        return {fname: np.concatenate(parts, axis=1)
-                for fname, parts in merged.items()}
+            yield BoundaryPostProcData(r.scfg, ppvars, ploc, elementscls,
+                                       psp, finfo)
 
 
 class AscentRenderer:
@@ -777,10 +745,6 @@ class AscentRenderer:
         tcurr = adapter.tcurr
         cycle = adapter.cycle
 
-        # Obtain the solution (and gradients if needed)
-        soln = adapter.soln
-        grad_soln = adapter.grad_soln if self._need_grads else None
-
         # out[sname] = {key: [(field, arr)]} for per-source publish
         out = defaultdict(dict)
 
@@ -791,29 +755,28 @@ class AscentRenderer:
             self.mesh_n[f'{dom}/state/cycle'] = cycle
 
             source = self.sources[sname]
-            csolns, cgrads = source.csolns_cgrads(soln, grad_soln, key)
+            plugins = self._postproc_plugins.get(sname, [])
 
-            # Adapter chooses conservative->primitive vs name-mapped (tavg)
-            pvars = adapter.pvars(csolns, cgrads)
+            # Run each patch, merge by field across patches
+            merged = defaultdict(list)
+            for data in source.postproc_data(adapter, key, self._need_grads):
+                # Prepare the substitutions dictionary
+                subs = data.pvars | {'t': tcurr}
 
-            # Prepare the substitutions dictionary
-            subs = pvars | {'t': tcurr}
+                # Field expressions
+                for field, comps in self._exprs:
+                    arr = np.stack([npeval(c, subs) for c in comps], axis=-1)
+                    merged[field].append(arr)
 
-            items = []
+                # Postproc plugins for this source/key
+                for pp in plugins:
+                    pp.run(data)
 
-            # Field expressions
-            for field, comps in self._exprs:
-                arr = np.stack([npeval(c, subs) for c in comps], axis=-1)
-                items.append((self._field_name(sname, field), arr))
+                for field, arr in data.fields.items():
+                    merged[field].append(np.atleast_3d(arr))
 
-            # Postproc plugins for this source/key
-            if plugins := self._postproc_plugins.get(sname):
-                pp_fields = source.run_postproc(plugins, key, pvars)
-                for field, arr in pp_fields.items():
-                    items.append((self._field_name(sname, field),
-                                  np.atleast_3d(arr)))
-
-            out[sname][key] = items
+            out[sname][key] = [(self._field_name(sname, f), np.hstack(a))
+                               for f, a in merged.items()]
 
         return out
 

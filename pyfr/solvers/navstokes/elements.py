@@ -1,5 +1,3 @@
-import numpy as np
-
 from pyfr.exprs import resolve_aux
 from pyfr.solvers.baseadvecdiff import BaseAdvectionDiffusionElements
 from pyfr.solvers.euler.elements import BaseFluidElements
@@ -27,26 +25,6 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
         aux['nu'] = 'mu/rho'
 
         return resolve_aux(aux)
-
-    @staticmethod
-    def grad_con_to_pri(cons, grad_cons, cfg):
-        rho, *rhouvw = cons[:-1]
-        grad_rho, *grad_rhouvw, grad_E = grad_cons
-
-        # Divide momentum components by ρ
-        uvw = [rhov / rho for rhov in rhouvw]
-
-        # Velocity gradients: ∇u⃗ = 1/ρ·[∇(ρu⃗) - u⃗ ⊗ ∇ρ]
-        grad_uvw = [(grad_rhov - v*grad_rho) / rho
-                    for grad_rhov, v in zip(grad_rhouvw, uvw)]
-
-        # Pressure gradient: ∇p = (γ - 1)·[∇E - 1/2*(u⃗·∇(ρu⃗) - ρu⃗·∇u⃗)]
-        gamma = cfg.getfloat('constants', 'gamma')
-        grad_p = grad_E - 0.5*(np.einsum('ijk,iljk->ljk', uvw, grad_rhouvw) +
-                               np.einsum('ijk,iljk->ljk', rhouvw, grad_uvw))
-        grad_p *= (gamma - 1)
-
-        return [grad_rho, *grad_uvw, grad_p]
 
     def set_backend(self, *args, **kwargs):
         super().set_backend(*args, **kwargs)
