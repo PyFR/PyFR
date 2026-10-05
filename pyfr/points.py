@@ -213,8 +213,8 @@ class PointLocator:
                 pidx.append(i)
                 sidx.append(ei)
 
-        return self._find_closest_element(etype, pts, np.array(pidx),
-                                          np.array(sidx))
+        pidx, sidx = np.array(pidx, dtype=int), np.array(sidx, dtype=int)
+        return self._find_closest_element(etype, pts, pidx, sidx)
 
     def _find_closest_element_bbox(self, etype, pts):
         # Query the index to find intersecting elements
