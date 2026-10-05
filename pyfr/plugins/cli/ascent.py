@@ -114,8 +114,8 @@ class AscentCLIPlugin(BaseCLIPlugin):
                 raise ValueError('No section with scenes found; use '
                                  '--cfgsect')
 
-        # Current Ascent render and associated config
-        renderer, rcfg = None, None
+        # Current Ascent renderer, mesh, and the key it was built for
+        renderer, rmesh, rkey = None, None, None
 
         # Iterate over the solutions
         for s in args.solns:
@@ -124,9 +124,10 @@ class AscentCLIPlugin(BaseCLIPlugin):
             adapter = _CLIAdapter(mesh, soln, acfg, acfgsect)
 
             # See if we need to create a new Ascent renderer
-            if not renderer or rcfg != soln.config:
+            key = (soln.config.tostr(), soln.stats.get('data', 'prefix'))
+            if mesh is not rmesh or key != rkey:
                 renderer = AscentRenderer(adapter, isrestart=True)
-                rcfg = soln.config
+                rmesh, rkey = mesh, key
 
             # Augment the data with any fields the plugins require
             adapter.prepare(renderer.postproc_plugins, renderer.need_grads)
