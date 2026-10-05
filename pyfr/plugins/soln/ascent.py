@@ -153,6 +153,7 @@ class AscentWrappers(LibWrapper):
     _functions = [
         (None, 'ascent_close', c_void_p),
         (c_void_p, 'ascent_create', c_void_p),
+        (None, 'ascent_destroy', c_void_p),
         (None, 'ascent_execute', c_void_p, c_void_p),
         (None, 'ascent_open', c_void_p, c_void_p),
         (None, 'ascent_publish', c_void_p, c_void_p)
@@ -502,6 +503,7 @@ class AscentRenderer:
     def __del__(self):
         if getattr(self, 'ascent_ptr', None):
             self.lib.ascent_close(self.ascent_ptr)
+            self.lib.ascent_destroy(self.ascent_ptr)
 
     def _write_state_meta(self, mesh_n, dom, domid):
         mesh_n[f'{dom}/state/domain_id'] = domid
