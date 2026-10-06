@@ -10,6 +10,7 @@ import weakref
 import numpy as np
 
 from pyfr.cache import memoize
+from pyfr.util import first
 
 
 def init_mpi():
@@ -101,6 +102,10 @@ def scal_coll(colfn, v, *args, **kwargs):
     v = np.array([v], dtype=dtype)
     colfn(mpi.IN_PLACE, v, *args, **kwargs)
     return dtype(v[0])
+
+
+def first_coll(comm, v, *default):
+    return first((v for v in comm.allgather(v) if v is not None), *default)
 
 
 def home_rank(gidxs, size):

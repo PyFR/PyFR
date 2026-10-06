@@ -4,10 +4,11 @@ from functools import partial
 import numpy as np
 
 from pyfr.cache import memoize
-from pyfr.mpiutil import (DistributedDirectory, get_comm_rank_root, mpi,
-                          scal_coll)
+from pyfr.mpiutil import (DistributedDirectory, first_coll,
+                          get_comm_rank_root)
 from pyfr.nputil import zip_chunks
 from pyfr.polys import get_polybasis
+from pyfr.readers.native import group_names
 from pyfr.shapes import BaseShape, interp_pts
 from pyfr.subdiv import get_subdiv
 from pyfr.util import first, subclass_where, subclasses
@@ -87,7 +88,7 @@ class CleanToGrid:
                         for etype in cnodemap}
 
     def _init_kind(self, kind, topos, cnodemap, shared):
-        evdofs, klist, nint, ncols = {}, [], 0, 0
+        evdofs, klist, kinfo = {}, [], None
         for etype, cn in cnodemap.items():
             if kind not in topos[etype].kinds:
                 continue
@@ -95,11 +96,10 @@ class CleanToGrid:
             keys, fsrc, cpos, nint = topos[etype].canonical_vdofs(kind, cn)
             evdofs[etype] = (keys, fsrc, cpos)
             klist.append(keys)
-            ncols = keys.shape[1]
+            kinfo = (nint, keys.shape[1])
 
         # Agree on nint and key width across ranks
-        nint = scal_coll(self.comm.Allreduce, nint, op=mpi.MAX)
-        ncols = scal_coll(self.comm.Allreduce, ncols, op=mpi.MAX)
+        nint, ncols = first_coll(self.comm, kinfo)
 
         # Deduplicate canonical keys across all contributing etypes
         akeys = np.concatenate(klist or [np.empty((0, ncols), dtype=int)])
@@ -305,13 +305,15 @@ class FieldRecovery:
 
     def average(self, fmap):
         # Node-average per-etype (nupts, ..., neles) fields across elements
-        shapes, nodal, dtype = {}, {}, first(fmap.values()).dtype
+        shapes, nodal = {}, {}
         for et, f in fmap.items():
             fn = interp_pts(self.up2n[et], f)
             shapes[et] = fn.shape
             nodal[et] = fn.reshape(len(fn), -1, fn.shape[-1]).swapaxes(1, 2)
 
-        ncomp = first(nodal.values()).shape[-1]
+        # Component count and data type, from any rank holding elements
+        ninfo = first(((n.shape[-1], n.dtype) for n in nodal.values()), None)
+        ncomp, dtype = first_coll(self.cleaner.comm, ninfo)
         avg = self.cleaner.average(nodal, ncomp, dtype)
 
         out = {}
@@ -423,6 +425,24 @@ class FieldRecovery:
                 np.einsum('ijkm,ijlkm->jlm', jchunk, refg, out=lchunk)
 
         return self.average(lap)
+
+
+def recover_grads(mesh, soln, elementscls):
+    rec = FieldRecovery(mesh, elementscls, soln.config)
+    nvars = len(soln.fields)
+    bcvars = ('con', list(range(nvars)))
+    data = soln.data
+
+    # Insert the gradients between the fields and any residuals
+    fmap = {et: d[:, :nvars] for et, d in data.items()}
+    for et, g in rec.grad_corrected(fmap, bcvars).items():
+        d = data[et]
+        g = g.reshape(len(d), -1, d.shape[-1])
+        data[et] = np.concatenate([d[:, :nvars], g, d[:, nvars:]], axis=1)
+
+    gnames = group_names(soln.fields, mesh.ndims, {'grad'})
+    soln.rownames[nvars:nvars] = gnames
+    soln.groups.add('grad')
 
 
 def _plugin_fields(soln, fields, pp_plugins):

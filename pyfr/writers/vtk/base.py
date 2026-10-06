@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 
 from pyfr.cache import clear_memoize, memoize
-from pyfr.fields import CleanToGrid, FieldRecovery
+from pyfr.fields import CleanToGrid, recover_grads
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.readers.native import group_names
 from pyfr.shapes import BaseShape, interp_pts
@@ -244,7 +244,7 @@ class BaseVTKWriter(BaseWriter):
         if self._can_grads and 'grad' not in self.soln.groups:
             if (any(f.startswith('grad ') for f in want) or
                 self.pp_pipe.needs_grads):
-                self._synth_grads()
+                recover_grads(self.mesh, self.soln, self.elementscls)
 
         # Stack any gradient and residual groups needed for the output
         self._stack_groups(want)
@@ -271,23 +271,6 @@ class BaseVTKWriter(BaseWriter):
 
         self._extra_fields = {f: m for f, m in self._extra_fields.items()
                               if f in want}
-
-    def _synth_grads(self):
-        rec = FieldRecovery(self.mesh, self.elementscls, self.cfg)
-        nvars = len(self.soln.fields)
-        bcvars = ('con', list(range(nvars)))
-        data = self.soln.data
-
-        # Insert the gradients between the fields and any residuals
-        fmap = {et: d[:, :nvars] for et, d in data.items()}
-        for et, g in rec.grad_corrected(fmap, bcvars).items():
-            d = data[et]
-            g = g.reshape(len(d), -1, d.shape[-1])
-            data[et] = np.concatenate([d[:, :nvars], g, d[:, nvars:]], axis=1)
-
-        gnames = group_names(self.soln.fields, self.ndims, {'grad'})
-        self.soln.rownames[nvars:nvars] = gnames
-        self.soln.groups.add('grad')
 
     def _stack_groups(self, want):
         pnames, vitems = list(self._soln_fields), list(self._vtk_vars.items())

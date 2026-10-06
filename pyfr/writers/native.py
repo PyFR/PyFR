@@ -13,7 +13,8 @@ import numpy as np
 
 from pyfr._version import __version__
 from pyfr.ctypesutil import get_libc_function
-from pyfr.mpiutil import Gatherer, autofree, get_comm_rank_root, mpi, scal_coll
+from pyfr.mpiutil import (Gatherer, autofree, first_coll, get_comm_rank_root,
+                          mpi, scal_coll)
 from pyfr.quadrules import get_quadrule
 from pyfr.shapes import BaseShape
 from pyfr.util import file_path_gen, first, mv, pwrite_all, subclass_where
@@ -154,14 +155,13 @@ class NativeWriter:
         self._futures = {}
         for etype, gcount in self._global_ecounts.items():
             # See if any ranks want to write elements of this type
-            eshape = comm.allgather(shapes.get(etype))
-            if any(eshape):
+            if (eshape := first_coll(comm, shapes.get(etype), None)):
                 # Create a gatherer for this element type
                 idxs = eidxs.get(etype, [])
                 gatherer = Gatherer(comm, idxs)
 
                 # Determine the final shape of the element array
-                shape = (gatherer.tot, *next(es for es in eshape if es))
+                shape = (gatherer.tot, *eshape)
 
                 # Determine the polynomial order
                 ecls = subclass_where(BaseShape, name=etype)

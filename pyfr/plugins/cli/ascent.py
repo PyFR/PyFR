@@ -1,5 +1,6 @@
 import numpy as np
 
+from pyfr.fields import recover_grads
 from pyfr.inifile import Inifile
 from pyfr.mpiutil import init_mpi
 from pyfr.plugins.base import BaseCLIPlugin
@@ -40,11 +41,17 @@ class _CLIAdapter:
 
     @property
     def has_grads(self):
-        return self.source.prefix == 'tavg' or 'grad' in self._soln.groups
+        return (self.source.prefix == 'tavg' or 'grad' in self._soln.groups or
+                self.source.elementscls.has_grad_soln)
 
     def prepare(self, pp_plugins, grads):
         soln, ndims = self._soln, self.mesh.ndims
         nvars = len(soln.fields)
+
+        # Recover gradients for solution snapshots which do not store them
+        lacks_grads = 'grad' not in soln.groups
+        if grads and lacks_grads and self.source.prefix == 'soln':
+            recover_grads(self.mesh, soln, self.source.elementscls)
 
         # Discard the residual group and, unless needed, the gradient group
         soln.groups &= {'grad'} if grads else set()

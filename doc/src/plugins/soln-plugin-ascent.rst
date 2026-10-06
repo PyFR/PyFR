@@ -133,10 +133,11 @@ Render
    available plugins and their configuration.  Fields are namespaced per
    source like any other field (``volume_mach``, ``airfoil_yplus``).
    Postprocs that need gradients (``vorticity``, ``yplus``, ``cf``)
-   work directly in-situ; via ``pyfr ascent render`` they need a
-   ``soln`` snapshot carrying gradients (``write-gradients = true``),
-   whereas for ``tavg`` snapshots the gradients of the averages are
-   recovered on demand:
+   work directly in-situ.  Via ``pyfr ascent render`` the gradients
+   are taken from ``soln`` snapshots which store them
+   (``write-gradients = true``) and otherwise recovered, as with
+   ``pyfr export``, whereas for ``tavg`` snapshots the gradients of
+   the averages are recovered on demand:
 
    *string* (, *string*)
 
