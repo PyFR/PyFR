@@ -5,7 +5,7 @@ import numpy as np
 
 from pyfr.cache import memoize
 from pyfr.exprs import npeval
-from pyfr.nputil import batched_fuzzysort
+from pyfr.nputil import fuzzysort
 from pyfr.quadrules import get_quadrule
 from pyfr.shapes import interp_pts, proj_l2
 
@@ -170,7 +170,7 @@ class BaseElements:
         for ffpts in self.basis.facefpts:
             ffpts = np.asarray(ffpts)
             coords = plocfpts[ffpts].transpose(1, 2, 0)
-            perm = batched_fuzzysort(coords)
+            perm = fuzzysort(coords)
             sffpts.append(ffpts[perm])
 
         return sffpts

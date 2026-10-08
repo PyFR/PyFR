@@ -286,8 +286,8 @@ class NodalMeshAssembler:
                 lpts = self._nodepts[lfnodes].mean(axis=1)
                 rpts = ((self._nodepts[rfnodes] - T) @ R).mean(axis=1)
 
-                lfidx = fuzzysort(lpts.T, range(len(lpts)))
-                rfidx = fuzzysort(rpts.T, range(len(rpts)))
+                lfidx = fuzzysort(lpts.T[None])[0]
+                rfidx = fuzzysort(rpts.T[None])[0]
 
                 if not np.allclose(lpts[lfidx], rpts[rfidx]):
                     raise ValueError('Could not pair periodic faces')

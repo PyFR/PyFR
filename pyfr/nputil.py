@@ -114,66 +114,48 @@ def search_unsorted(a, v):
     return idx[np.searchsorted(a, v, sorter=idx)]
 
 
-def fuzzysort(arr, idx, dim=0, tol=1e-6):
-    # Extract our dimension and argsort
-    arrd = arr[dim]
-    srtdidx = sorted(idx, key=arrd.__getitem__)
+def _fuzzysort_chunk(coords, perm, tol):
+    rows, prows, gid = np.arange(len(perm)), perm, np.zeros_like(perm)
+    npts = perm.shape[1]
 
-    if len(srtdidx) > 1:
-        i, ix = 0, srtdidx[0]
-        for j, jx in enumerate(srtdidx[1:], start=1):
-            if arrd[jx] - arrd[ix] >= tol:
-                if j - i > 1:
-                    srtdidx[i:j] = fuzzysort(arr, srtdidx[i:j], dim + 1, tol)
-                i, ix = j, jx
+    # Offset which places the groups of a row in disjoint key ranges
+    span = np.ptp(coords) + 1
 
-        if i != j:
-            srtdidx[i:] = fuzzysort(arr, srtdidx[i:], dim + 1, tol)
+    for dim in range(coords.shape[1]):
+        # Sort the points of each row by group and then by this dimension
+        vals = np.take_along_axis(coords[rows, dim], prows, axis=1)
+        sub = np.argsort(gid*span + vals, axis=1, kind='stable')
 
-    return srtdidx
+        # Convert the per-row indices into flat indices
+        sub += (np.arange(len(rows))*npts)[:, None]
 
+        # Apply the sort to the permutation, values, and group ids
+        prows = np.take(prows, sub)
+        vals, gid = np.take(vals, sub), np.take(gid, sub)
 
-def _batched_fuzzysort_rec(coords, perm, dim, s, e, ndims, tol):
-    neles = perm.shape[0]
-    group = perm[:, s:e]
-    vals = np.take_along_axis(coords[:, dim, :], group, axis=1)
+        # Update the permutation
+        perm[rows] = prows
 
-    sub = np.argsort(vals, axis=1, kind='stable')
-    perm[:, s:e] = np.take_along_axis(group, sub, axis=1)
+        # Split the groups where the sorted values jump by the tolerance
+        gaps = (np.diff(gid, axis=1) != 0) | (np.diff(vals, axis=1) >= tol)
+        gid[:, 1:] = np.cumsum(gaps, axis=1)
 
-    if dim + 1 >= ndims:
-        return np.zeros(neles, dtype=bool)
-
-    # Find tolerance-based group boundaries from the first element
-    sorted_vals = np.take_along_axis(vals, sub, axis=1)
-    ref_gaps = np.diff(sorted_vals[0]) >= tol
-
-    # Tag elements that have different group boundaries
-    bad = np.any((np.diff(sorted_vals, axis=1) >= tol) != ref_gaps, axis=1)
-
-    # Recursively sub-sort group by the next dimension
-    prev = 0
-    for b in [*(np.flatnonzero(ref_gaps) + 1), e - s]:
-        if b - prev > 1:
-            bad |= _batched_fuzzysort_rec(coords, perm, dim + 1,
-                                          s + prev, s + b, ndims, tol)
-        prev = b
-
-    return bad
+        # Continue with only those rows which still have tied points
+        if (tied := ~gaps.all(axis=1)).any():
+            rows, prows, gid = rows[tied], prows[tied], gid[tied]
+        else:
+            break
+    else:
+        raise ValueError('Unable to sort coincident points')
 
 
-def batched_fuzzysort(coords, tol=1e-6):
-    neles, ndims, nfp = coords.shape
+def fuzzysort(coords, tol=1e-6):
+    nrows, _, npts = coords.shape
+    perm = np.tile(np.arange(npts), (nrows, 1))
 
-    if nfp <= 1:
-        return np.zeros((neles, 1), dtype=int)
-
-    perm = np.tile(np.arange(nfp), (neles, 1))
-    bad = _batched_fuzzysort_rec(coords, perm, 0, 0, nfp, ndims, tol)
-
-    # Handle pathological elements
-    for bi in np.flatnonzero(bad):
-        perm[bi] = fuzzysort(coords[bi], list(range(nfp)), tol=tol)
+    # Perform the sorting in cache-blocked chunks
+    for c, p in zip_chunks(2**16, coords, perm):
+        _fuzzysort_chunk(c, p, tol)
 
     return perm
 

@@ -6,7 +6,7 @@ import numpy as np
 from pyfr.cache import memoize
 from pyfr.mpiutil import (AlltoallMixin, get_comm_rank_root, home_rank, mpi,
                           scal_coll)
-from pyfr.nputil import batched_fuzzysort, range_offsets, search_unsorted
+from pyfr.nputil import fuzzysort, range_offsets, search_unsorted
 from pyfr.plugins.common import get_elementscls
 from pyfr.points import PointLocator
 from pyfr.polys import get_polybasis
@@ -282,7 +282,7 @@ class ExtrudedSpanwise(_SpanwiseBase, AlltoallMixin):
 
             # Canonically order the lattice by its physical position
             sp = interp_pts(ei.smpop, spts[:, sel])
-            perm = batched_fuzzysort(sp.transpose(1, 2, 0)[:, self.in_axes])
+            perm = fuzzysort(sp.transpose(1, 2, 0)[:, self.in_axes])
 
             eles['sum'][sel] = np.take_along_axis(v, perm[..., None], axis=1)
             eles['vperm'][sel] = perm

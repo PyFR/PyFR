@@ -4,7 +4,7 @@ import math
 import numpy as np
 
 from pyfr.exprs import npeval
-from pyfr.nputil import batched_fuzzysort
+from pyfr.nputil import fuzzysort
 from pyfr.solvers.base import BaseInters
 
 
@@ -65,7 +65,7 @@ class BaseAdvectionIntInters(BaseInters):
 
             # Sort both sides together so coincident points sort alike
             pts = np.concatenate([lpts[ix], rpts[ix]]).transpose(0, 2, 1)
-            lperm, rperm = np.split(batched_fuzzysort(pts, tol), 2)
+            lperm, rperm = np.split(fuzzysort(pts, tol), 2)
 
             # Pair each LHS flux point with the like-sorted RHS flux point
             rpos = np.take_along_axis(rperm, np.argsort(lperm, axis=1), 1)
