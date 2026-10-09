@@ -68,6 +68,9 @@ class BaseImplicitIntegrator(BaseIntegrator):
         # Allocate preconditioner scratch only when active
         self._size_register(self._precond_temp, self._pccls.active)
 
+        # Size any dynamic registers
+        self._size_registers()
+
         # Construct the relevant system
         self.system = systemcls(backend, mesh, initsoln, self._registers, cfg,
                                 self.serialiser,
@@ -82,14 +85,14 @@ class BaseImplicitIntegrator(BaseIntegrator):
         # Hook for subclasses to modify extents before commit
         self._pre_commit()
 
+        # Allocate the compensation terms of the solution banks
+        self._alloc_comp_accum()
+
         # Commit the system
         self.system.commit()
 
         # Hook for subclasses which require committed storage
         self._post_commit()
-
-        # Index of the register number containing the solution
-        self.idxcurr = 0
 
         # Global degree of freedom count
         self.gndofs = self._get_gndofs()

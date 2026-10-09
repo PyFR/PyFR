@@ -1,4 +1,5 @@
 from collections import defaultdict, deque, namedtuple
+from functools import cached_property
 import itertools as it
 import re
 import sys
@@ -54,12 +55,16 @@ class BaseIntegrator(metaclass=RegisterMeta):
         prevcfgs = initsoln.prevcfgs if initsoln else {}
         self.prevcfgs = {k: v.tostr() for k, v in prevcfgs.items()}
 
-        # Register our pointwise kernel
-        backend.pointwise.register('pyfr.backends.base.kernels.axnpby')
+        # Register our pointwise kernels
+        backend.pointwise.register('pyfr.integrators.kernels.add')
+        backend.pointwise.register('pyfr.integrators.kernels.add_with_comp')
 
         # Start time
         self.tstart = cfg.getfloat('solver-time-integrator', 'tstart', 0.0)
         self.tend = cfg.getfloat('solver-time-integrator', 'tend')
+
+        # Index of the register number containing the solution
+        self.idxcurr = 0
 
         # Current time; defaults to tstart unless restarting
         if self.isrestart:
@@ -442,7 +447,7 @@ class BaseIntegrator(metaclass=RegisterMeta):
             args = {f'x{i}': em[r] for i, r in enumerate(rs)}
             args |= {f'a{i}': 0.0 for i in range(len(rs))}
 
-            kern = self.backend.kernel('axnpby', tplargs=tplargs,
+            kern = self.backend.kernel('add', tplargs=tplargs,
                                        dims=[nupts, neles], **args)
             kerns.append(kern)
 
@@ -453,20 +458,80 @@ class BaseIntegrator(metaclass=RegisterMeta):
         if len(regidxs) != len(set(regidxs)):
             raise ValueError('Duplicate register indices')
 
-        # Get a suitable set of axnpby kernels
+        # Get a suitable set of add kernels
         in_s, out_s = tuple(in_scale), tuple(out_scale)
-        axnpby = self._get_add_kerns(*regidxs, in_scale=in_s,
-                                     in_scale_idxs=in_scale_idxs,
-                                     out_scale=out_s)
+        add = self._get_add_kerns(*regidxs, in_scale=in_s,
+                                  in_scale_idxs=in_scale_idxs,
+                                  out_scale=out_s)
 
         # Bind the arguments
-        for k in axnpby:
+        for k in add:
             k.bind(**{f'a{i}': c for i, c in enumerate(consts)})
 
-        self.backend.run_kernels(axnpby)
+        self.backend.run_kernels(add)
 
     def _add(self, *args, in_scale=(), in_scale_idxs=(), out_scale=()):
         self._addv(args[::2], args[1::2], in_scale, in_scale_idxs, out_scale)
+
+    @memoize
+    def _get_add_with_comp_kerns(self, out, src, *regidxs):
+        # Update the compensated register in-place or write to the output
+        rs, inplace = (out, *regidxs), out == src
+        comp = set(self._comp_banks) if self.comp_accum else set()
+        if src not in comp:
+            raise ValueError('Source register has no compensation term')
+
+        # Whether the output register has a compensation term
+        ycomp = out in comp
+
+        # Operands which alias the output register and which are compensated
+        oidxs = tuple(i for i, r in enumerate(regidxs, 1) if r == out)
+        cidxs = tuple(i for i, r in enumerate(regidxs, 1) if r in comp)
+
+        kerns = []
+        tplargs = dict(ncola=self.system.nvars, nv=len(rs), inplace=inplace,
+                       ycomp=ycomp, oidxs=oidxs, cidxs=cidxs)
+
+        shapes, banks = self.system.ele_shapes.values(), self.system.ele_banks
+        for (nupts, _, neles), em, cm in zip(shapes, banks, self._comp):
+            # Pass the output and the weights
+            args = {'x0': em[out]} | {f'a{i}': 0.0 for i in range(1, len(rs))}
+
+            # Pass the operands not aliasing the output and their terms
+            for i, r in enumerate(regidxs, 1):
+                if r != out:
+                    args[f'x{i}'] = em[r]
+                    if r in cm:
+                        args[f'x{i}c'] = cm[r]
+
+            # Pass the compensation terms and, unless in-place, the register
+            if ycomp:
+                args['x0c'] = cm[out]
+            if not inplace:
+                args |= {'u': em[src], 'uc': cm[src]}
+
+            kern = self.backend.kernel('add_with_comp', tplargs=tplargs,
+                                       dims=[nupts, neles], **args)
+            kerns.append(kern)
+
+        return kerns
+
+    def _add_with_comp(self, out, src, *args):
+        # Compensated operands are weighted by their difference from src
+        regidxs = args[1::2]
+        if len(regidxs) != len(set(regidxs)):
+            raise ValueError('Duplicate register indices')
+        if src in regidxs:
+            raise ValueError('Source register can not be an operand')
+
+        # Get a suitable set of add_with_comp kernels
+        add_with_comp = self._get_add_with_comp_kerns(out, src, *regidxs)
+
+        # Bind the arguments
+        for k in add_with_comp:
+            k.bind(**{f'a{i}': c for i, c in enumerate(args[::2], 1)})
+
+        self.backend.run_kernels(add_with_comp)
 
     def _addv_nz(self, out_reg, pairs):
         consts, regidxs = [0], [out_reg]
@@ -477,7 +542,31 @@ class BaseIntegrator(metaclass=RegisterMeta):
 
         self._addv(consts, regidxs)
 
-    def _size_register(self, reg, n):
+    @cached_property
+    def comp_accum(self):
+        # Read whether time steps are accumulated with compensation
+        comp_accum = self.cfg.getbool('solver-time-integrator',
+                                      'compensated-accumulation', False)
+        if comp_accum and not self.stepper_has_comp_accum:
+            raise ValueError('Stepper does not support compensated '
+                             'accumulation')
+
+        return comp_accum
+
+    def _alloc_comp_accum(self):
+        # Allocate compensation terms for the registers declared compensated
+        banks = self._comp_banks if self.comp_accum else []
+        if self.comp_accum and self.idxcurr not in banks:
+            raise ValueError('Solution register has no compensation term')
+
+        matrix = self.backend.matrix
+        self._comp = [{b: matrix(s, tags={'align'}) for b in banks}
+                      for s in self.system.ele_shapes.values()]
+
+    def _size_registers(self):
+        pass
+
+    def _size_register(self, reg, n, compensated=False):
         if not reg.dynamic:
             raise ValueError('Only dynamic registers can be sized')
 
@@ -485,14 +574,17 @@ class BaseIntegrator(metaclass=RegisterMeta):
             raise ValueError('Dynamic scalar register must be 0 or 1')
 
         if reg.vector:
-            new_reg = VectorRegister(n=n, rhs=reg.rhs, extent=reg.extent)
+            new_reg = VectorRegister(n=n, rhs=reg.rhs, extent=reg.extent,
+                                     compensated=compensated)
         else:
-            new_reg = ScalarRegister(n=n, rhs=reg.rhs, extent=reg.extent)
+            new_reg = ScalarRegister(n=n, rhs=reg.rhs, extent=reg.extent,
+                                     compensated=compensated)
 
         self._registers[new_reg] = self._registers.pop(reg)
 
     def _assign_registers(self):
         off = 0
+        self._comp_banks = []
 
         # Allocate register numbers to member variables starting with
         # registers which can be used for RHS evaluations
@@ -506,6 +598,11 @@ class BaseIntegrator(metaclass=RegisterMeta):
                     else:
                         v = None
                     setattr(self, name, v)
+
+                    # Record the banks of registers declared compensated
+                    if r.compensated:
+                        self._comp_banks += range(off, off + r.n)
+
                     off += r.n
 
     @property
