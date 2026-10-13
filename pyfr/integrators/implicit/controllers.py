@@ -337,9 +337,8 @@ class BaseImplicitController(BaseImplicitIntegrator):
         self._stage_stats = []
         self.stepinfo = []
 
-        # Fire off any event handlers if not restarting
-        if not self.isrestart:
-            self._run_plugins()
+        # Start the plugins and, if not restarting, fire off any event handlers
+        self._start_plugins()
 
     def _accept_step(self, dt, idxcurr, wtime, err=None):
         self._advance_time(dt)

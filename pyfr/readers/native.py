@@ -234,11 +234,11 @@ class NativeReader:
         # Extract previous configs
         prevcfgs = {k: v for k, v in cfgs.items() if k.startswith('config-')}
 
-        # Read serialised state (plugins, bcs, intg)
+        # Read serialised state (plugins, bcs, intg, triggers)
         if rank == root:
             state = {}
             def svisit(name):
-                if name.startswith(('plugins/', 'bcs/', 'intg/')):
+                if name.startswith(('plugins/', 'bcs/', 'intg/', 'triggers/')):
                     if not isinstance(f[name], h5py.Group):
                         state[name] = f[name][()]
             f.visit(svisit)

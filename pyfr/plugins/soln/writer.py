@@ -10,6 +10,7 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
     name = 'writer'
     systems = '.*'
     dimensions = '2|3'
+    trigger_actions = frozenset({'write'})
 
     def __init__(self, intg, cfgsect, suffix=None):
         super().__init__(intg, cfgsect, suffix)
@@ -66,7 +67,7 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
         self.fpdtype = intg.backend.fpdtype
 
         # Trigger-only mode: no dt-out when gated by a trigger
-        self._trigger_only = (self.trigger is not None and
+        self._trigger_only = (self.trigger_cond and
                               self.trigger_action == 'gate' and
                               not self.cfg.hasopt(cfgsect, 'dt-out'))
 
@@ -76,7 +77,7 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
         else:
             # Output time step and last output time
             self.dt_out = self.cfg.getfloat(cfgsect, 'dt-out')
-            self.tout_last = intg.tcurr
+            self.tout_base = self.tout_last = intg.tcurr
 
             # Register our output times with the integrator
             intg.call_plugin_dt(intg.tcurr, self.dt_out)
@@ -157,9 +158,12 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
             return
         else:
             self._do_write(intg)
-            self.tout_last = intg.tcurr
 
-    def trigger_write(self, intg):
+            # Advance the output clock to the most recent due time
+            nout = (intg.tcurr - self.tout_base + self.tol) // self.dt_out
+            self.tout_last = self.tout_base + nout*self.dt_out
+
+    def trigger_for(self, intg, action):
         self._do_write(intg)
 
     def finalise(self, intg):

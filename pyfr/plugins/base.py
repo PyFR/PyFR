@@ -8,11 +8,11 @@ class BasePlugin:
     suffix = None
     enabled = True
     nsteps = None
-    trigger = None
-    trigger_comb = None
+    trigger_cond = None
     trigger_action = 'activate'
     trigger_activated = False
-    trigger_write_name = None
+    trigger_actions = frozenset()
+    trigger_binds = {}
     trigger_fire_name = None
 
     def __init__(self, *, cfg=None, cfgsect=None, ndims=None):
@@ -34,13 +34,13 @@ class BasePlugin:
     def __call__(self, intg):
         pass
 
-    def trigger_write(self, intg):
+    def start(self, intg):
         pass
+
+    def trigger_for(self, intg, action):
+        raise NotImplementedError
 
     def finalise(self, intg):
-        pass
-
-    def setup(self, sdata, prevcfg, serialiser):
         pass
 
 

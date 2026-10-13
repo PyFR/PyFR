@@ -98,6 +98,9 @@ class BaseIntegrator(metaclass=RegisterMeta):
         # Record the total amount of time spent in each plugin
         self._plugin_wtimes = defaultdict(lambda: 0)
 
+        # Track which plugins have been started
+        self._started_plugins = set()
+
         # Abort computation
         self._abort = False
         self._abort_reason = ''
@@ -148,7 +151,6 @@ class BaseIntegrator(metaclass=RegisterMeta):
             self.triggers.restore(initsoln.state)
 
         plugins = []
-        prevcfg = initsoln.config if initsoln else None
 
         for s in self.cfg.sections():
             if (m := re.match('(soln|solver)-plugin-(.+?)(?:-(.+))?$', s)):
@@ -163,23 +165,7 @@ class BaseIntegrator(metaclass=RegisterMeta):
                     args += (suffix, )
 
                 # Instantiate
-                plugin = get_plugin(*args)
-                sprefix = plugin.sprefix
-                sdata = initsoln.state.get(sprefix) if initsoln else None
-                plugin.setup(sdata, prevcfg, self.serialiser)
-                plugins.append(plugin)
-
-        # Validate plugin trigger references
-        refs = []
-        for p in plugins:
-            if p.trigger:
-                refs.extend(p.trigger)
-            if p.trigger_write_name:
-                refs.append(p.trigger_write_name)
-            if p.trigger_fire_name:
-                refs.append(p.trigger_fire_name)
-
-        self.triggers.check_names(refs)
+                plugins.append(get_plugin(*args))
 
         # Restore and register plugin trigger activation states
         self._init_plugin_activated(plugins, initsoln)
@@ -189,7 +175,7 @@ class BaseIntegrator(metaclass=RegisterMeta):
     def _init_plugin_activated(self, plugins, initsoln):
         # Identify plugins using activate mode
         aplugins = [p for p in plugins
-                    if p.trigger and p.trigger_action == 'activate']
+                    if p.trigger_cond and p.trigger_action == 'activate']
 
         if not aplugins:
             return
@@ -212,6 +198,21 @@ class BaseIntegrator(metaclass=RegisterMeta):
         self.serialiser.register('plugins/activated',
                                  datafn if rank == root else None)
 
+    def _start_plugins(self):
+        # When restarting just start the plugins without running them
+        if self.isrestart:
+            for plugin in self.plugins:
+                if plugin.enabled and self._plugin_should_run(plugin):
+                    self._start_plugin(plugin)
+        else:
+            self._run_plugins()
+
+    def _start_plugin(self, plugin):
+        # Start each plugin at most once
+        if plugin not in self._started_plugins:
+            self._started_plugins.add(plugin)
+            plugin.start(self)
+
     def _run_plugins(self):
         wtimes = self._plugin_wtimes
 
@@ -233,16 +234,17 @@ class BaseIntegrator(metaclass=RegisterMeta):
             tstart = time.perf_counter()
             tcommon = wtimes['common', None]
 
-            # Handle trigger-write independently of normal scheduling
-            if (tw := plugin.trigger_write_name) and self.triggers.active(tw):
-                plugin.trigger_write(self)
+            # Handle trigger actions independently of normal scheduling
+            for action, cond in plugin.trigger_binds.items():
+                if cond():
+                    plugin.trigger_for(self, action)
 
             # Normal scheduling
             if self._plugin_should_run(plugin):
-                plugin(self)
+                # Ensure the plugin has been started
+                self._start_plugin(plugin)
 
-                if ts := plugin.trigger_fire_name:
-                    self.triggers.fire(ts)
+                plugin(self)
 
             tend = time.perf_counter()
             dt = tend - tstart - wtimes['common', None] + tcommon
@@ -257,8 +259,8 @@ class BaseIntegrator(metaclass=RegisterMeta):
 
     def _plugin_should_run(self, plugin):
         # Trigger scheduling
-        if plugin.trigger is not None:
-            active = plugin.trigger_comb(self.triggers)
+        if plugin.trigger_cond:
+            active = plugin.trigger_cond()
 
             # Gate mode
             if plugin.trigger_action == 'gate':

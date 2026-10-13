@@ -24,6 +24,7 @@ class FluidForcePlugin(PublishMixin, SeriesWriterMixin, BackendMixin,
     name = 'fluidforce'
     systems = 'euler|navier-stokes'
     dimensions = '2|3'
+    trigger_actions = frozenset({'write'})
 
     def __init__(self, intg, cfgsect, suffix):
         super().__init__(intg, cfgsect, suffix)
@@ -266,5 +267,5 @@ class FluidForcePlugin(PublishMixin, SeriesWriterMixin, BackendMixin,
             self._write(intg.tcurr, samps)
             self._publish(intg, **pvals)
 
-    def trigger_write(self, intg):
+    def trigger_for(self, intg, action):
         self(intg)

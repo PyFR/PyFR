@@ -198,6 +198,19 @@ class TriggerManager:
         self._check_name(name)
         return self._states[name]
 
+    def condition(self, expr):
+        # Parse trigger: & for AND, | for OR, or a single name
+        if '&' in expr:
+            names, comb = [t.strip() for t in expr.split('&')], all
+        elif '|' in expr:
+            names, comb = [t.strip() for t in expr.split('|')], any
+        else:
+            names, comb = [expr.strip()], all
+
+        self.check_names(names)
+
+        return lambda: comb(self._states[n] for n in names)
+
     def fire(self, name):
         self._check_name(name)
         self._states[name] = True
@@ -239,20 +252,20 @@ class TriggerManager:
             dt = [('name', f'S{nmax}'), ('state', '?'), ('prev_raw', '?')]
             return np.array(list(zip(names, states, prev_raw)), dtype=dt)
 
-        reg('triggers', datafn)
+        reg('triggers/state', datafn)
 
         # Per-source scalar state (e.g. duration) and consumed history
         for name, src in self._triggers.items():
             if src.has_checkpoint:
-                reg(f'trigger-src/{name}', src.checkpoint)
+                reg(f'triggers/src/{name}', src.checkpoint)
             if src.has_history:
-                reg(f'trigger-pub/{name}', src.dump_history)
+                reg(f'triggers/pub/{name}', src.dump_history)
 
     def restore(self, state):
         if state is None:
             return
 
-        if (sdata := state.get('triggers')) is not None:
+        if (sdata := state.get('triggers/state')) is not None:
             for row in sdata:
                 name = row['name'].decode()
                 if name in self._states:
@@ -261,8 +274,8 @@ class TriggerManager:
 
         for name, src in self._triggers.items():
             if src.has_checkpoint:
-                if (sd := state.get(f'trigger-src/{name}')) is not None:
+                if (sd := state.get(f'triggers/src/{name}')) is not None:
                     src.restore_checkpoint(sd)
             if src.has_history:
-                if (sd := state.get(f'trigger-pub/{name}')) is not None:
+                if (sd := state.get(f'triggers/pub/{name}')) is not None:
                     src.load_history(sd)

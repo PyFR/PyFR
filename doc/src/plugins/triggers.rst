@@ -51,13 +51,15 @@ Every plugin supports the following optional trigger-related keys:
   With ``activate`` (the default) the plugin remains dormant until the
   trigger condition is met, after which it runs on its normal schedule
   permanently.  With ``gate`` the plugin runs only while the trigger
-  condition is met.
+  condition is met; a gated time average only accumulates over these
+  periods.
 
 ``trigger-write``
-  *string* --- name of a trigger; when active the plugin's
-  ``trigger_write`` method is called (if it has one) to perform a
-  non-destructive snapshot.  This does not affect the plugin's normal
-  output schedule.
+  *string* --- name(s) of trigger(s), combined as for ``trigger``;
+  when active the plugin performs a non-destructive snapshot.  This
+  does not affect the plugin's normal output schedule.  Supported by
+  the writer, time average, and fluid force plugins; specifying it
+  for any other plugin is an error.
 
 ``trigger-set``
   *string* --- name of a trigger to fire programmatically when the
