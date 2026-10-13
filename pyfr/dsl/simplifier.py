@@ -1,8 +1,8 @@
 from collections import defaultdict
 
-from pyfr.dsl.nodes import (Assign, Binary, Block, Call, Float, For, Int,
-                            Number, Region, Ternary, Typedef, Unary, VarDecl,
-                            call, expr_children, map_ast)
+from pyfr.dsl.nodes import (PRECISE_REGIONS, Assign, Binary, Block, Call,
+                            Float, For, Int, Number, Region, Ternary, Typedef,
+                            Unary, VarDecl, call, expr_children, map_ast)
 from pyfr.dsl.types import Environment
 
 
@@ -58,7 +58,7 @@ def reduce_pow(base, v):
 
 class Simplifier:
     # Region kinds whose statements must not be rearranged
-    frozen_regions = frozenset({'fp-precise'})
+    frozen_regions = PRECISE_REGIONS
 
     def __init__(self, env=None):
         self.env = env or Environment()

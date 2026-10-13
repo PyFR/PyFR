@@ -4,10 +4,11 @@ from itertools import product
 
 from pyfr.dsl.codegen import CodeGenerator
 from pyfr.dsl.derivs import Differentiator, build_index, extract_loop_offset
-from pyfr.dsl.nodes import (ArrayInit, Assign, Block, DoWhile, ExprStmt, For,
-                            If, Index, Int, MultiDecl, Number, Postfix,
-                            Program, Region, Unary, Var, VarDecl, While,
-                            expr_children, map_ast, unwrap_index, walk_ast)
+from pyfr.dsl.nodes import (PRECISE_REGIONS, ArrayInit, Assign, Block,
+                            DoWhile, ExprStmt, For, If, Index, Int, MultiDecl,
+                            Number, Postfix, Program, Region, Unary, Var,
+                            VarDecl, While, expr_children, map_ast,
+                            unwrap_index, walk_ast)
 from pyfr.dsl.rewriter import rename_vars
 from pyfr.dsl.simplifier import Simplifier
 from pyfr.dsl.types import DOUBLE, Environment
@@ -61,7 +62,7 @@ def _check_pure(expr):
 
 class DerivativeGenerator:
     # Region kinds whose rewrite guarantees differentiation would break
-    nodiff_regions = frozenset({'fp-precise'})
+    nodiff_regions = PRECISE_REGIONS
 
     def __init__(self, wrt, prefix='d_', tangent_mode=False, array_info={},
                  force_arrays=set()):

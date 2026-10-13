@@ -3,7 +3,7 @@ import re
 
 import numpy as np
 
-from pyfr.backends.base.mathfns import generate_helper, lower_math_fns
+from pyfr.backends.base.mathfns import lower_math_fns
 from pyfr.dsl.codegen import CodeGenerator
 from pyfr.dsl.nodes import (Assign, Binary, Call, DslCall, DslVar, ExprStmt,
                             Float, Index, Int, Program, Unary, Var, VarDecl,
@@ -103,8 +103,8 @@ class BaseKernelGenerator:
     # Region kinds which are directives for the generator itself
     _unwrap_regions = frozenset({'simplify'})
 
-    # Math functions we lower to helper functions in all kernels
-    lower_fns = frozenset()
+    # Math functions we rewrite on all backends
+    lower_fns = frozenset({'pow'})
 
     # Qualifier needed for helper functions to be callable from kernels
     _function_qual = ''
@@ -218,8 +218,8 @@ class BaseKernelGenerator:
 
             self._ast = Simplifier(env).simplify_program(self._ast)
 
-        # Math helpers required by the body, filled in by passes
-        self._helper_calls = set()
+        # Math helper functions required by the kernel
+        self._helper_calls = {}
 
         # Select the dereference rules appropriate to our dimensionality
         rules = self._rules_1d if ndim == 1 else self._rules_2d
@@ -228,9 +228,6 @@ class BaseKernelGenerator:
         # Render the main body of our kernel
         body, preamble, epilogue = self._render_body_preamble_epilogue()
         self.body, self.preamble, self.epilogue = body, preamble, epilogue
-
-        # Generate any math helper functions used by the body
-        self._gen_helpers()
 
         # Determine the dimensions to be iterated over
         self._dims = ['_nx'] if ndim == 1 else ['_ny', '_nx']
@@ -403,15 +400,16 @@ class BaseKernelGenerator:
     def _generate(self, codegen, ast):
         return codegen.generate(self._lower_intrinsics(ast))
 
-    def _gen_helpers(self):
-        self.helpers = '\n'.join(
-            generate_helper(k, self.fpdtype, self._function_qual)
-            for k in sorted(self._helper_calls)
-        )
+    @property
+    def helpers(self):
+        # Generate any math helper functions used by the body
+        return '\n'.join(h.render(self.fpdtype, self._function_qual)
+                         for h in self._helper_calls.values())
 
     def _render_body(self, ast, codegen):
         # Lower math functions to helper function calls
-        ast, self._helper_calls = lower_math_fns(ast, self.lower_fns)
+        ast, helpers = lower_math_fns(ast, self.lower_fns)
+        self._helper_calls |= helpers
 
         # At single precision suffix all floating point constants by 'f'
         if self.fpdtype == np.float32:

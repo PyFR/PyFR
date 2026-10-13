@@ -7,7 +7,7 @@ from pyfr.dsl.nodes import (Binary, DslVar, Index, Int, Program, Var,
 
 class OpenMPKernelGenerator(BaseKernelGenerator):
     # Math functions we lower to helper functions in all kernels
-    lower_fns = frozenset({'exp'})
+    lower_fns = BaseKernelGenerator.lower_fns | {'exp', 'log'}
 
     # Lowerings for the @-intrinsics produced by the dereference rules
     _xidx = '_xi + _xj'

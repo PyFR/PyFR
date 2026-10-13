@@ -48,6 +48,7 @@ include = ["pyfr*"]
 
 [tool.setuptools.package-data]
 "pyfr.backends.base.kernels" = ["*.mako"]
+"pyfr.backends.base.kernels.mathfns" = ["*.mako"]
 "pyfr.backends.cuda.kernels" = ["*.mako"]
 "pyfr.backends.hip.kernels" = ["*.mako"]
 "pyfr.backends.metal.kernels" = ["*.mako"]

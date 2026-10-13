@@ -207,6 +207,7 @@ COMPOUND_ASSIGN = frozenset([
 
 UNARY_OPS = frozenset(['+', '-', '!', '~', '++', '--'])
 POSTFIX_OPS = frozenset(['++', '--'])
+PRECISE_REGIONS = frozenset(['fp-precise'])
 
 
 def unwrap_index(expr):

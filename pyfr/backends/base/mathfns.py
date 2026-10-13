@@ -1,37 +1,33 @@
-from math import factorial, gcd
+from decimal import Context, Decimal, localcontext
+from fractions import Fraction
+import math
 
 import numpy as np
-from mako.template import Template
-from numpy.polynomial.legendre import leg2poly, legfit, leggauss
-from numpy.polynomial.polynomial import polyfit
+from numpy.polynomial.legendre import leggauss
+from numpy.polynomial.polynomial import polyfit, polyval
 
-from pyfr.dsl.nodes import (Binary, Call, Int, Number, Region, Unary, Var,
-                            map_ast)
+from pyfr.dsl.nodes import (PRECISE_REGIONS, Binary, Call, Int, Number,
+                            Region, Unary, Var, map_ast)
 from pyfr.dsl.simplifier import expand_power, expr_size, reduce_pow
+from pyfr.template import DottedTemplateLookup
+from pyfr.util import subclasses
 
 
-def _galerkin_coeffs(q, deg=4, nq=20):
-    # L2 Galerkin projection of m^(-1/q) onto Legendre basis on [1,2)
-    nodes, wts = leggauss(nq)
-    f = (0.5*nodes + 1.5)**(-1.0/q)
-
-    # Fit in Legendre basis then convert to monomials in u = m - 1.5
-    lc = legfit(nodes, f, deg, w=np.sqrt(wts))
-    mc = leg2poly(lc)
-    return (mc * 2.0**np.arange(len(mc))).tolist()
+def _fsuffix(fpdtype):
+    # Suffix for floating point literals of the given type
+    return '' if fpdtype == np.float64 else 'f'
 
 
-def _scale_coeffs(q):
-    # Lagrange interpolation of 2^(-r/q) for r = 0..q-1
-    r = np.arange(q, dtype=np.float64)
-    return polyfit(r, 2.0**(-r/q), q - 1).tolist()
+def _fp_params(fpdtype):
+    # Bit layout of the floating point type and its literal suffixes
+    fi = np.finfo(fpdtype)
+    eshift, ebias = fi.nmant, fi.maxexp - 1
 
-
-def _horner(coeffs, var, sfx):
-    s = f'{coeffs[-1]:.18e}{sfx}'
-    for c in reversed(coeffs[:-1]):
-        s = f'{c:.18e}{sfx} + {var}*({s})'
-    return s
+    return {
+        'fsuffix': _fsuffix(fpdtype), 'eshift': eshift, 'ebias': ebias,
+        'emask': 2*fi.maxexp - 1, 'mmask': (1 << eshift) - 1,
+        'one_bits': ebias << eshift
+    }
 
 
 # Addition chains for y^q (computing yq from y)
@@ -51,142 +47,6 @@ _TR = {
     6: 'fpdtype_t x2 = x*x, x3 = x2*x; fpdtype_t t = x3*x3;',
 }
 
-_pow_tpl = Template('''\
-${qual}static inline fpdtype_t _pyfr_pow_${r}_${q}(fpdtype_t x)
-{
-    ${tr}
-    union { fpdtype_t f; fp_uint_t u; } _b;
-    _b.f = t;
-    int _e = (int)((_b.u >> ${eshift}) & ${emask}) - ${ebias};
-    _b.u = (_b.u & ${mmask}) | ${one_bits};
-    fpdtype_t m = _b.f, u = m - 1.5${sfx};
-    fpdtype_t y = ${seed};
-    fpdtype_t ef = (fpdtype_t)_e;
-    fpdtype_t qf = floor(ef * ${inv_q});
-    fpdtype_t rf = ef - ${q}.0${sfx}*qf;
-    y *= ${scale};
-    _b.u = (fp_uint_t)(${ebias} - (int)qf) << ${eshift};
-    y *= _b.f;
-% for _ in range(nn):
-    { ${yq} y = y*(${q + 1}.0${sfx} - t*yq) * ${inv_q}; }
-% endfor
-    return 1.0${sfx} / y;
-}''')
-
-
-_exp_tpl = Template('''\
-${qual}static inline fpdtype_t _pyfr_exp(fpdtype_t x)
-{
-    fpdtype_t n = rint${sfx}(x*${log2e});
-    fpdtype_t r = fma${sfx}(-n, ${ln2hi}, x);
-    r = fma${sfx}(-n, ${ln2lo}, r);
-    fpdtype_t p = ${poly};
-    union { fpdtype_t f; fp_uint_t u; } _b;
-    _b.u = (fp_uint_t)((int)n + ${ebias}) << ${eshift};
-    return p*_b.f;
-}''')
-
-
-def generate_exp_fn(fpdtype, qual=''):
-    # Split of ln2 into a leading part and a residual correction
-    if fpdtype == np.float64:
-        sfx = ''
-        eshift, ebias = 52, 1023
-        ln2hi, ln2lo = 6.931471805599452862e-01, 2.319046813846299558e-17
-        ncoef = 14
-    else:
-        sfx = 'f'
-        eshift, ebias = 23, 127
-        ln2hi, ln2lo = 6.9314575195e-01, 1.4286067653e-06
-        ncoef = 8
-
-    # Taylor series for exp(r) on [-ln2/2, ln2/2]
-    ecoef = [1/factorial(k) for k in range(ncoef)]
-
-    return _exp_tpl.render(
-        qual=qual, sfx=sfx, eshift=eshift, ebias=ebias,
-        log2e=f'{1.4426950408889634:.18e}{sfx}',
-        ln2hi=f'{ln2hi:.18e}{sfx}', ln2lo=f'{ln2lo:.18e}{sfx}',
-        poly=_horner(ecoef, 'r', sfx),
-    ).rstrip()
-
-
-def generate_pow_fn(r, q, fpdtype, qual=''):
-    g = gcd(r, q)
-    r, q = r // g, q // g
-
-    if fpdtype == np.float64:
-        sfx = ''
-        eshift, emask = 52, '0x7FF'
-        ebias = 1023
-        mmask = '0x000FFFFFFFFFFFFFULL'
-        one_bits = '0x3FF0000000000000ULL'
-        nn = 2
-    else:
-        sfx = 'f'
-        eshift, emask = 23, '0xFF'
-        ebias = 127
-        mmask = '0x007FFFFF'
-        one_bits = '0x3F800000'
-        nn = 1
-
-    mc = _galerkin_coeffs(q)
-    sc = _scale_coeffs(q)
-
-    return _pow_tpl.render(
-        qual=qual, r=r, q=q, sfx=sfx, nn=nn,
-        tr=_TR[r], yq=_YQ[q],
-        eshift=eshift, emask=emask, ebias=ebias,
-        mmask=mmask, one_bits=one_bits,
-        seed=_horner(mc, 'u', sfx),
-        scale=_horner(sc, 'rf', sfx),
-        inv_q=f'{1.0/q:.18e}{sfx}',
-    ).rstrip()
-
-
-def _lower_pow(base, v, helpers):
-    # Integer and half-integer exponents need only multiplies and a sqrt
-    if exact := reduce_pow(base, v):
-        return exact
-
-    neg, av = v < 0, abs(v)
-
-    for q in (3, 5, 7):
-        p = round(av*q)
-        if abs(av*q - p) > 1e-12 or p == 0:
-            continue
-
-        k, r = divmod(p, q)
-        if r == 0:
-            continue
-
-        frac = Call(Var(f'_pyfr_pow_{r}_{q}'), [base])
-        if k == 0:
-            result = frac
-        elif k == 1:
-            result = Binary('*', base, frac)
-        elif k <= 8 and expr_size(base) <= 3:
-            result = Binary('*', expand_power(base, k), frac)
-        else:
-            continue
-
-        if neg:
-            result = Binary('/', Int(1), result)
-
-        helpers.add(('pow', r, q))
-        return result
-
-    return None
-
-
-def generate_helper(key, fpdtype, qual=''):
-    # Emit the helper function identified by the given key
-    match key:
-        case ('exp',):
-            return generate_exp_fn(fpdtype, qual)
-        case ('pow', r, q):
-            return generate_pow_fn(r, q, fpdtype, qual)
-
 
 def _const_value(expr):
     # Literal exponents may carry a leading unary minus
@@ -199,8 +59,221 @@ def _const_value(expr):
             return None
 
 
-def lower_math_fns(ast, fns, frozen=frozenset({'fp-precise'})):
-    helpers = set()
+class BaseMathFn:
+    # DSL function this class lowers
+    name = None
+
+    # Single argument functions we replace with calls to our helper
+    fns = ()
+
+    # Lookup for the templates of our helper functions
+    _lookup = DottedTemplateLookup('pyfr.backends.base.kernels.mathfns', {})
+
+    def __init__(self, fn):
+        # Name of the generated helper function
+        self.cname = f'_pyfr_{fn}'
+
+    @classmethod
+    def lower(cls, node, helpers):
+        match node:
+            case Call(Var(fn), [arg]) if fn in cls.fns:
+                return cls(fn).call(helpers, arg)
+            case _:
+                return None
+
+    def call(self, helpers, *args):
+        # Register ourself as a helper and call it with the given arguments
+        helpers[self.cname] = self
+        return Call(Var(self.cname), list(args))
+
+    def tplargs(self, fpdtype):
+        return {}
+
+    def render(self, fpdtype, qual=''):
+        fp = _fp_params(fpdtype)
+        src = self._lookup.get_template(self.name).render(
+            **fp, **self.tplargs(fpdtype), cname=self.cname, qual=qual
+        )
+
+        return src.rstrip()
+
+    @staticmethod
+    def _horner(coeffs, var, fpdtype):
+        fsuffix = _fsuffix(fpdtype)
+        s = f'{coeffs[-1]}{fsuffix}'
+        for c in reversed(coeffs[:-1]):
+            s = f'{c}{fsuffix} + {var}*({s})'
+        return s
+
+    @staticmethod
+    def _split(v, nbits):
+        # Leading nbits of v plus the residual correction
+        hi = round(v*2**nbits) / 2**nbits
+        return hi, float(v - Decimal(hi))
+
+
+class ExpMathFn(BaseMathFn):
+    name = 'exp'
+    fns = ('exp',)
+
+    def tplargs(self, fpdtype):
+        fi = np.finfo(fpdtype)
+
+        # Split of ln(2) into a leading part and a residual correction
+        with localcontext(Context(prec=40)):
+            ln2hi, ln2lo = self._split(Decimal(2).ln(), fi.nmant + 1)
+
+        # Add Taylor terms until the first omitted one is below half an ulp
+        rmax, ncoef = math.log(2) / 2, 1
+        while rmax**ncoef / math.factorial(ncoef) >= fi.eps / 2:
+            ncoef += 1
+
+        # Taylor series for exp(r) on [-ln(2)/2, ln(2)/2]
+        ecoef = [1/math.factorial(k) for k in range(ncoef)]
+
+        return {
+            'log2e': math.log2(math.e), 'ln2hi': ln2hi, 'ln2lo': ln2lo,
+            'poly': self._horner(ecoef, 'r', fpdtype)
+        }
+
+
+class LogMathFn(BaseMathFn):
+    name = 'log'
+
+    # Bases of the logarithms we lower with None denoting the natural one
+    bases = {'log': None, 'log2': 2, 'log10': 10}
+    fns = bases
+
+    def __init__(self, fn):
+        super().__init__(fn)
+        self.base = self.bases[fn]
+
+    @staticmethod
+    def _series_coeffs(eps, nq=20):
+        # Fit and check points in t = w/wmax where w = s^2
+        wmax = (3 - 2*math.sqrt(2))**2
+        nodes, wts = leggauss(nq)
+        t, tc = 0.5*(nodes + 1), np.linspace(0, 1, 1001)
+
+        def series(x):
+            return sum(2*(wmax*x)**k / (2*k + 3) for k in range(40))
+
+        # Sample the series for (2*atanh(s) - 2*s)/s^3 at these points
+        q, qc = series(t), series(tc)
+
+        # Raise the degree until the error in log(m) is below half an ulp
+        deg, err = 0, math.inf
+        while err >= eps:
+            deg += 1
+            c = polyfit(t, q, deg, w=t*wts**0.5)
+            err = np.max(wmax*tc*np.abs(qc - polyval(tc, c)))
+
+        # Convert the coefficients from powers of t into powers of w
+        return (c / wmax**np.arange(deg + 1)).tolist()
+
+    def tplargs(self, fpdtype):
+        fi = np.finfo(fpdtype)
+
+        # Fit of the series for 2*atanh(s) - 2*s divided by s^3
+        qcoef = self._series_coeffs(fi.eps)
+
+        with localcontext(Context(prec=40)):
+            # Natural logarithm of our base
+            lnb = Decimal(self.base).ln() if self.base else Decimal(1)
+
+            # Split of log(2) in our base into a leading part and a residual
+            lb2hi, lb2lo = self._split(Decimal(2).ln() / lnb, fi.nmant + 1)
+
+            # Factor converting natural logarithms into our base
+            lbe = float(1 / lnb)
+
+        return {
+            'sqrt2': math.sqrt(2), 'lb2hi': lb2hi, 'lb2lo': lb2lo,
+            'lbe': lbe, 'poly': self._horner(qcoef, 'w', fpdtype)
+        }
+
+
+class PowMathFn(BaseMathFn):
+    name = 'pow'
+
+    def __init__(self, r, q):
+        super().__init__(f'pow_{r}_{q}')
+        self.r, self.q = r, q
+
+    @classmethod
+    def lower(cls, node, helpers):
+        match node:
+            case Binary('**', base, e) if (v := _const_value(e)) is not None:
+                return cls._lower_pow(base, v, helpers)
+            case _:
+                return None
+
+    @classmethod
+    def _lower_pow(cls, base, v, helpers):
+        # Write the magnitude of the exponent as k + r/q
+        av = abs(v)
+        fv = Fraction(av).limit_denominator(7)
+        p, q = fv.numerator, fv.denominator
+        k, r = divmod(p, q)
+
+        large = k > 1 and (k > 8 or expr_size(base) > 3)
+        badfrac = q not in (3, 5, 7) or abs(av*q - p) > 1e-12
+
+        # Reduce integer and half-integer exponents to multiplies and sqrts
+        if exact := reduce_pow(base, v):
+            result = exact
+        # Pass on large or awkward exponents
+        elif large or badfrac:
+            result = None
+        # Evaluate x^(r/q) with a helper and multiply in x^k
+        else:
+            result = cls(r, q).call(helpers, base)
+
+            if k == 1:
+                result = Binary('*', base, result)
+            elif k > 1:
+                result = Binary('*', expand_power(base, k), result)
+
+            if v < 0:
+                result = Binary('/', Int(1), result)
+
+        return result
+
+    @staticmethod
+    def _invroot_coeffs(q, deg=4, nq=20):
+        # Sample m^(-1/q) at Gauss-Legendre points mapped to [1, 2]
+        nodes, wts = leggauss(nq)
+        u = 0.5*nodes
+
+        # Fit a polynomial in u = m - 1.5
+        return polyfit(u, (u + 1.5)**(-1 / q), deg, w=wts**0.5).tolist()
+
+    @staticmethod
+    def _pow2_coeffs(q):
+        # Lagrange interpolation of 2^(-r/q) for r = 0..q-1
+        r = np.arange(q, dtype=float)
+        return polyfit(r, 2**(-r/q), q - 1).tolist()
+
+    def tplargs(self, fpdtype):
+        q = self.q
+
+        # Newton iterations needed to reach full precision
+        nn = 2 if fpdtype == np.float64 else 1
+
+        mc = self._invroot_coeffs(q)
+        sc = self._pow2_coeffs(q)
+
+        return {
+            'q': q, 'nn': nn, 'tr': _TR[self.r], 'yq': _YQ[q],
+            'seed': self._horner(mc, 'u', fpdtype),
+            'scale': self._horner(sc, 'rf', fpdtype), 'inv_q': 1/q
+        }
+
+
+def lower_math_fns(ast, fns, frozen=PRECISE_REGIONS):
+    mfs = {c.name: c for c in subclasses(BaseMathFn, just_leaf=True)}
+    mfcls = [mfs[n] for n in fns]
+    helpers = {}
 
     def lower(node):
         # Leave regions which forbid rearrangement untouched
@@ -208,17 +281,11 @@ def lower_math_fns(ast, fns, frozen=frozenset({'fp-precise'})):
             return node
 
         node = map_ast(node, lower)
-        match node:
-            case Call(Var('exp'), [arg]) if 'exp' in fns:
-                helpers.add(('exp',))
-                return Call(Var('_pyfr_exp'), [arg])
-            case Binary('**', base, e):
-                if (v := _const_value(e)) is not None:
-                    return _lower_pow(base, v, helpers) or node
-                else:
-                    return node
-            case _:
-                return node
+        for c in mfcls:
+            if (new := c.lower(node, helpers)) is not None:
+                return new
+
+        return node
 
     # Hand back the lowered AST plus the set of helpers it now requires
     return lower(ast), helpers
