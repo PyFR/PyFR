@@ -3,18 +3,38 @@ import numpy as np
 from pyfr.util import first
 
 
-def _get_inter_arrays(interside, meth, elemap, perm=Ellipsis):
-    parts, reorder = [], []
-
-    for etype, fidx, eidxs, idx in interside.foreach():
-        parts.append(getattr(elemap[etype], meth)(eidxs, fidx))
-        reorder.append(np.repeat(idx, elemap[etype].nfacefpts[fidx]))
-
+def sort_inter_pts(idxs, nfps, parts, perm=Ellipsis):
     if not parts:
         return []
 
-    ro = np.argsort(np.concatenate(reorder), kind='stable')[perm]
+    # Number of points of each interface and its offset in interface order
+    cnt = np.zeros(sum(len(idx) for idx in idxs), dtype=int)
+    for idx, nfp in zip(idxs, nfps):
+        cnt[idx] = nfp
+    offs = np.cumsum(cnt) - cnt
+
+    # Destination of each point of each group of interfaces
+    dests = [(offs[idx, None] + np.arange(nfp)).ravel()
+             for idx, nfp in zip(idxs, nfps)]
+    dest = np.concatenate(dests)
+
+    # Invert the destinations to obtain the source of each point and permute
+    ro = np.empty_like(dest)
+    ro[dest] = np.arange(len(dest))
+    ro = ro[perm]
+
     return [np.concatenate(a)[ro] for a in zip(*parts)]
+
+
+def _get_inter_arrays(interside, meth, elemap, perm=Ellipsis):
+    idxs, nfps, parts = [], [], []
+
+    for etype, fidx, eidxs, idx in interside.foreach():
+        idxs.append(idx)
+        nfps.append(elemap[etype].nfacefpts[fidx])
+        parts.append(getattr(elemap[etype], meth)(eidxs, fidx))
+
+    return sort_inter_pts(idxs, nfps, parts, perm)
 
 
 class BaseInters:
@@ -75,7 +95,7 @@ class BaseInters:
         return np.argsort(mm[0][self.side_perm(inter, False)])
 
     def _get_perm_for_field(self, inter, field, blksz=None):
-        matmap, rowmap, colmap, reorder = [], [], [], []
+        idxs, nfps, parts = [], [], []
 
         for etype, fidx, eidxs, idx in inter.foreach():
             mat = field[etype]
@@ -84,15 +104,12 @@ class BaseInters:
             nfp = fpts.shape[1]
             n = len(eidxs)
 
-            matmap.append(np.full(n * nfp, mat.mid))
-            rowmap.append(fpts.ravel())
-            colmap.append(np.repeat(eidxs, nfp))
-            reorder.append(np.repeat(idx, nfp))
+            idxs.append(idx)
+            nfps.append(nfp)
+            parts.append((np.full(n*nfp, mat.mid), fpts.ravel(),
+                          np.repeat(eidxs, nfp)))
 
-        ro = np.argsort(np.concatenate(reorder), kind='stable')
-        m = np.concatenate(matmap)[ro]
-        r = np.concatenate(rowmap)[ro]
-        c = np.concatenate(colmap)[ro]
+        m, r, c = sort_inter_pts(idxs, nfps, parts)
         mm = self._be.view(m, r, c, vshape=()).mapping.get()
         sp = self.side_perm(inter, False)
 

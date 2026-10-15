@@ -9,6 +9,7 @@ from pyfr.backends.base import NullKernel
 from pyfr.cache import memoize
 from pyfr.mpiutil import autofree, get_comm_rank_root, mpi
 from pyfr.shapes import BaseShape
+from pyfr.solvers.base.inters import sort_inter_pts
 from pyfr.util import subclasses
 
 
@@ -113,7 +114,7 @@ class BaseSystem:
 
     def _field_view(self, interside, field, layout, view_fn,
                     perm=Ellipsis, vshape=()):
-        matmap, rowmap, colmap, reorder = [], [], [], []
+        matmap, rowmap, colmap, idxs, nfps = [], [], [], [], []
 
         for etype, fidx, eidxs, idx in interside.foreach():
             mat, eles = field[etype], self.ele_map[etype]
@@ -136,12 +137,11 @@ class BaseSystem:
                 rowmap.append(np.full(n*nfp, fidx))
                 colmap.append(np.repeat(eidxs, nfp))
 
-            reorder.append(np.repeat(idx, nfp))
+            idxs.append(idx)
+            nfps.append(nfp)
 
-        ro = np.argsort(np.concatenate(reorder), kind='stable')[perm]
-        m = np.concatenate(matmap)[ro]
-        r = np.concatenate(rowmap)[ro]
-        c = np.concatenate(colmap)[ro]
+        parts = list(zip(matmap, rowmap, colmap))
+        m, r, c = sort_inter_pts(idxs, nfps, parts, perm)
         return view_fn(m, r, c, vshape=vshape)
 
     def _compute_perm(self, interside, field):
