@@ -144,15 +144,17 @@ class BaseBackend:
     def const_matrix(self, initval, dtype=None, tags=set()):
         dtype = dtype or self.fpdtype
 
-        # Hash the matrix
-        key = digest(np.dtype(dtype).str, np.ascontiguousarray(initval))
+        # Derive a key from a sample of the matrix
+        arr = np.asarray(initval, dtype=dtype)
+        sample = arr.flat[::max(1, arr.size >> 16)]
+        key = digest(arr.dtype.str, arr.shape, sample)
 
         # See if we have previously allocated an identical matrix
         for m in self._const_cache[key]:
             if tags.issubset(m.tags) and (m.get() == initval).all():
                 break
         else:
-            m = self.const_matrix_cls(self, dtype, initval, tags)
+            m = self.const_matrix_cls(self, dtype, arr, tags)
             self._const_cache[key].add(m)
 
         return m
