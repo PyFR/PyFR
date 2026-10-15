@@ -39,6 +39,12 @@ formulations:
 
     *int* (default: 10)
 
+#. ``compensated-accumulation`` --- use compensated arithmetic when
+    accumulating time steps; intended for single precision simulations
+    where weak features such as acoustic waves would otherwise freeze
+
+    ``true`` | ``false`` (default: ``false``)
+
 Explicit Formulation
 ====================
 
@@ -377,7 +383,10 @@ Read from the ``[solver-gmres]`` section when ``linear-solver = gmres``:
     When set to a positive integer *m*, GMRES restarts every *m*
     iterations.  Total iterations are still bounded by
     ``linear-max-iter``.  When 0 (default), no restart is
-    performed.
+    performed and ``linear-max-iter`` must not exceed 30.  The
+    Krylov basis is limited to 30 vectors, so a larger
+    ``linear-max-iter`` requires ``restart`` to be set to 30 or
+    less.
 
 Preconditioner Options
 ----------------------
@@ -521,7 +530,7 @@ A basic implicit configuration with fixed time-step:
     dt = 0.005
 
     linear-solver = gmres
-    linear-max-iter = 50
+    linear-max-iter = 30
     linear-rtol = 1e-3
     precond = none
 
@@ -545,7 +554,7 @@ the PI controller:
     rtol = 1e-5
 
     linear-solver = gmres
-    linear-max-iter = 50
+    linear-max-iter = 30
     linear-rtol = 1e-3
     precond = none
 
@@ -567,7 +576,7 @@ time-stepping:
     dt-max = 1.0
 
     linear-solver = gmres
-    linear-max-iter = 50
+    linear-max-iter = 30
     linear-rtol = 1e-3
     precond = none
 
@@ -587,7 +596,7 @@ For high-pressure compressible flow with large dynamic range:
     dt = 0.0001
 
     linear-solver = gmres
-    linear-max-iter = 50
+    linear-max-iter = 30
     linear-rtol = 1e-3
     precond = none
 

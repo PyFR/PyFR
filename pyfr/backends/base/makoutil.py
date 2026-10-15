@@ -86,6 +86,35 @@ def polyfit(context, f, a, b, n, var, nqpts=500):
     return f'({pfexpr})'
 
 
+def twosum(context, a, b, s, e):
+    # Split a + b into its rounded sum s and exact rounding error e
+    return (f'{s} = {a} + {b};\n'
+            f'{e} = ({a} - ({s} - ({s} - {a}))) + ({b} - ({s} - {a}));')
+
+
+def fasttwosum(context, a, b, s, e):
+    # Split a + b into its rounded sum s and rounding error e for |a| >= |b|
+    return f'{s} = {a} + {b};\n{e} = {b} - ({s} - {a});'
+
+
+def _fp_precise(body):
+    return f'#pragma pyfr fp-precise\n{{\n{body}\n}}'
+
+
+def compadd(context, *, hi, lo, inc, ohi, olo=None):
+    # Round the sum into ohi unless the output has a compensation term
+    if olo is None:
+        body = f'{ohi} = {hi} + ({lo} + ({inc}));'
+    else:
+        ti, ts, te, tl = [f'__cadd_{t}' for t in ('inc', 'sum', 'err', 'lo')]
+        body = (f'fpdtype_t {ti} = {inc}, {ts}, {te}, {tl};\n'
+                f'{twosum(context, hi, ti, ts, te)}\n'
+                f'{tl} = {lo} + {te};\n'
+                f'{fasttwosum(context, ts, tl, ohi, olo)}')
+
+    return _fp_precise(body)
+
+
 Macro = namedtuple('Macro', ['params', 'externs', 'argsig', 'caller', 'id'])
 
 
@@ -228,7 +257,7 @@ def expand(context, name, /, *args, **kwargs):
 def fp_precise(context):
     body = capture(context, context['caller'].body)
 
-    return '#pragma pyfr fp-precise\n{\n' + body + '\n}'
+    return _fp_precise(body)
 
 
 @supports_caller

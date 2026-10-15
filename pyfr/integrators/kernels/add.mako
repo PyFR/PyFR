@@ -2,7 +2,7 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
 <%!
-def axnpby_expr(k, start, nv, in_scale_idxs, out_scale):
+def add_expr(k, start, nv, in_scale_idxs, out_scale):
     terms = []
     for l in range(start, nv):
         coef, val = f'a{l}', f'x{l}[{k}]'
@@ -25,7 +25,7 @@ def axnpby_expr(k, start, nv, in_scale_idxs, out_scale):
     kargs |= {f'a{i}': 'scalar fpdtype_t' for i in range(nv)}
 %>
 
-<%pyfr:kernel name='axnpby' ndim='2' kargs='${kargs}'>
+<%pyfr:kernel name='add' ndim='2' kargs='${kargs}'>
 % if in_scale:
     const fpdtype_t _in[] = ${pyfr.carray(in_scale)};
 % endif
@@ -35,21 +35,21 @@ def axnpby_expr(k, start, nv, in_scale_idxs, out_scale):
     if (a0 == 0.0)
     {
 % for k in range(ncola):
-        x0[${k}] = ${axnpby_expr(k, 1, nv, in_scale_idxs, out_scale)};
+        x0[${k}] = ${add_expr(k, 1, nv, in_scale_idxs, out_scale)};
 % endfor
     }
 % if nv > 1:
     else if (a0 == 1.0)
     {
 % for k in range(ncola):
-        x0[${k}] += ${axnpby_expr(k, 1, nv, in_scale_idxs, out_scale)};
+        x0[${k}] += ${add_expr(k, 1, nv, in_scale_idxs, out_scale)};
 % endfor
     }
 % endif
     else
     {
 % for k in range(ncola):
-        x0[${k}] = ${axnpby_expr(k, 0, nv, in_scale_idxs, out_scale)};
+        x0[${k}] = ${add_expr(k, 0, nv, in_scale_idxs, out_scale)};
 % endfor
     }
 </%pyfr:kernel>
