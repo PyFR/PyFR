@@ -90,10 +90,11 @@ class BackendMixin:
 
     def _make_view(self, mat, eidxs, vshape):
         n = len(eidxs)
-        return self.backend.view(
+        vmap = self.backend.view_mapping(
             np.full(n, mat.mid), np.zeros(n, dtype=np.int32),
             eidxs, np.ones(n, dtype=np.int32), vshape=vshape
         )
+        return self.backend.view(vmap)
 
 
 class PostactionMixin:

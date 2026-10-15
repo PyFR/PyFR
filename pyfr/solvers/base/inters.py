@@ -37,6 +37,33 @@ def _get_inter_arrays(interside, meth, elemap, perm=Ellipsis):
     return sort_inter_pts(idxs, nfps, parts, perm)
 
 
+def field_mapping(be, interside, field, elemap, layout='fpts', perm=Ellipsis,
+                  vshape=()):
+    idxs, nfps, parts = [], [], []
+
+    for etype, fidx, eidxs, idx in interside.foreach():
+        mat, eles = field[etype], elemap[etype]
+        n = len(eidxs)
+
+        if layout == 'fpts':
+            fpts = eles.srtd_face_fpts[fidx][eidxs]
+            nfp = fpts.shape[1]
+            rmap, cmap = fpts.ravel(), np.repeat(eidxs, nfp)
+        elif layout == 'face':
+            nfp = 1
+            rmap, cmap = np.full(n, fidx), eidxs
+        elif layout == 'face-expand':
+            nfp = eles.nfacefpts[fidx]
+            rmap, cmap = np.full(n*nfp, fidx), np.repeat(eidxs, nfp)
+
+        idxs.append(idx)
+        nfps.append(nfp)
+        parts.append((np.full(n*nfp, mat.mid), rmap, cmap))
+
+    m, r, c = sort_inter_pts(idxs, nfps, parts, perm)
+    return be.view_mapping(m, r, c, vshape=vshape)
+
+
 class BaseInters:
     def __init__(self, be, lhs, elemap, cfg):
         self._be = be
@@ -88,42 +115,17 @@ class BaseInters:
 
         return self._be.const_matrix(np.atleast_2d(m.T))
 
-    def _get_perm_for_view(self, inter, meth):
-        vm = _get_inter_arrays(inter, meth, self.elemap)
-        mm = self._be.view(*vm, vshape=()).mapping.get()
-
-        return np.argsort(mm[0][self.side_perm(inter, False)])
-
     def _get_perm_for_field(self, inter, field, blksz=None):
-        idxs, nfps, parts = [], [], []
-
-        for etype, fidx, eidxs, idx in inter.foreach():
-            mat = field[etype]
-            eles = self.elemap[etype]
-            fpts = eles.srtd_face_fpts[fidx][eidxs]
-            nfp = fpts.shape[1]
-            n = len(eidxs)
-
-            idxs.append(idx)
-            nfps.append(nfp)
-            parts.append((np.full(n*nfp, mat.mid), fpts.ravel(),
-                          np.repeat(eidxs, nfp)))
-
-        m, r, c = sort_inter_pts(idxs, nfps, parts)
-        mm = self._be.view(m, r, c, vshape=()).mapping.get()
         sp = self.side_perm(inter, False)
+        vm = field_mapping(self._be, inter, field, self.elemap, perm=sp)
 
         # Group the points by element block so partner data stays cached
-        if blksz:
-            return np.lexsort((mm[0][sp], c[sp] // blksz))
-        # Otherwise order the points by their address
-        else:
-            return np.argsort(mm[0][sp])
+        return vm.access_order(blksz)
 
     def _view(self, inter, meth, vshape=(), with_perm=True):
         perm = self.side_perm(inter, with_perm)
         vm = _get_inter_arrays(inter, meth, self.elemap, perm)
-        return self._be.view(*vm, vshape=vshape)
+        return self._be.view(self._be.view_mapping(*vm, vshape=vshape))
 
     def _scal_view(self, inter, meth):
         return self._view(inter, meth, (self.nvars,))
@@ -134,7 +136,7 @@ class BaseInters:
     def _xchg_view(self, inter, meth, vshape=(), with_perm=True):
         perm = self.side_perm(inter, with_perm)
         vm = _get_inter_arrays(inter, meth, self.elemap, perm)
-        return self._be.xchg_view(*vm, vshape=vshape)
+        return self._be.xchg_view(self._be.view_mapping(*vm, vshape=vshape))
 
     def _scal_xchg_view(self, inter, meth):
         return self._xchg_view(inter, meth, (self.nvars,))

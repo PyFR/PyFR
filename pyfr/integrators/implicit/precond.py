@@ -53,10 +53,12 @@ class _ElementPrecond:
         # Pad the gather map to capacity by replicating its final entry
         e = np.pad(eidxs, (0, self.nemax - len(eidxs)), mode='edge')
 
-        return self.backend.view(np.full(self.nemax, mat.mid),
-                                 np.zeros(self.nemax, dtype=int), e,
-                                 np.ones(self.nemax, dtype=int),
-                                 vshape=(self.nupts, self.nvars))
+        vmap = self.backend.view_mapping(np.full(self.nemax, mat.mid),
+                                         np.zeros(self.nemax, dtype=int), e,
+                                         np.ones(self.nemax, dtype=int),
+                                         vshape=(self.nupts, self.nvars))
+
+        return self.backend.view(vmap)
 
     @memoize
     def _colour_views(self, reg):

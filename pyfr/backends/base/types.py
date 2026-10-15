@@ -266,35 +266,31 @@ class XchgMatrix(Matrix):
         return autofree(comm.Send_init(self.hdata, pid, tag))
 
 
-class View:
-    def __init__(self, backend, matmap, rmap, cmap, rstridemap, vshape, tags):
+class ViewMapping:
+    def __init__(self, backend, matmap, rmap, cmap, rstridemap, vshape):
         self.n = len(matmap)
         self.nvrow = vshape[-2] if len(vshape) == 2 else 1
         self.nvcol = vshape[-1] if len(vshape) >= 1 else 1
 
         # Get the different matrices which we map onto
-        self._mats = [backend.mats[i] for i in np.unique(matmap)]
-
-        # Extract the base allocation and data type
-        self.storage_root = self._mats[0].storage_root
-        self.basedata = self._mats[0].basedata
-        self.refdtype = self._mats[0].dtype
+        self.mats = mats = [backend.mats[i] for i in np.unique(matmap)]
+        self.refdtype = mats[0].dtype
 
         # Valid matrix types
         mattypes = (backend.matrix_cls, backend.matrix_slice_cls)
 
         # Validate the matrices
-        if any(not isinstance(m, mattypes) for m in self._mats):
+        if any(not isinstance(m, mattypes) for m in mats):
             raise TypeError('Incompatible matrix type for view')
 
-        if any(not m.same_storage(self._mats[0]) for m in self._mats):
+        if any(not m.same_storage(mats[0]) for m in mats):
             raise TypeError('All viewed matrices must belong to the same '
                             'storage object')
 
-        if any(m.dtype != self.refdtype for m in self._mats):
+        if any(m.dtype != self.refdtype for m in mats):
             raise TypeError('Mixed data types are not supported')
 
-        if any(m.tags & {'xchg', 'noblock'} for m in self._mats):
+        if any(m.tags & {'xchg', 'noblock'} for m in mats):
             raise TypeError('Views of xchg or noblock matrices are not '
                             'supported')
 
@@ -309,7 +305,7 @@ class View:
         leaddim = np.empty(self.n, dtype=ixdtype)
         blkdisp = np.empty(self.n, dtype=ixdtype)
 
-        for m in self._mats:
+        for m in mats:
             ix = np.where(matmap == m.mid)
             offset[ix], leaddim[ix] = m.offset // m.itemsize, m.leaddim
             blkdisp[ix] = (cmap[ix]*self.nvcol // m.leaddim)*m.blocksz
@@ -319,12 +315,54 @@ class View:
         cmapmod = cmap % csubsz if backend.blocks else cmap
         coldisp = (cmapmod // k)*k*self.nvcol + cmapmod % k
 
-        mapping = (offset + blkdisp + rowdisp + coldisp)[None, :]
-        self.mapping = backend.const_matrix(mapping, dtype=ixdtype, tags=tags)
+        # Compute the displacement of each point
+        disps = offset + blkdisp + rowdisp + coldisp
+        self.disps = disps.astype(ixdtype, copy=False)
+        self.cmap = np.asarray(cmap)
+
+        # Row strides of each point
+        if self.nvrow > 1:
+            rstrides = rstridemap*leaddim
+            self.rstrides = rstrides.astype(ixdtype, copy=False)
+        else:
+            self.rstrides = None
+
+    def __getitem__(self, idxs):
+        vm = copy(self)
+        vm.disps, vm.cmap = self.disps[idxs], self.cmap[idxs]
+        vm.n = len(vm.disps)
+        if self.rstrides is not None:
+            vm.rstrides = self.rstrides[idxs]
+
+        return vm
+
+    def access_order(self, colblksz=None):
+        # Group the points by blocks of columns and then by address
+        if colblksz:
+            return np.lexsort((self.disps, self.cmap // colblksz))
+        # Otherwise order the points by their address
+        else:
+            return np.argsort(self.disps)
+
+
+class View:
+    def __init__(self, backend, vmap, tags):
+        self.n, self.nvrow, self.nvcol = vmap.n, vmap.nvrow, vmap.nvcol
+
+        # Extract the base allocation and data type
+        self.storage_root = vmap.mats[0].storage_root
+        self.basedata = vmap.mats[0].basedata
+        self.refdtype = vmap.refdtype
+
+        # Index type
+        ixdtype = backend.ixdtype
+
+        self.mapping = backend.const_matrix(vmap.disps[None, :],
+                                            dtype=ixdtype, tags=tags)
 
         # Row strides, with a scalar shortcut if they are uniform
         if self.nvrow > 1:
-            rstrides = (rstridemap*leaddim)[None, :]
+            rstrides = vmap.rstrides[None, :]
             if (rstrides == rstrides.flat[0]).all():
                 self.rstride = int(rstrides.flat[0])
             else:
@@ -362,9 +400,9 @@ class View:
 
 
 class XchgView:
-    def __init__(self, backend, matmap, rmap, cmap, rstridemap, vshape, tags):
+    def __init__(self, backend, vmap, tags):
         # Create a normal view
-        self.view = backend.view(matmap, rmap, cmap, rstridemap, vshape, tags)
+        self.view = backend.view(vmap, tags)
 
         # Dimensions
         self.n = n = self.view.n

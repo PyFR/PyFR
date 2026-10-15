@@ -91,16 +91,15 @@ class ArtificialViscosity:
         cmap = np.searchsorted(mesh.node_idxs, vnodes.ravel())
 
         # Full view for 1D kernels (shocksensor, avfill)
-        eles.vtx_view = be.view(matmap, rmap, cmap)
+        vmap = be.view_mapping(matmap, rmap, cmap)
+        eles.vtx_view = be.view(vmap)
 
         # Per-region views for 2D tflux kernel
         for rgn in ('curved', 'linear'):
             if rgn in eles.mesh_regions:
                 off = 0 if rgn == 'curved' else eles.linoff
                 slc = slice(off*nverts, (off + eles.mesh_regions[rgn])*nverts)
-                eles.vtx_views[rgn] = be.view(
-                    matmap[slc], rmap[slc], cmap[slc]
-                )
+                eles.vtx_views[rgn] = be.view(vmap[slc])
 
     def _setup_kernels(self, eles, c_av, nverts, vnodes, linbasis,
                        artvisc_fpts):
@@ -198,9 +197,10 @@ class ArtificialViscosity:
             rmap = np.zeros(n, dtype=int)
             cmap = shared_local
 
-            xv = be.xchg_view(matmap, rmap, cmap)
+            vmap = be.view_mapping(matmap, rmap, cmap)
+            xv = be.xchg_view(vmap)
             rm = be.xchg_matrix_for_view(xv)
-            mv = be.view(matmap, rmap, cmap)
+            mv = be.view(vmap)
 
             self._peers.append(
                 _VtxPeer(be, self._vtx_comm, rank, xv, rm, mv, n)

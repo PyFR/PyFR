@@ -9,7 +9,7 @@ from pyfr.backends.base import NullKernel
 from pyfr.cache import memoize
 from pyfr.mpiutil import autofree, get_comm_rank_root, mpi
 from pyfr.shapes import BaseShape
-from pyfr.solvers.base.inters import sort_inter_pts
+from pyfr.solvers.base.inters import field_mapping
 from pyfr.util import subclasses
 
 
@@ -112,75 +112,36 @@ class BaseSystem:
 
         self._kernel_callbacks.append((tuple(names), callback))
 
-    def _field_view(self, interside, field, layout, view_fn,
-                    perm=Ellipsis, vshape=()):
-        matmap, rowmap, colmap, idxs, nfps = [], [], [], [], []
-
-        for etype, fidx, eidxs, idx in interside.foreach():
-            mat, eles = field[etype], self.ele_map[etype]
-            n = len(eidxs)
-
-            if layout == 'fpts':
-                fpts = eles.srtd_face_fpts[fidx][eidxs]
-                nfp = fpts.shape[1]
-                matmap.append(np.full(n * nfp, mat.mid))
-                rowmap.append(fpts.ravel())
-                colmap.append(np.repeat(eidxs, nfp))
-            elif layout == 'face':
-                nfp = 1
-                matmap.append(np.full(n, mat.mid))
-                rowmap.append(np.full(n, fidx))
-                colmap.append(eidxs)
-            elif layout == 'face-expand':
-                nfp = eles.nfacefpts[fidx]
-                matmap.append(np.full(n*nfp, mat.mid))
-                rowmap.append(np.full(n*nfp, fidx))
-                colmap.append(np.repeat(eidxs, nfp))
-
-            idxs.append(idx)
-            nfps.append(nfp)
-
-        parts = list(zip(matmap, rowmap, colmap))
-        m, r, c = sort_inter_pts(idxs, nfps, parts, perm)
-        return view_fn(m, r, c, vshape=vshape)
-
-    def _compute_perm(self, interside, field):
-        # Compute the optimal memory access permutation for a field
-        v = self._field_view(interside, field, 'fpts',
-                             self.backend.view, vshape=())
-        return np.argsort(v.mapping.get()[0])
-
     def make_field_views(self, field, layout='fpts', bc_layout=None,
                          vshape=()):
         bc_layout = bc_layout or layout
-        be = self.backend
+        be, elemap = self.backend, self.ele_map
 
         # Leave face-granular views in interface order
         def side_perm(i, side, l):
             return Ellipsis if l == 'face' else i.side_perm(side)
 
+        def fmap(side, l, perm=Ellipsis):
+            return field_mapping(be, side, field, elemap, l, perm, vshape)
+
         iint_views = []
         for i in self._int_inters:
             lperm = side_perm(i, i.lhs, layout)
             rperm = side_perm(i, i.rhs, layout)
-            lhs = self._field_view(i.lhs, field, layout, be.view, lperm,
-                                   vshape)
-            rhs = self._field_view(i.rhs, field, layout, be.view, rperm,
-                                   vshape)
+            lhs = be.view(fmap(i.lhs, layout, lperm))
+            rhs = be.view(fmap(i.rhs, layout, rperm))
             iint_views.append((lhs, rhs))
 
         mpi_views = []
         for m in self._mpi_inters:
-            lhs = self._field_view(m.lhs, field, layout, be.xchg_view,
-                                   vshape=vshape)
+            lhs = be.xchg_view(fmap(m.lhs, layout))
             rhs = be.xchg_matrix_for_view(lhs)
             mpi_views.append((lhs, rhs))
 
         bc_views = []
         for b in self._bc_inters:
             perm = side_perm(b, b.lhs, bc_layout)
-            lhs = self._field_view(b.lhs, field, bc_layout, be.view,
-                                   perm, vshape)
+            lhs = be.view(fmap(b.lhs, bc_layout, perm))
             bc_views.append(lhs)
 
         return iint_views, mpi_views, bc_views

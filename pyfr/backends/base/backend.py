@@ -10,6 +10,7 @@ import numpy as np
 from pyfr.backends.base.provider import NotSuitableError
 from pyfr.backends.base.makoutil import mfilttag
 from pyfr.backends.base.storage import _Arena, Extent
+from pyfr.backends.base.types import ViewMapping
 from pyfr.template import DottedTemplateLookup
 from pyfr.util import digest
 
@@ -190,14 +191,14 @@ class BaseBackend:
         s = 64 // np.dtype(dtype).itemsize
         return (s, s)
 
-    def view(self, matmap, rmap, cmap, rstridemap=1, vshape=(), tags=set()):
-        return self.view_cls(self, matmap, rmap, cmap, rstridemap, vshape,
-                             tags)
+    def view_mapping(self, matmap, rmap, cmap, rstridemap=1, vshape=()):
+        return ViewMapping(self, matmap, rmap, cmap, rstridemap, vshape)
 
-    def xchg_view(self, matmap, rmap, cmap, rstridemap=1, vshape=(),
-                  tags=set()):
-        return self.xchg_view_cls(self, matmap, rmap, cmap, rstridemap,
-                                  vshape, tags)
+    def view(self, vmap, tags=set()):
+        return self.view_cls(self, vmap, tags)
+
+    def xchg_view(self, vmap, tags=set()):
+        return self.xchg_view_cls(self, vmap, tags)
 
     @contextmanager
     def region(self, name):
