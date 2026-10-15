@@ -119,9 +119,13 @@ class BaseAdvectionSystem(BaseSystem):
         if self._ef:
             self._ef.add_to_graph_post_recv(g_flux_div, k, deps)
 
+        # Execute NSCBC boundary kernels after the other interface fluxes
+        g_flux_div.add_all(k['bcint/nscbc_flux'], deps=k['mpiint/comm_flux'])
+
         # Compute the transformed divergence of the corrected flux
         for l in k['eles/tdivtconf']:
-            ldeps = deps(l, 'eles/tdivtpcorf') + k['mpiint/comm_flux']
+            ldeps = (deps(l, 'eles/tdivtpcorf') + k['mpiint/comm_flux'] +
+                     k['bcint/nscbc_flux'])
             g_flux_div.add(l, deps=ldeps)
 
         # Obtain the physical divergence of the corrected flux
