@@ -51,16 +51,15 @@ class MetalKernelProvider(BaseKernelProvider):
         buf = m.basedata.contents().as_buffer(m.offset + m.nbytes)
         return np.frombuffer(buf, dtype=np.uint8, offset=m.offset)
 
-    def _bench_save(self, m):
+    def _bench_read(self, m):
         return self._bench_view(m).copy()
 
-    def _bench_restore(self, m, buf):
-        self._bench_view(m)[:] = buf
+    def _bench_write(self, m, buf):
+        self._bench_view(m)[:buf.nbytes] = buf
 
-    def _bench_fill_random(self, m):
-        v, blk = self._bench_view(m), self._bench_rand_block(m.nbytes)
-        for off in range(0, m.nbytes, blk.nbytes):
-            v[off:off + blk.nbytes] = blk[:m.nbytes - off]
+    def _bench_dup(self, m, off, nbytes):
+        v = self._bench_view(m)
+        v[off:off + nbytes] = v[:nbytes]
 
     @memoize
     def _build_kernel(self, name, src, argtypes, regions=frozenset(),

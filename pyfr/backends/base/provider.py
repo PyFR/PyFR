@@ -104,15 +104,22 @@ class BaseKernelProvider:
     def __init__(self, backend):
         self.backend = backend
 
-    def _bench_rand_block(self, nbytes):
-        # Generate up to 64 MiB of random data
-        n = min(nbytes, 2**26)
+    def _bench_fill_random(self, m):
+        # Generate up to 1 MiB of random data
+        n = min(m.nbytes, 2**20)
         blk = np.random.default_rng(0).integers(0, 256, n, dtype=np.uint8)
 
         # Ensure that the data can be interpreted as floating point values
         blk[(blk & 0x7c) == 0x7c] &= 0x7b
 
-        return blk
+        # Seed the start of the matrix with this data
+        self._bench_write(m, blk)
+
+        # Double the filled region with device copies until the matrix is full
+        off = n
+        while off < m.nbytes:
+            self._bench_dup(m, off, min(off, m.nbytes - off))
+            off *= 2
 
     @contextmanager
     def _bench_data(self, save=[], rand=[]):
@@ -122,7 +129,7 @@ class BaseKernelProvider:
         mats = [getattr(m, 'parent', m) for m in [*save, *rand]]
 
         # Save the operands
-        saved = [(m, self._bench_save(m)) for m in mats]
+        saved = [(m, self._bench_read(m)) for m in mats]
 
         # Fill with random entries
         for m in mats[len(save):]:
@@ -133,7 +140,7 @@ class BaseKernelProvider:
         finally:
             # Restore the saved operands
             for m, buf in saved:
-                self._bench_restore(m, buf)
+                self._bench_write(m, buf)
 
 
 class BasePointwiseKernelProvider(BaseKernelProvider):

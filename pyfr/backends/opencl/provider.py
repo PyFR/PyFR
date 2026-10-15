@@ -56,22 +56,22 @@ class OpenCLKernelProvider(BaseKernelProvider):
 
         return (end_evt.end_time - start_evt.start_time) / nbench
 
-    def _bench_save(self, m):
+    def _bench_read(self, m):
         buf = np.empty(m.nbytes, dtype=np.uint8)
         self.backend.cl.memcpy(self.backend.cl.qdflt, buf, m.data, m.nbytes,
                                blocking=True)
         return buf
 
-    def _bench_restore(self, m, buf):
-        self.backend.cl.memcpy(self.backend.cl.qdflt, m.data, buf, m.nbytes,
+    def _bench_write(self, m, buf):
+        self.backend.cl.memcpy(self.backend.cl.qdflt, m.data, buf, buf.nbytes,
                                blocking=True)
 
-    def _bench_fill_random(self, m):
-        blk = self._bench_rand_block(m.nbytes)
-        for off in range(0, m.nbytes, blk.nbytes):
-            self.backend.cl.memcpy(self.backend.cl.qdflt, m.data, blk,
-                                   min(blk.nbytes, m.nbytes - off),
-                                   blocking=True, dstoff=off)
+    def _bench_dup(self, m, off, nbytes):
+        cl = self.backend.cl
+        cl.memcpy(cl.qdflt, m.data, m.data, nbytes, dstoff=off)
+
+        # Complete the copy before benchmarks run on their own queue
+        cl.qdflt.finish()
 
     @memoize
     def _build_program(self, src):
