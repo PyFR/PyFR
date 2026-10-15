@@ -96,22 +96,35 @@ class MatrixBase(_MatrixArg, _StorageBase):
         pass
 
     def _pack(self, ary, out=None):
-        # Convert from SoA to [blocked] AoSoA packing
-        n, k, csubsz = ary.shape[-1], self.backend.soasz, self.backend.csubsz
+        if out is None:
+            out = np.empty((self.nblocks, self.nrow, self.leaddim), self.dtype)
 
+        # View the source and destination in terms of chunks of k columns
         if ary.ndim == 2:
-            ary = np.pad(ary, [(0, 0)] + [(0, -n % self.leaddim)])
+            src, k = ary[:, None], 1
+            dst = out.reshape(*self.datashape, 1, 1)
         else:
-            ary = np.pad(ary, [(0, 0)]*(ary.ndim - 1) + [(0, -n % csubsz)])
-            ary = ary.reshape(ary.shape[:-1] + (-1, k)).swapaxes(-2, -3)
+            src, k = ary, self.backend.soasz
+            dst = out.reshape(self.datashape)
 
-        ary = ary.reshape(self.nrow, -1, self.leaddim).swapaxes(0, 1)
+        *lead, nvar, n = src.shape
+        nb, nc = dst.shape[0], dst.shape[-3]
+        (nck, rem), (nbf, ncr) = divmod(n, k), divmod(n // k, nc)
 
-        if out is not None:
-            out.reshape(ary.shape)[:] = ary
-            return out
-        else:
-            return np.ascontiguousarray(ary, dtype=self.dtype)
+        # Copy over the complete chunks of each complete block
+        chunks = src[..., :nck*k].reshape(*lead, nvar, nck, k)
+        chunks = chunks.swapaxes(-2, -3)
+        fchunks = chunks[..., :nbf*nc, :, :].reshape(*lead, nbf, nc, nvar, k)
+        dst[:nbf] = np.moveaxis(fchunks, -4, 0)
+
+        # Copy over any partial block, zeroing the padding
+        if nbf < nb:
+            pdst = dst[nbf]
+            pdst[..., :ncr, :, :] = chunks[..., nbf*nc:, :, :]
+            pdst[..., ncr:, :, :] = 0
+            pdst[..., ncr, :, :rem] = src[..., nck*k:]
+
+        return out
 
     def _unpack(self, ary):
         # Unpack from blocked AoSoA to blocked SoA
