@@ -398,7 +398,7 @@ class _BoundaryAscentOutput(_VolumeAscentOutput):
         return dom
 
     def samples(self, adapter, itype, grads):
-        spts = self.renderer.mesh.spts
+        spts, curved = self.renderer.mesh.spts, self.renderer.mesh.spts_curved
 
         for eidxs, etype, mop, sop, fidx, svpts in self.patches[itype]:
             names, block = adapter.block(etype, eidxs, grads)
@@ -411,7 +411,7 @@ class _BoundaryAscentOutput(_VolumeAscentOutput):
             ploc = interp_pts(mop, psp)
 
             finfo = FaceInfo(etype, fidx, svpts)
-            yield names, samples, ploc, psp, finfo
+            yield names, samples, ploc, psp, curved[etype][eidxs], finfo
 
 
 class AscentRenderer:

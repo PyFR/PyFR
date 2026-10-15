@@ -52,8 +52,8 @@ class BaseAdvectionElements(BaseElements):
         if value is not None:
             self._external_vals[name] = value
 
-    def set_backend(self, backend, nonce, linoff):
-        super().set_backend(backend, nonce, linoff)
+    def set_backend(self, backend, nonce):
+        super().set_backend(backend, nonce)
 
         kernels = self.kernels
 

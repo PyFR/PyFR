@@ -278,7 +278,8 @@ class FieldRecovery:
         cnodemap, divmap, nsvptsmap = {}, {}, {}
         for et in mesh.spts:
             shapecls = subclass_where(BaseShape, name=et)
-            eles = elementscls(shapecls, mesh.spts[et], cfg)
+            eles = elementscls(shapecls, mesh.spts[et], cfg,
+                               mesh.spts_curved[et])
             basis = eles.basis
             nodes = shapecls.std_ele(p)
 

@@ -135,7 +135,8 @@ class VTKBoundaryWriter(BaseVTKWriter):
                     op = lin_op if data.shape[0] == nlpts else soln_op
                     pointf[f.name].append(interp_pts(op, data))
 
-            fields = self._postproc(face_vsoln, face_vpts, spts, finfo)
+            fields = self._postproc(face_vsoln, face_vpts, spts, curved[-1],
+                                    finfo)
             for fname, arr in fields.items():
                 pointf[fname].append(arr)
 

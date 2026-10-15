@@ -3,8 +3,6 @@ import inspect
 import itertools as it
 import statistics
 
-import numpy as np
-
 from pyfr.backends.base import NullKernel
 from pyfr.cache import memoize
 from pyfr.mpiutil import autofree, get_comm_rank_root, mpi
@@ -190,7 +188,8 @@ class BaseSystem:
         basismap = {b.name: b for b in subclasses(BaseShape, just_leaf=True)}
 
         # Load the elements
-        elemap = {etype: self.elementscls(basismap[etype], spts, self.cfg)
+        elemap = {etype: self.elementscls(basismap[etype], spts, self.cfg,
+                                          mesh.spts_curved[etype])
                   for etype, spts in mesh.spts.items()}
 
         eles = list(elemap.values())
@@ -203,11 +202,8 @@ class BaseSystem:
             ics = [ele.set_ics_from_cfg() for ele in eles]
 
         # Allocate these elements on the backend
-        for etype, ele in elemap.items():
-            curved = mesh.spts_curved[etype]
-            linoff = np.max(*np.nonzero(curved), initial=-1) + 1
-
-            ele.set_backend(self.backend, nonce, linoff)
+        for ele in eles:
+            ele.set_backend(self.backend, nonce)
 
         return eles, elemap, ics
 

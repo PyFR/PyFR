@@ -31,10 +31,11 @@ class PostProcData:
 
 
 class BoundaryPostProcData(PostProcData):
-    def __init__(self, source, pvars, ploc, spts, finfo):
+    def __init__(self, source, pvars, ploc, spts, curved, finfo):
         super().__init__(source, pvars, ploc)
 
         self._spts = spts
+        self._curved = curved
         self._finfo = finfo
 
     @cached_property
@@ -45,7 +46,8 @@ class BoundaryPostProcData(PostProcData):
     @cached_property
     def _eles(self):
         elementscls = self.source.elementscls
-        return elementscls(type(self._shape), self._spts, self.cfg)
+        return elementscls(type(self._shape), self._spts, self.cfg,
+                           self._curved)
 
     @cached_property
     def pnorm(self):

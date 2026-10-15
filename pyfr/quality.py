@@ -109,7 +109,8 @@ class MeshQuality:
 
         self.metrics = {}
         for etype, spts in mesh.spts.items():
-            ele = elementscls(basismap[etype], spts, cfg)
+            ele = elementscls(basismap[etype], spts, cfg,
+                              mesh.spts_curved[etype])
             self.metrics[etype] = element_metrics(ele)
 
         char_len = {et: m.char_len for et, m in self.metrics.items()}

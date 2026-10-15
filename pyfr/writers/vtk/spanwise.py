@@ -65,7 +65,8 @@ class ExtrudedSpanwise(_SpanwiseBase, AlltoallMixin):
 
         # Geometry-only element containers for the physical face normals
         ecls = get_elementscls(cfg)
-        eles = {et: ecls(subclass_where(BaseShape, name=et), spts, cfg)
+        eles = {et: ecls(subclass_where(BaseShape, name=et), spts, cfg,
+                         self.pmesh.spts_curved[et])
                 for et, spts in self.pmesh.spts.items()}
 
         # Classify the faces of each element by their physical normals

@@ -8,6 +8,7 @@ from pyfr.exprs import npeval
 from pyfr.nputil import fuzzysort
 from pyfr.quadrules import get_quadrule
 from pyfr.shapes import interp_pts, proj_l2
+from pyfr.util import ndrange
 
 
 @dataclass
@@ -51,7 +52,7 @@ class BaseElements:
         # Absent an equation of state every state is admissible
         return np.ones(np.shape(cons[0]), dtype=bool)
 
-    def __init__(self, basiscls, eles, cfg):
+    def __init__(self, basiscls, eles, cfg, curved):
         self._be = None
 
         self.eles = eles
@@ -92,6 +93,12 @@ class BaseElements:
         self.nfpts = basis.nfpts
         self.nfacefpts = basis.nfacefpts
         self.nmpts = basis.nmpts
+
+        # Treat all elements up to the last curved one as curved
+        if basis.order >= 2:
+            self.ncurved = int(np.max(*np.nonzero(curved), initial=-1)) + 1
+        else:
+            self.ncurved = neles
 
         if self.basis.fpts_in_upts:
             self.get_vect_fpts_for_inters = self._get_vect_upts_for_inters
@@ -219,14 +226,14 @@ class BaseElements:
         else:
             return klist[0]
 
-    def set_backend(self, backend, nonce, linoff):
+    def set_backend(self, backend, nonce):
         self._be = backend
 
         # If we are doing gradient fusion
         self.grad_fusion = not (self._be.blocks or 'flux' in self.antialias)
 
         if self.basis.order >= 2:
-            self.linoff = linoff - linoff % -backend.csubsz
+            self.linoff = self.ncurved - self.ncurved % -backend.csubsz
         else:
             self.linoff = self.neles
 
@@ -427,14 +434,16 @@ class BaseElements:
 
             djacs = a*d - b*c
         else:
-            tt = np.empty((nmpts, ndims, neles))
-
+            # Handle the curved elements first using the curl form of smats
+            nc = self.ncurved
+            tt = np.empty((nmpts, ndims, nc))
             dtt = []
-            for dx in jac:
+
+            for dx in jac[..., :nc]:
                 # Compute x cross x_(chi)
                 for i in range(3):
                     j, k = (i + 1) % 3, (i + 2) % 3
-                    tt[:, i] = x[:, j]*dx[k] - x[:, k]*dx[j]
+                    tt[:, i] = x[:, j, :nc]*dx[k] - x[:, k, :nc]*dx[j]
 
                 # Jacobian of x cross x_(chi) at the pseudo grid points
                 dt = jacop @ tt.reshape(nmpts, -1)
@@ -443,9 +452,16 @@ class BaseElements:
                 dtt.append(dt)
 
             # Kopriva's invariant form of smats; JSC 26(3), 301-327, Eq. (37)
-            smats[0] = 0.5*(dtt[2][1] - dtt[1][2])
-            smats[1] = 0.5*(dtt[0][2] - dtt[2][0])
-            smats[2] = 0.5*(dtt[1][0] - dtt[0][1])
+            smats[0, ..., :nc] = 0.5*(dtt[2][1] - dtt[1][2])
+            smats[1, ..., :nc] = 0.5*(dtt[0][2] - dtt[2][0])
+            smats[2, ..., :nc] = 0.5*(dtt[1][0] - dtt[0][1])
+
+            # Cross product form of smats for linear elements
+            jl = jac[..., nc:]
+            for i, c in ndrange(3, 3):
+                j, k = (i + 1) % 3, (i + 2) % 3
+                a, b = (c + 1) % 3, (c + 2) % 3
+                smats[i, :, c, nc:] = jl[j, a]*jl[k, b] - jl[j, b]*jl[k, a]
 
             # We note that J = [x0; x1; x2]
             x0, x1, x2 = jac

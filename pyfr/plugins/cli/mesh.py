@@ -163,9 +163,9 @@ class _MeshAnalyser:
         self.stats |= {k: np.inf for k in self.gmins}
 
         for etype, spts in mesh.spts.items():
-            ele = elementscls(basismap[etype], spts, cfg)
-            m = element_metrics(ele)
             curved = mesh.spts_curved[etype]
+            ele = elementscls(basismap[etype], spts, cfg, curved)
+            m = element_metrics(ele)
             n_curved = int(np.sum(curved))
 
             # Count issues per element (int cast for JSON serialization)
