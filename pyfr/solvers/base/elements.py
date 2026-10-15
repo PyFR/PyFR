@@ -427,10 +427,14 @@ class BaseElements:
 
             djacs = a*d - b*c
         else:
+            tt = np.empty((nmpts, ndims, neles))
+
             dtt = []
             for dx in jac:
                 # Compute x cross x_(chi)
-                tt = np.cross(x, dx, axisa=1, axisb=0, axisc=1)
+                for i in range(3):
+                    j, k = (i + 1) % 3, (i + 2) % 3
+                    tt[:, i] = x[:, j]*dx[k] - x[:, k]*dx[j]
 
                 # Jacobian of x cross x_(chi) at the pseudo grid points
                 dt = jacop @ tt.reshape(nmpts, -1)
@@ -447,8 +451,10 @@ class BaseElements:
             x0, x1, x2 = jac
 
             # Exploit the fact that det(J) = x0 · (x1 ^ x2)
-            x1cx2 = np.cross(x1, x2, axisa=0, axisb=0, axisc=1)
-            djacs = np.einsum('ij...,ji...->j...', x0, x1cx2)
+            djacs = 0
+            for i in range(3):
+                j, k = (i + 1) % 3, (i + 2) % 3
+                djacs += x0[i]*(x1[j]*x2[k] - x1[k]*x2[j])
 
         return smats.reshape(ndims, nmpts, -1), djacs
 
