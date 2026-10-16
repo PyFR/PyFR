@@ -20,79 +20,78 @@ class NIRFPostProc(BasePostProcPlugin):
     transform = True
     source_prefix = 'soln'
 
-    def _process(self, data):
-        ndims = data.ndims
-
-        sdata = data.soln.state.get('plugins/nirf')
+    def prepare(self, mesh, soln):
+        sdata = soln.state.get('plugins/nirf')
         if sdata is None:
             raise RuntimeError('No NIRF state in solution file')
 
-        fquat = sdata['quat']
-        fomega = sdata['omega']
-        fvelo = sdata['velo']
-        floc = sdata['loc']
+        self._R = _quat_to_rotmat(sdata['quat'])
+        self._omega = np.array(sdata['omega'])
+        self._velo = np.array(sdata['velo'])
+        self._loc = np.array(sdata['loc'])
 
-        fx0 = np.zeros(3)
-        fx0[:ndims] = data.cfg.getliteral('solver-plugin-nirf',
-                                          'center-of-rot', (0.,)*ndims)
+        # Centre of rotation, padded to 3D
+        self._x0 = np.zeros(3)
+        self._x0[:self.ndims] = soln.config.getliteral(
+            'solver-plugin-nirf', 'center-of-rot', (0.,)*self.ndims
+        )
 
-        R = _quat_to_rotmat(fquat)
-        Rd = R[:ndims, :ndims]
+    def _process(self, data):
+        ndims = data.ndims
+        R, Rd = self._R, self._R[:ndims, :ndims]
+        x0 = self._x0[:ndims]
+        vnames = ['u', 'v', 'w'][:ndims]
 
-        # r_body (before rotation); pad to 3D for omega x r
-        r = np.zeros((3, *data.ploc.shape[1:]))
-        r[:ndims] = data.ploc - fx0[:ndims, None, None]
+        # Body-frame offsets from the centre of rotation, padded to 3D
+        ploc = data.ploc
+        r = np.zeros((*ploc.shape[:-1], 3))
+        r[..., :ndims] = ploc - x0
 
         # The wall distance is a frame-invariant scalar, so evaluate it in
         # the body frame before anything moves; the normals rotate
-        if data.kind == 'boundary':
+        if self.kind == 'boundary':
             data.boundary_dist
             pnorm, normals = data.pnorm, data.normals
             data.pnorm = np.tensordot(Rd, pnorm, axes=1)
             data.normals = np.tensordot(Rd, normals, axes=1)
 
         # Transform coordinates: x_lab = R*(x_body - x0) + x0 + loc
-        ploc = data.ploc
-        ploc -= fx0[:ndims, None, None]
-        ploc[:] = np.tensordot(Rd, ploc, axes=1)
-        ploc += fx0[:ndims, None, None]
-
-        apply_trans = self.cfg.getbool(self.cfgsect,
-                                       'apply-translation', False)
-        if apply_trans:
-            ploc += floc[:ndims, None, None]
+        ploc[...] = r[..., :ndims] @ Rd.T + x0
+        if self.cfg.getbool(self.cfgsect, 'apply-translation', False):
+            ploc += self._loc[:ndims]
 
         # Transform velocity: u_lab = R*(u_body + omega x r_body) + V_frame
-        vs = data.pris[1:ndims + 1]
-        u_body = np.zeros_like(r)
-        u_body[:ndims] = vs
-
-        oxr = np.cross(fomega, r, axisb=0, axisc=0)
-        u_lab = np.tensordot(R, u_body + oxr, axes=1) + fvelo[:, None, None]
-
-        for d, v in enumerate(vs):
-            v[:] = u_lab[d]
+        u = np.zeros_like(r)
+        u[..., :ndims] = np.stack([data[n] for n in vnames], axis=-1)
+        u = (u + np.cross(self._omega, r)) @ R.T + self._velo
+        for i, n in enumerate(vnames):
+            data[n][...] = u[..., i]
 
         if not data.has_grads:
             return
 
-        # Scalar gradients (rho, p) rotate as covectors: grad_lab = R*grad_body
-        for vi in (0, ndims + 1):
-            data.grad_pris[vi][:] = np.tensordot(Rd, data.grad_pris[vi],
-                                                 axes=1)
+        dims = 'xyz'[:ndims]
+
+        def grad(n):
+            return np.stack([data[f'grad_{n}_{d}'] for d in dims], axis=-1)
+
+        def set_grad(n, g):
+            for i, d in enumerate(dims):
+                data[f'grad_{n}_{d}'][...] = g[..., i]
+
+        # Scalar gradients rotate as covectors: grad_lab = R*grad_body
+        privars = self.source.elementscls.privars(ndims, data.cfg)
+        for n in privars:
+            if n not in vnames:
+                set_grad(n, grad(n) @ Rd.T)
 
         # Velocity gradient tensor: G_lab = R*(G_body + [Omega x])*R^T
-        # Build padded (3, 3, npts, neles) so the omega correction works in 2D
-        G = np.zeros((3, 3, *r.shape[1:]))
-        for i in range(ndims):
-            G[i, :ndims] = data.grad_pris[1 + i]
+        G = np.zeros((*ploc.shape[:-1], 3, 3))
+        for i, n in enumerate(vnames):
+            G[..., i, :ndims] = grad(n)
 
-        wx, wy, wz = fomega
-        G += np.array([[0, -wz,  wy],
-                       [wz,  0, -wx],
-                       [-wy, wx,  0]])[:, :, None, None]
-
-        G_lab = np.einsum('ik,kl...,jl->ij...', R, G, R)
-
-        for i in range(ndims):
-            data.grad_pris[1 + i][:] = G_lab[i, :ndims]
+        wx, wy, wz = self._omega
+        G += np.array([[0, -wz, wy], [wz, 0, -wx], [-wy, wx, 0]])
+        G = R @ G @ R.T
+        for i, n in enumerate(vnames):
+            set_grad(n, G[..., i, :ndims])

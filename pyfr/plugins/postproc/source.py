@@ -73,6 +73,9 @@ class BaseDataSource:
         return qs
 
     def prepare(self, mesh, soln, pp_plugins):
+        for pp in pp_plugins:
+            pp.prepare(mesh, soln)
+
         return []
 
     def pvar_names(self, rownames, groups):
