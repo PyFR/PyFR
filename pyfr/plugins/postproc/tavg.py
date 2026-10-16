@@ -174,5 +174,7 @@ class TavgDataSource(BaseDataSource):
         return block.astype(float)
 
     def prepare(self, mesh, soln, pp_plugins):
+        super().prepare(mesh, soln, pp_plugins)
+
         # Averaged data lacks stored gradients; compute them on demand
         return expand_stats_fields(mesh, soln, pp_plugins, self.elementscls)

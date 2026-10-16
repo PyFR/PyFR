@@ -34,6 +34,9 @@ class BasePostProcPlugin(BasePlugin):
     def derived_fields(self, fields):
         return {}
 
+    def prepare(self, mesh, soln):
+        pass
+
     def run(self, data):
         if self.needs_grads and not data.has_grads:
             raise RuntimeError(f'Postproc {self.name} requires gradient '
