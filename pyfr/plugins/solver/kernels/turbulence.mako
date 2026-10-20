@@ -44,6 +44,6 @@
     src[${nvars - 1}] += ${0.5*beta3}*u[0]*(${pyfr.dot('utilde[{i}]', i=3)})*clip;
 
   % for i in range(3):
-    src[${i + 1}] += utilde[${i}]*u[0];
+    src[${i + 1}] += utilde[${i}]*u[0]*clip;
   % endfor
 </%pyfr:macro>
