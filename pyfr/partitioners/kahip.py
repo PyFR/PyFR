@@ -37,7 +37,7 @@ class KaHIPPartitioner(BasePartitioner):
     has_multiple_constraints = False
 
     # Integer options
-    int_opts = {'seed', 'ufactor'}
+    int_opts = frozenset({'seed', 'ufactor'})
 
     # Enumeration options
     enum_opts = {

@@ -105,7 +105,9 @@ class METISPartitioner(BasePartitioner):
     has_multiple_constraints = True
 
     # Integer options
-    int_opts = {'niter', 'niparts', 'ncuts', 'seed', 'nseps', 'ufactor'}
+    int_opts = frozenset({
+        'niter', 'niparts', 'ncuts', 'seed', 'nseps', 'ufactor'
+    })
 
     # Enumeration options
     enum_opts = {

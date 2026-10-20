@@ -74,7 +74,7 @@ class SCOTCHPartitioner(BasePartitioner):
     has_multiple_constraints = False
 
     # Interger options
-    int_opts = {'ufactor', 'seed'}
+    int_opts = frozenset({'ufactor', 'seed'})
 
     # Enumeration options
     enum_opts = {
