@@ -1,20 +1,14 @@
 from collections import defaultdict
+from math import isfinite
 
 from pyfr.dsl.nodes import (PRECISE_REGIONS, Assign, Binary, Block, Call,
                             Float, For, Int, Number, Region, Ternary, Typedef,
-                            Unary, VarDecl, call, expr_children, map_ast)
+                            Unary, VarDecl, call, map_ast)
 from pyfr.dsl.types import Environment
 
 
-def expr_size(expr):
-    return 1 + sum(expr_size(c) for c in expr_children(expr))
-
-
 def expand_power(base, n):
-    # Expanding a large base would duplicate it at every factor
-    if expr_size(base) > 3:
-        return Binary('**', base, Int(n))
-    elif n == 2:
+    if n == 2:
         return Binary('*', base, base)
     # Squaring halves the exponent, so the multiply count stays low
     elif n % 2 == 0:
@@ -24,20 +18,30 @@ def expand_power(base, n):
         return Binary('*', base, expand_power(base, n - 1))
 
 
+def fold_pow(a, b):
+    # Evaluate a constant power, declining unless it is a finite real
+    try:
+        c = float(a)**float(b)
+    except (OverflowError, ZeroDivisionError):
+        return None
+
+    return Float(c) if isinstance(c, float) and isfinite(c) else None
+
+
 def reduce_pow(base, v):
     twov = round(2*v)
     n = abs(int(twov))
     ipart, has_sqrt = divmod(n, 2)
 
+    # Fold a constant base at generation time
+    if isinstance(base, Number):
+        result = fold_pow(base.value, v)
     # Leave exponents which are not half integers or need many multiplies
-    if abs(2*v - twov) > 1e-12 or n > 17:
+    elif abs(2*v - twov) > 1e-12 or n > 17:
         result = None
     # Anything to the power of zero is one
     elif n == 0:
         result = Int(1)
-    # Repeating a large base at every factor costs more than it saves
-    elif ipart > 0 and expr_size(base) > 3:
-        result = None
     # Expand the integer part and attach the sqrt for the half
     else:
         if ipart == 0:

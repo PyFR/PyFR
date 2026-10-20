@@ -8,7 +8,7 @@ from numpy.polynomial.polynomial import polyfit, polyval
 
 from pyfr.dsl.nodes import (PRECISE_REGIONS, Binary, Call, Int, Number,
                             Region, Unary, Var, map_ast)
-from pyfr.dsl.simplifier import expand_power, expr_size, reduce_pow
+from pyfr.dsl.simplifier import expand_power, reduce_pow
 from pyfr.template import DottedTemplateLookup
 from pyfr.util import subclasses
 
@@ -216,7 +216,7 @@ class PowMathFn(BaseMathFn):
         p, q = fv.numerator, fv.denominator
         k, r = divmod(p, q)
 
-        large = k > 1 and (k > 8 or expr_size(base) > 3)
+        large = k > 8
         badfrac = q not in (3, 5, 7) or abs(av*q - p) > 1e-12
 
         # Reduce integer and half-integer exponents to multiplies and sqrts
