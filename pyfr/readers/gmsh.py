@@ -252,7 +252,7 @@ class GmshReader(BaseReader):
         if ver == '2.2':
             self._read_nodes_impl = self._read_nodes_impl_v2
             self._read_eles_impl = self._read_eles_impl_v2
-        elif ver == '4.1':
+        elif ver in {'4.1', '4.2'}:
             self._read_nodes_impl = self._read_nodes_impl_v41
             self._read_eles_impl = self._read_eles_impl_v41
         else:
