@@ -7,7 +7,7 @@ import numpy as np
 from pyfr.mpiutil import (AlltoallMixin, SharedWorkQueue, Sorter,
                           get_comm_rank_root, get_node_comm, mpi,
                           mpi_progress, shared_ndarrays)
-from pyfr.nputil import morton_encode, zip_chunks
+from pyfr.nputil import morton_keys, zip_chunks
 from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where
 
@@ -430,11 +430,10 @@ class BaseCloudResampler(AlltoallMixin):
         comm.Allreduce(mpi.IN_PLACE, pmax, op=mpi.MAX)
 
         # Record the key normalisation for assigning target points
-        fact = 2**21 if self.ndims == 3 else 2**32
-        self._mort_norm = fact, pmin, (pmax - pmin).max()
+        self._mort_norm = pmin, (pmax - pmin).max()
 
         # Normalise our points and compute their Morton codes
-        keys = self._morton_keys(pts)
+        keys = morton_keys(pts, *self._mort_norm)
 
         # Use these codes to sort our points
         sorter = Sorter(comm, keys)
@@ -446,14 +445,6 @@ class BaseCloudResampler(AlltoallMixin):
 
         # With this redistribute our points and solutions
         return sorter(pts), sorter(solns), sorter.keys
-
-    def _morton_keys(self, pts):
-        fact, pmin, ext = self._mort_norm
-
-        # Map the points onto the integer grid the codes are built from
-        ipts = np.clip(fact*((pts - pmin) / ext), 0, fact).astype(np.uint64)
-
-        return morton_encode(ipts, [fact]*self.ndims)
 
     def _compute_pts_tree(self, pts):
         return RTree.from_points(pts, storage='point')
@@ -521,7 +512,7 @@ class BaseCloudResampler(AlltoallMixin):
         return counts
 
     def _prefilter_coords(self, pts):
-        gfact, (_, pmin, ext) = self._prefilter_fact, self._mort_norm
+        gfact, (pmin, ext) = self._prefilter_fact, self._mort_norm
 
         # Normalise the points onto the coarse grid
         gpts = gfact*((pts - pmin) / ext)
@@ -612,7 +603,7 @@ class BaseCloudResampler(AlltoallMixin):
         comm, rank, root = get_comm_rank_root()
 
         # Assign points to the ranks owning their Morton code segments
-        keys = self._morton_keys(pts)
+        keys = morton_keys(pts, *self._mort_norm)
         tranks = np.searchsorted(self._mort_bounds, keys)
 
         # Sort the points according to their rank

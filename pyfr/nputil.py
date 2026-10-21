@@ -109,6 +109,20 @@ def morton_encode(ipts, imax, dtype=np.uint64):
     return codes
 
 
+def morton_keys(pts, pmin=None, ext=None):
+    ndims = pts.shape[1]
+    fact = 2**(64 // ndims)
+
+    # Default to normalising the points by their bounding box
+    if pmin is None:
+        pmin, ext = pts.min(axis=0), np.ptp(pts, axis=0).max() or 1
+
+    # Map the points onto the integer grid the codes are built from
+    ipts = np.clip(fact*((pts - pmin) / ext), 0, fact).astype(np.uint64)
+
+    return morton_encode(ipts, [fact]*ndims)
+
+
 def search_unsorted(a, v):
     idx = np.argsort(a)
     return idx[np.searchsorted(a, v, sorter=idx)]

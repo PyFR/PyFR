@@ -7,8 +7,10 @@ import numpy as np
 
 from pyfr._version import __version__
 from pyfr.nputil import iter_struct, fuzzysort, range_offsets
+from pyfr.partitioners.renumber import ElementRenumberer
 from pyfr.polys import get_polybasis
 from pyfr.progress import NullProgressSequence, NullProgressSpinner
+from pyfr.readers.reorient import ElementReorienter
 from pyfr.shapes import BaseShape
 from pyfr.util import digest, first, subclass_where
 
@@ -17,7 +19,7 @@ class BaseReader:
     def __init__(self, progress):
         self.progress = progress
 
-    def _get_default_partitioning(self, eles, codec):
+    def _get_default_partitioning(self, eles, codec, neidx):
         # Allocate the partitioning array
         partitioning = np.empty(sum(len(einfo) for einfo in eles.values()),
                                 dtype=np.int64)
@@ -29,9 +31,13 @@ class BaseReader:
         for i, etype in enumerate(sorted(eles)):
             einfo = eles[etype]
 
+            # Order the elements by their new number
+            eidx = np.argsort(neidx[etype], kind='stable')
+            curved = einfo['curved'][eidx]
+
             # Move curved elements to the start of the list
-            ceidx = einfo['curved'].nonzero()[0]
-            leidx = (~einfo['curved']).nonzero()[0]
+            ceidx = eidx[curved]
+            leidx = eidx[~curved]
 
             # Add them to the array
             if len(ceidx):
@@ -64,18 +70,34 @@ class BaseReader:
     def _to_raw_mesh(self, lintol):
         pass
 
-    def write(self, fname, lintol):
+    def write(self, fname, lintol, renumber=True, reorient=True):
         nodes, eles, codec, periodic = self._to_raw_mesh(lintol)
+
+        # Rotate the elements so chains of them share a face numbering
+        if reorient:
+            with self.progress.start('Reorienting elements'):
+                ElementReorienter(codec).reorient(nodes, eles, periodic)
 
         # Compute the UUID
         with self.progress.start('Computing UUID'):
             uuid = UUID(digest((nodes, eles, codec, periodic))[:32])
 
+        # Renumber the elements of each type for memory locality
+        if renumber:
+            with self.progress.start('Renumbering elements'):
+                eclass = {et: einfo['curved'] for et, einfo in eles.items()}
+                pfaces = [pidx for pidx, *_ in periodic.values()]
+                renumberer = ElementRenumberer(codec)
+                neidx = renumberer.renumber(nodes, eles, eclass, pfaces)
+        else:
+            neidx = {et: np.arange(len(einfo)) for et, einfo in eles.items()}
+
         # Write out the file
         with self.progress.start('Writing mesh'):
             with h5py.File(fname, 'w', libver='latest') as f:
                 # Generate a default partitioning
-                parts, pregions = self._get_default_partitioning(eles, codec)
+                parts, pregions = self._get_default_partitioning(eles, codec,
+                                                                 neidx)
 
                 # Write out the metadata
                 f['codec'] = np.array(codec, dtype='S')

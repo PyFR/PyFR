@@ -57,6 +57,12 @@ def main():
                            'from the extension of inmesh')
     ap_import.add_argument('-l', dest='lintol', type=float, default=1e-5,
                            help='linearisation tolerance')
+    ap_import.add_argument('--no-renumber', dest='renumber',
+                           action='store_false',
+                           help='do not renumber elements for locality')
+    ap_import.add_argument('--no-reorient', dest='reorient',
+                           action='store_false',
+                           help='do not reorient elements for locality')
     ap_import.set_defaults(process=process_import)
 
     # Partition subcommand
@@ -106,6 +112,10 @@ def main():
     ap_partition_add.add_argument(
         '--popt', dest='popts', action='append', default=[],
         metavar='key:value', help='partitioner-specific option'
+    )
+    ap_partition_add.add_argument(
+        '--no-renumber', dest='renumber', action='store_false',
+        help='do not renumber elements for locality'
     )
     ap_partition_add.set_defaults(process=process_partition_add)
 
@@ -293,7 +303,7 @@ def process_import(args):
         reader = get_reader_by_extn(extn, args.inmesh, args.progress)
 
     # Write out the mesh
-    reader.write(args.outmesh, args.lintol)
+    reader.write(args.outmesh, args.lintol, args.renumber, args.reorient)
 
 
 def process_upgrade(args):
@@ -382,12 +392,13 @@ def process_partition_add(args):
         # Create the partitioner
         if args.partitioner:
             part = get_partitioner(args.partitioner, pwts, ewts, twts,
-                                   opts=opts)
+                                   renumber=args.renumber, opts=opts)
         else:
             parts = sorted(cls.name for cls in subclasses(BasePartitioner))
             for name in parts:
                 try:
-                    part = get_partitioner(name, pwts, ewts, twts)
+                    part = get_partitioner(name, pwts, ewts, twts,
+                                           renumber=args.renumber)
                     break
                 except OSError:
                     pass

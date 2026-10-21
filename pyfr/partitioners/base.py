@@ -3,6 +3,7 @@ from collections import namedtuple
 import numpy as np
 
 from pyfr.nputil import iter_struct, range_offsets
+from pyfr.partitioners.renumber import ElementRenumberer
 from pyfr.progress import NullProgressSequence
 from pyfr.util import DisjointSet
 
@@ -26,10 +27,12 @@ def write_partitioning(mesh, pname, pinfo):
 
 
 class BasePartitioner:
-    def __init__(self, partwts, elewts='balanced', tagwts={}, opts={}):
+    def __init__(self, partwts, elewts='balanced', tagwts={}, renumber=True,
+                 opts={}):
         self.partwts = partwts
         self.elewts = elewts
         self.tagwts = tagwts
+        self.renumber = renumber
         self.nparts = len(partwts)
 
         if not self.has_part_weights and len(set(partwts)) != 1:
@@ -256,8 +259,26 @@ class BasePartitioner:
 
         return neighbours, internal
 
+    @staticmethod
+    def _renumber_eles(mesh, eclass, edisps):
+        codec = [c.decode() for c in mesh['codec']]
+        eles = {et: einfo['nodes', 'faces'][()]
+                for et, einfo in sorted(mesh['eles'].items())}
+        eclass = dict(zip(eles, np.split(eclass, edisps)))
+
+        # Obtain the periodic connectivity info
+        pfaces = [pcon[()] for pcon in mesh.get('periodic', {}).values()]
+
+        # Renumber the elements of each type for memory locality
+        renumberer = ElementRenumberer(codec)
+        eidx = renumberer.renumber(mesh['nodes']['location'], eles, eclass,
+                                   pfaces)
+
+        return np.concatenate([eidx[et] for et in eles])
+
     @classmethod
-    def construct_partitioning(cls, mesh, ecurved, edisps, con, vparts):
+    def construct_partitioning(cls, mesh, ecurved, edisps, con, vparts,
+                               renumber=True):
         nparts = vparts.max() + 1
         etypes = np.arange(len(edisps))
         edisps = list(edisps.values())[1:]
@@ -280,8 +301,18 @@ class BasePartitioner:
         for i, p in enumerate(np.split(petype, edisps)):
             p[:] = i
 
-        # Sort by partition number, type, internal, and if linear or not
-        pidx = np.lexsort((~ecurved, internal, petype, vparts))
+        # Renumber the elements of each type for memory locality
+        if renumber:
+            # Class the elements by partition, connectivity, and curvature
+            keys = np.stack([vparts, internal, ecurved], axis=1)
+            eclass = np.unique(keys, axis=0, return_inverse=True)[1].ravel()
+
+            eidx = cls._renumber_eles(mesh, eclass, edisps)
+        else:
+            eidx = peidx
+
+        # Sort by partition number, type, internal, linear or not, and number
+        pidx = np.lexsort((eidx, ~ecurved, internal, petype, vparts))
 
         # Apply this permutation to the various arrays
         peidx, petype, vparts = peidx[pidx], petype[pidx], vparts[pidx]
@@ -358,6 +389,6 @@ class BasePartitioner:
         # Construct the partitioning data
         with progress.start('Construct partitioning'):
             pinfo = self.construct_partitioning(mesh, ecurved, edisps, con,
-                                                vparts)
+                                                vparts, self.renumber)
 
         return pinfo
