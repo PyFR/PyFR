@@ -5,7 +5,7 @@ import numpy as np
 from pyfr.integrators.implicit.base import BaseImplicitIntegrator
 from pyfr.integrators.implicit.nonlinear import StageStats
 from pyfr.integrators.registers import (DynamicScalarRegister,
-                                        DynamicVectorRegister, VectorRegister)
+                                        DynamicVectorRegister, ScalarRegister)
 
 
 class BaseImplicitStepper(BaseImplicitIntegrator):
@@ -18,9 +18,15 @@ class BaseSDIRKStepper(BaseImplicitStepper):
     bhat = []
     _gamma = 0
 
+    stepper_has_comp_accum = True
     stepper_order = 1
 
-    _r_u = VectorRegister(n=2)
+    # Solution register
+    _r_u = ScalarRegister(compensated=True)
+
+    # Stage register; also holds u(t + dt) if steps may be rejected
+    _r_s = DynamicScalarRegister()
+
     _r_f = DynamicVectorRegister()
     _r_err = DynamicScalarRegister(rhs=False)
 
@@ -45,9 +51,20 @@ class BaseSDIRKStepper(BaseImplicitStepper):
 
         super().__init__(*args, **kwargs)
 
+    def _assign_registers(self):
+        super()._assign_registers()
+
+        # Take u(t) from the solution register
+        self.idxcurr = self._r_u
+
     @property
     def stepper_has_errest(self):
         return self.controller_needs_errest and len(self.bhat)
+
+    def _size_registers(self):
+        # Compensate the stage register if it alternates with the solution
+        errest = bool(self.stepper_has_errest)
+        self._size_register(self._r_s, 1, compensated=errest)
 
     def _compute_guess_weights(self):
         pfit = np.polynomial.Polynomial.fit
@@ -113,7 +130,7 @@ class BaseSDIRKStepper(BaseImplicitStepper):
 
     def step(self, t, dt):
         r_f = self._r_f
-        r_un, r_ui = self._r_u
+        r_un, r_ui = self._r_u, self._r_s
 
         # Invalidate the predictor damping norm cache
         self._guess_norms.clear()
@@ -154,6 +171,10 @@ class BaseSDIRKStepper(BaseImplicitStepper):
                 if i < self._nstages - 1:
                     self._rhs(t_i, r_ui, f_reg)
 
+        # Form the step increment and add it to u_n with compensation
+        if self.comp_accum:
+            r_ui = self._accumulate_step(dt, r_un, r_ui, r_f)
+
         # Handle FSAL
         if self._fsal:
             r_f[0], r_f[-1] = r_f[-1], r_f[0]
@@ -169,6 +190,16 @@ class BaseSDIRKStepper(BaseImplicitStepper):
     def _compute_error_estimate(self, dt, r_f):
         pairs = [(dt*ei, fi) for ei, fi in zip(self._err_coeffs, r_f)]
         self._addv_nz(self._r_err, pairs)
+
+    def _accumulate_step(self, dt, r_un, r_ui, r_f):
+        # Weight the stage fluxes to form the step increment
+        args = [v for bi, fi in zip(self.b, r_f) if bi for v in (dt*bi, fi)]
+
+        # Update the solution in-place unless it may need to be restored
+        r_out = r_ui if self.stepper_has_errest else r_un
+        self._add_with_comp(r_out, r_un, *args)
+
+        return r_out
 
 
 class ImplicitEulerStepper(BaseSDIRKStepper):
