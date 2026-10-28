@@ -14,7 +14,7 @@ class HIPKernelGenerator(BaseGPUKernelGenerator):
     codegen_cls = HIPCodeGenerator
 
     _lid = ('threadIdx.x', 'threadIdx.y')
-    _gid = 'ixdtype_t(blockIdx.x)*blockDim.x + threadIdx.x'
+    _gid = 'PYFR_GLOBAL_ID_X'
     _shared_prfx = '__shared__'
     _shared_sync = '__syncthreads()'
     _function_qual = '__device__ '

@@ -1,3 +1,4 @@
+from functools import cached_property
 import re
 
 import numpy as np
@@ -54,6 +55,9 @@ class HIPBackend(BaseBackend):
         self.soasz = self.props['warp_size']
         self.csubsz = self.soasz
 
+        # Determine the number of compute dies
+        self.ndies = self.hip.device_xcc_count(devid)
+
         # Get the MPI runtime type
         self.mpitype = cfg.get('backend-hip', 'mpi-type', 'standard')
         if self.mpitype not in {'standard', 'hip-aware'}:
@@ -95,6 +99,13 @@ class HIPBackend(BaseBackend):
 
         # Bounce buffer for device-to-host transfers
         self._xfer_buf = None
+
+    @cached_property
+    def lookup(self):
+        lookup = super().lookup
+        lookup.dfltargs['ndies'] = self.ndies
+
+        return lookup
 
     def xfer_buf(self, shape, dtype):
         nbytes = np.prod(shape)*np.dtype(dtype).itemsize

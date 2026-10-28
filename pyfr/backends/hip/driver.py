@@ -91,6 +91,7 @@ class HIPWrappers(LibWrapper):
     }
 
     # Constants
+    DEVICE_ATTR_NUMBER_OF_XCCS = 10018
     FUNC_ATTR_SHARED_SIZE_BYTES = 1
     FUNC_ATTR_LOCAL_SIZE_BYTES = 3
     FUNC_ATTR_NUM_REGS = 4
@@ -101,6 +102,7 @@ class HIPWrappers(LibWrapper):
         (c_int, 'hipRuntimeGetVersion', POINTER(c_int)),
         (c_int, 'hipGetDeviceCount', POINTER(c_int)),
         (c_int, 'hipGetDevicePropertiesR0600', c_void_p, c_int),
+        (c_int, 'hipDeviceGetAttribute', POINTER(c_int), c_int, c_int),
         (c_int, 'hipSetDevice', c_int),
         (c_int, 'hipDeviceGetUuid', 16*c_char, c_int),
         (c_int, 'hipMemGetInfo', POINTER(c_size_t), POINTER(c_size_t)),
@@ -446,6 +448,12 @@ class HIP:
             'warp_size': cint(308),
             'multiprocessor_count': cint(388)
         }
+
+    def device_xcc_count(self, devid):
+        count, attr = c_int(), self.lib.DEVICE_ATTR_NUMBER_OF_XCCS
+        self.lib.hipDeviceGetAttribute(count, attr, devid)
+
+        return count.value
 
     def device_uuid(self, devid):
         buf = create_string_buffer(16)

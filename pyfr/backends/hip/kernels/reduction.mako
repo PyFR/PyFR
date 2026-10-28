@@ -19,7 +19,7 @@ reduction(ixdtype_t nrow, ixdtype_t ncolb, ixdtype_t ldim,
 % endif
     int tid = threadIdx.x % warpSize, wid = threadIdx.x / warpSize;
     int nwarps = blockDim.x / warpSize;
-    ixdtype_t i = ixdtype_t(blockIdx.x)*blockDim.x + threadIdx.x;
+    ixdtype_t i = PYFR_GLOBAL_ID_X;
 
     __shared__ fpdtype_t sdata[${nexprs}][32];
     fpdtype_t acc[${nexprs}] = ${pyfr.array(str(init_val), i=nexprs)};

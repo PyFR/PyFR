@@ -8,7 +8,7 @@ pack_view(ixdtype_t n, ixdtype_t nrv, ixdtype_t ncv,
           const ixdtype_t* __restrict__ vrstri,
           fpdtype_t* __restrict__ pmat)
 {
-    ixdtype_t i = ixdtype_t(blockIdx.x)*blockDim.x + threadIdx.x;
+    ixdtype_t i = PYFR_GLOBAL_ID_X;
 ${pkg.pack_view_body()}
 }
 
@@ -19,6 +19,6 @@ unpack_view(ixdtype_t n, ixdtype_t nrv, ixdtype_t ncv,
             const ixdtype_t* __restrict__ vrstri,
             const fpdtype_t* __restrict__ pmat)
 {
-    ixdtype_t i = ixdtype_t(blockIdx.x)*blockDim.x + threadIdx.x;
+    ixdtype_t i = PYFR_GLOBAL_ID_X;
 ${pkg.unpack_view_body()}
 }

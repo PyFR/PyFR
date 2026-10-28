@@ -38,7 +38,12 @@ __device__ static inline bf16 f32_to_bf16(float f) { return bf16(f); }
 __device__ static inline float bf16_to_f32(bf16 b) { return (float) b; }
 
 #define PYFR_THREAD_ID threadIdx.x
+% if ndies > 1:
+// Give each die a contiguous range of blocks
+#define PYFR_BLOCK_ID ((blockIdx.x % ${ndies})*(gridDim.x / ${ndies}) + min(blockIdx.x % ${ndies}, gridDim.x % ${ndies}) + blockIdx.x / ${ndies})
+% else:
 #define PYFR_BLOCK_ID blockIdx.x
+% endif
 #define PYFR_BLOCK_ID_Y blockIdx.y
 #define PYFR_SYNC_THREADS() __syncthreads()
 #define PYFR_SYNC_GMEM_THREADS() do { __threadfence_block(); __syncthreads(); } while (0)
@@ -54,7 +59,7 @@ __device__ static inline float bf16_to_f32(bf16 b) { return (float) b; }
      ((c) % (tile_sz)))
 
 // Global thread position
-#define PYFR_GLOBAL_ID_X (ixdtype_t(blockIdx.x)*blockDim.x + threadIdx.x)
+#define PYFR_GLOBAL_ID_X (ixdtype_t(PYFR_BLOCK_ID)*blockDim.x + threadIdx.x)
 #define PYFR_GLOBAL_ID_Y (blockIdx.y*blockDim.y + threadIdx.y)
 
 // Subgroup shuffle primitive
