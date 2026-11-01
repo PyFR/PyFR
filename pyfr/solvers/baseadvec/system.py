@@ -89,9 +89,6 @@ class BaseAdvectionSystem(BaseSystem):
         g_intf.add_all(k['bcint/comm_flux'],
                        deps=k['eles/disu'] + k['bcint/comm_entropy'])
 
-        # Make a copy of the solution (if used by source terms)
-        g_intf.add_all(k['eles/copy_soln'], deps=k['eles/entropy_filter'])
-
         g_intf.commit()
 
         # Graph 2: receive MPI solution, compute flux and divergence

@@ -309,22 +309,17 @@ class BaseSystem:
                     if kn.startswith('_'):
                         continue
 
-                    # See if the kernel depends on uin/fout
+                    # See which of the uin/fout banks the kernel depends on
                     kparams = inspect.signature(kgetter).parameters
-                    if 'uin' in kparams or 'fout' in kparams:
-                        for i in range(nregs):
-                            kern = kgetter(i)
-                            if isinstance(kern, NullKernel):
-                                continue
+                    bnames = [b for b in ('uin', 'fout') if b in kparams]
 
-                            if 'uin' in kparams:
-                                kernels[f'{pn}/{kn}', i, None].append(kern)
-                            else:
-                                kernels[f'{pn}/{kn}', None, i].append(kern)
+                    # Instantiate the kernel for each combination of banks
+                    for bidx in it.product(range(nregs), repeat=len(bnames)):
+                        banks = dict(zip(bnames, bidx))
+                        key = (f'{pn}/{kn}', banks.get('uin'),
+                               banks.get('fout'))
 
-                            tag_kern(pn, p, kern)
-                    else:
-                        kerns = kgetter()
+                        kerns = kgetter(**banks)
                         if not isinstance(kerns, list):
                             kerns = [kerns]
 
@@ -332,7 +327,7 @@ class BaseSystem:
                             if isinstance(kern, NullKernel):
                                 continue
 
-                            kernels[f'{pn}/{kn}', None, None].append(kern)
+                            kernels[key].append(kern)
 
                             tag_kern(pn, p, kern)
 
@@ -355,9 +350,8 @@ class BaseSystem:
 
         # Filter down the kernels dictionary
         for (kn, ui, fo), k in self._kernels.items():
-            if ((ui is None and fo is None) or
-                (ui is not None and ui == uinbank) or
-                (fo is not None and fo == foutbank)):
+            # Keep kernels which are indifferent to or match the banks
+            if ui in (None, uinbank) and fo in (None, foutbank):
                 kernels[kn].extend(k)
 
         # Handle kernels which have arguments that can be bound at runtime

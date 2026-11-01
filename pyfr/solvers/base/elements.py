@@ -165,7 +165,7 @@ class BaseElements:
         return interp_pts(plocop, self.eles)
 
     @cached_property
-    def _scal_upts_cpy(self):
+    def _scal_upts_tmp(self):
         return self._be.matrix((self.nupts, self.nvars, self.neles),
                                tags={'align'})
 

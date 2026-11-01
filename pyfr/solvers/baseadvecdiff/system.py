@@ -78,9 +78,6 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
                               k['mpiint/scal_fpts_pack']):
             g_soln.add_mpi_req(send, deps=[pack])
 
-        # Make a copy of the solution (if used by source terms)
-        g_soln.add_all(k['eles/copy_soln'], deps=k['eles/entropy_filter'])
-
         # Compute the common solution at our internal/boundary interfaces
         g_soln.add_all(k['iint/con_u'],
                        deps=k['eles/disu'] + k['mpiint/scal_fpts_pack'])
