@@ -3,6 +3,7 @@ from contextlib import contextmanager
 from functools import cached_property, wraps
 from itertools import count
 import math
+import time
 from weakref import WeakSet, WeakValueDictionary
 
 import numpy as np
@@ -76,6 +77,14 @@ class BaseBackend:
 
         # Peak memory tracking
         self._mem_peak = 0
+
+        # Wall time spent in the outermost region of each name
+        self.region_wtime = defaultdict(float)
+        self._region_depth = defaultdict(int)
+
+    @property
+    def kernel_setup_wtime(self):
+        return self.region_wtime['kernel-setup']
 
     def get_extent(self, name):
         return self._extents[name]
@@ -205,12 +214,20 @@ class BaseBackend:
         if self._annotator:
             self._annotator.push(name)
 
+        # Time the outermost region of each name
+        self._region_depth[name] += 1
+        tstart = time.perf_counter()
+
         try:
             yield
         finally:
             if self._annotator:
                 self.wait()
                 self._annotator.pop(name)
+
+            self._region_depth[name] -= 1
+            if not self._region_depth[name]:
+                self.region_wtime[name] += time.perf_counter() - tstart
 
     def kernel(self, name, *args, **kwargs):
         with self.region('kernel-setup'):
