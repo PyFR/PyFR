@@ -145,10 +145,6 @@ class BaseImplicitIntegrator(BaseIntegrator):
         return self._preconditioner.computed
 
     @property
-    def _precond_gdt_built(self):
-        return self._preconditioner.gdt_built
-
-    @property
     def _precond_build_wtime(self):
         return self._preconditioner.build_wtime
 

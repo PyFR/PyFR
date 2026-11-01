@@ -1,13 +1,23 @@
 from collections import namedtuple
 import math
+import time
 
 from pyfr.integrators.implicit.base import BaseImplicitIntegrator
 from pyfr.integrators.registers import DynamicScalarRegister, ScalarRegister
+from pyfr.mpiutil import get_comm_rank_root, mpi, scal_coll
 
 
+# Statistics from a nonlinear solve
+SolveStats = namedtuple('SolveStats',
+                        'nonlin_iters precond_apps init_resid final_resid '
+                        'converged stalled nmatvec nretries inner_tol probe',
+                        defaults=('',)*4)
+
+# Solve statistics for a stage along with its cost and preconditioner state
 StageStats = namedtuple('StageStats',
-                        'stage niters nmatvec nprecond resid0 resid inner_tol '
-                        'converged stalled precond_gdt_ratio precond_built')
+                        ['stage', *SolveStats._fields, 'nrhs', 'wtime',
+                         'precond_gdt_ratio', 'precond_built',
+                         'precond_wtime', 'precond_nbuilds'])
 
 
 class NonlinearDivergenceError(Exception):
@@ -16,6 +26,9 @@ class NonlinearDivergenceError(Exception):
 
 class BaseNonlinearSolver(BaseImplicitIntegrator):
     nonlinear_name = None
+
+    # Columns of the per-stage statistics
+    stage_stats_fields = StageStats._fields
 
     _nl_resid = ScalarRegister(rhs=False)
     _nl_temp = ScalarRegister()
@@ -97,7 +110,7 @@ class BaseNonlinearSolver(BaseImplicitIntegrator):
         return rnorm > self._nl_diverge_fact*rnorm_init
 
     def _nl_outcome(self, rnorm_init, rnorm, tol):
-        # Converged, or else stalled unless it has diverged
+        # Converged, or else accepted as stalled unless it has diverged
         converged = rnorm < tol
         stalled = not converged and not self._nl_diverged(rnorm_init, rnorm)
 
@@ -143,16 +156,32 @@ class BaseNonlinearSolver(BaseImplicitIntegrator):
         # Recompute the residual
         return self._residual_norm(t, u_reg, f_reg, residual_fn)
 
-    def _stage_solve(self, t, u_reg, f_reg, residual_fn, initial_guess_fn,
-                     gamma_dt):
-        # Run the core solve, detecting precond rebuild and gamma*dt drift
-        pc_built_before = self._precond_computed
+    def _stage_solve(self, stage, t, u_reg, f_reg, residual_fn,
+                     initial_guess_fn, gamma_dt):
+        comm, _, _ = get_comm_rank_root()
+        pc = self._preconditioner
 
+        # Note the RHS evaluation and preconditioner build counters
+        nrhs = self.nrhsevals
+        pc_wtime, nbuilds = pc.build_wtime_total, pc.nbuilds
+
+        # Run the core solve
+        tstart = time.perf_counter() - self.backend.kernel_setup_wtime
         stats = self._solve(t, u_reg, f_reg, residual_fn, initial_guess_fn,
                             gamma_dt)
+        wtime = time.perf_counter() - self.backend.kernel_setup_wtime - tstart
 
-        precond_built = not pc_built_before and self._precond_computed
-        gdt_built = self._precond_gdt_built
-        gdt_ratio = gamma_dt / gdt_built if gdt_built > 0 else 1.0
+        # Agree on the stage time across ranks
+        wtime = scal_coll(comm.Allreduce, wtime, op=mpi.MAX)
 
-        return (*stats, gdt_ratio, precond_built)
+        # Split the time between the solve and any build
+        pc_wtime = pc.build_wtime_total - pc_wtime
+        nrhs = self.nrhsevals - nrhs
+        wtime = max(wtime - pc_wtime, 0.0)
+
+        # Note if the preconditioner was rebuilt and how gamma*dt has drifted
+        precond_built = int(pc.nbuilds > nbuilds)
+        gdt_ratio = gamma_dt / pc.gdt_built if pc.gdt_built else 1.0
+
+        return StageStats(stage, *stats, nrhs, wtime, gdt_ratio,
+                          precond_built, pc_wtime, pc.nbuilds)

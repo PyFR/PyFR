@@ -2,7 +2,8 @@ import math
 import time
 
 from pyfr.integrators.implicit.nonlinear.base import (BaseNonlinearSolver,
-                                                      NonlinearDivergenceError)
+                                                      NonlinearDivergenceError,
+                                                      SolveStats)
 from pyfr.mpiutil import get_comm_rank_root, mpi, scal_coll
 
 
@@ -22,8 +23,7 @@ class NewtonSolver(BaseNonlinearSolver):
                   out_scale=self._inv_scales)
 
     def _newton_iterate(self, t, u_reg, f_reg, gamma_dt, residual_fn,
-                        initial_guess_fn, precond, rtol, safeguard,
-                        rnorm_init=None):
+                        initial_guess_fn, rtol, safeguard, rnorm_init=None):
         # Matrix-vector product; eps = eps_base/‖v‖ (pass ‖v‖ to skip norm)
         def matvec(v, result, vnorm=None):
             if vnorm is None:
@@ -31,6 +31,13 @@ class NewtonSolver(BaseNonlinearSolver):
 
             self._jfnk_matvec(t, u_reg, f_reg, gamma_dt, self._fd_eps/vnorm,
                               v, result)
+
+        if self._preconditioner.active:
+            def precond(in_reg, out_reg):
+                self._apply_precond(in_reg, out_reg, in_scale=self._scales,
+                                    out_scale=self._inv_scales)
+        else:
+            precond = None
 
         # Pick an initial starting guess
         rnorm = initial_guess_fn(u_reg)
@@ -111,19 +118,11 @@ class NewtonSolver(BaseNonlinearSolver):
 
         converged, stalled = self._nl_outcome(rnorm_init, rnorm, tol)
 
-        return (niters, krylov_total, precond_total, rnorm_init, rnorm,
-                converged, stalled)
+        return SolveStats(niters, precond_total, rnorm_init, rnorm,
+                          int(converged), int(stalled), krylov_total)
 
     def _solve(self, t, u_reg, f_reg, residual_fn, initial_guess_fn, gamma_dt):
         comm, _, _ = get_comm_rank_root()
-
-        # Scaled preconditioner: M̃⁻¹ = S⁻¹ M⁻¹ S
-        if self._preconditioner.active:
-            def precond(in_reg, out_reg):
-                self._apply_precond(in_reg, out_reg, in_scale=self._scales,
-                                    out_scale=self._inv_scales)
-        else:
-            precond = None
 
         # Residual norm of the current iterate for warm-started retries
         def warm_guess_fn(u):
@@ -136,6 +135,7 @@ class NewtonSolver(BaseNonlinearSolver):
         # Select a Krylov tolerance for this operator and preconditioner
         build = self._preconditioner.nbuilds
         krylov_rtol = self._tol_controller.select_tolerance(gamma_dt, build)
+        probing = self._tol_controller.probing
 
         # Treat the tolerance as a cap unless it is fixed or a retry
         safeguard = self._tol_controller.safeguard
@@ -145,26 +145,26 @@ class NewtonSolver(BaseNonlinearSolver):
         for i in range(self._tol_controller.max_retries + 1):
             # Iterate
             stats = self._newton_iterate(
-                t, u_reg, f_reg, gamma_dt, residual_fn, guess_fn, precond,
+                t, u_reg, f_reg, gamma_dt, residual_fn, guess_fn,
                 krylov_rtol, safeguard, rnorm_init
             )
-            n, nmv, npc, rnorm_init, rnorm, converged, stalled = stats
+            rnorm_init = stats.init_resid
 
             # Accumulate the work done by this attempt
-            niters += n
-            nmatvec += nmv
-            nprecond += npc
+            niters += stats.nonlin_iters
+            nmatvec += stats.nmatvec
+            nprecond += stats.precond_apps
 
             # Stop once converged or out of retries
-            if converged or i == self._tol_controller.max_retries:
+            if stats.converged or i == self._tol_controller.max_retries:
                 break
 
             # A tighter tolerance cannot help once Krylov is at its budget
-            if nmv >= self._krylov_nmax*n:
+            if stats.nmatvec >= self._krylov_nmax*stats.nonlin_iters:
                 break
 
             # Continue a stalled solve from where it stopped
-            if stalled:
+            if stats.stalled:
                 # Give up after a stall on a retry
                 if i > 0:
                     break
@@ -183,7 +183,10 @@ class NewtonSolver(BaseNonlinearSolver):
         # Inform the tolerance controller unless a build inflated the time
         built = not pc_built_before and self._precond_computed
         if not built:
-            self._tol_controller.update(wtime, gamma_dt, converged, niters)
+            self._tol_controller.update(wtime, gamma_dt, stats.converged,
+                                        niters)
 
-        return (niters, nmatvec, nprecond, rnorm_init, rnorm, krylov_rtol,
-                converged, stalled)
+        return stats._replace(
+            nonlin_iters=niters, precond_apps=nprecond, nmatvec=nmatvec,
+            nretries=i, inner_tol=krylov_rtol, probe=int(probing)
+        )

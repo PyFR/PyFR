@@ -18,19 +18,19 @@ class PrecondDriftMonitor:
     def _reset(self):
         self._baseline = None
         self._excess = 0.0
-        self._nmatvec = 0
+        self._napps = 0
         self._wtime = 0.0
         self._nsteps = 0
 
-    def record(self, key, nmatvec, wtime, build_wtime):
+    def record(self, key, napps, wtime, build_wtime):
         # Start afresh when the preconditioner or Krylov tolerance changes
         if key != self._key:
             self._key = key
             self._reset()
             return False
 
-        # Accumulate the Krylov work and wall time of this step
-        self._nmatvec += nmatvec
+        # Accumulate the preconditioner applications and wall time of the step
+        self._napps += napps
         self._wtime += wtime
         self._nsteps += 1
 
@@ -41,24 +41,24 @@ class PrecondDriftMonitor:
             return False
 
     def _check(self, build_wtime):
-        # Collect the Krylov work and wall time of this window
-        nmatvec, wtime, nsteps = self._nmatvec, self._wtime, self._nsteps
-        self._nmatvec, self._wtime, self._nsteps = 0, 0.0, 0
+        # Collect the preconditioner applications and wall time of the window
+        napps, wtime, nsteps = self._napps, self._wtime, self._nsteps
+        self._napps, self._wtime, self._nsteps = 0, 0.0, 0
 
-        # No Krylov work accumulated this window
-        if not nmatvec:
+        # No preconditioner work accumulated this window
+        if not napps:
             return False
 
-        # Mean Krylov work per step
-        mean_mv = nmatvec / nsteps
+        # Mean preconditioner applications per step
+        mean_apps = napps / nsteps
 
         # Take the first window after a build as the baseline
         if self._baseline is None:
-            self._baseline = mean_mv
+            self._baseline = mean_apps
             return False
-        # Otherwise accumulate the wall time spent on excess Krylov work
+        # Otherwise accumulate the wall time spent on excess applications
         else:
-            excess = self._excess + (1 - self._baseline / mean_mv)*wtime
+            excess = self._excess + (1 - self._baseline / mean_apps)*wtime
             self._excess = max(excess, 0.0)
 
             # Rebuild once the drift has cost more wall time than a build
@@ -290,7 +290,7 @@ class ThroughputLimitMixin:
         self._wtime_window[i] = self._solve_wtime(wtime)
         self._fac_buffer[i] = fac
         self._steps_in_window += 1
-        self._win_iters += sum(s.niters for s in self._stage_stats)
+        self._win_iters += sum(s.nonlin_iters for s in self._stage_stats)
         self._win_stages += len(self._stage_stats)
 
         if self._steps_in_window < self.dt_update_interval:
@@ -480,7 +480,9 @@ class BaseImplicitController(BaseImplicitIntegrator):
         # Let the time step controller respond to the failure
         self._record_failed_attempt(dt, wtime, retry)
 
-        self._reject_step(dt, self.idxcurr, wtime)
+        # Record the failed attempt and how we are responding to it
+        action = 'retry' if retry else 'fail'
+        self._reject_step(dt, self.idxcurr, wtime, action=action)
 
     def _monitor_precond(self, wtime):
         pc, tc = self._preconditioner, self._tol_controller
@@ -489,10 +491,10 @@ class BaseImplicitController(BaseImplicitIntegrator):
         if not pc.active or tc.probing:
             return
 
-        # Rebuild if the Krylov work has drifted since the last build
-        nmatvec = sum(s.nmatvec for s in self._stage_stats)
+        # Rebuild if the preconditioner work has drifted since the last build
+        napps = sum(s.precond_apps for s in self._stage_stats)
         key = (pc.nbuilds, round(4*np.log10(tc.best_tol)))
-        if self._pc_monitor.record(key, nmatvec, wtime, pc.build_wtime):
+        if self._pc_monitor.record(key, napps, wtime, pc.build_wtime):
             self._invalidate_precond()
 
     def _accept_step(self, dt, idxcurr, wtime, err=None):
@@ -516,13 +518,13 @@ class BaseImplicitController(BaseImplicitIntegrator):
         # Clear step info after plugins have consumed it
         self.stepinfo = []
 
-    def _reject_step(self, dt, idxold, wtime, err=None):
+    def _reject_step(self, dt, idxold, wtime, err=None, action='reject'):
         if dt <= self.dtmin:
             raise RuntimeError('Minimum sized time step rejected')
 
         self.nrjctsteps += 1
 
-        self.stepinfo.append(StepInfo(dt, 'reject', err, wtime,
+        self.stepinfo.append(StepInfo(dt, action, err, wtime,
                                       self._stage_stats))
         self._stage_stats = []
 

@@ -3,8 +3,7 @@ import math
 import numpy as np
 
 from pyfr.integrators.implicit.base import BaseImplicitIntegrator
-from pyfr.integrators.implicit.nonlinear import (NonlinearDivergenceError,
-                                                 StageStats)
+from pyfr.integrators.implicit.nonlinear import NonlinearDivergenceError
 from pyfr.integrators.registers import (DynamicScalarRegister,
                                         DynamicVectorRegister, VectorRegister)
 
@@ -151,16 +150,16 @@ class BaseSDIRKStepper(BaseImplicitStepper):
                     )
 
                 stats = self._stage_solve(
-                    t_i, r_ui, f_reg, residual_fn, initial_guess_fn,
+                    i, t_i, r_ui, f_reg, residual_fn, initial_guess_fn,
                     self._gamma*dt
                 )
-                self._stage_stats.append(stats := StageStats(i, *stats))
+                self._stage_stats.append(stats)
 
                 # If the stage has not converged, abandon the step
                 if not stats.converged:
                     raise NonlinearDivergenceError(
                         f'Stage {i} failed to converge: residual '
-                        f'{stats.resid:.2e} from {stats.resid0:.2e}'
+                        f'{stats.final_resid:.2e} from {stats.init_resid:.2e}'
                     )
 
                 if i < self._nstages - 1:

@@ -3,7 +3,8 @@ import math
 import numpy as np
 
 from pyfr.integrators.implicit.nonlinear.base import (BaseNonlinearSolver,
-                                                      NonlinearDivergenceError)
+                                                      NonlinearDivergenceError,
+                                                      SolveStats)
 from pyfr.integrators.registers import DynamicVectorRegister, VectorRegister
 
 
@@ -45,7 +46,7 @@ class AndersonSolver(BaseNonlinearSolver):
 
         self._compute_fd_eps(u_reg)
 
-        niters, nrhs, nprec = 0, 1, 0
+        niters = nprec = 0
         tol = self._nl_tol(rnorm)
         rhist = []
 
@@ -104,18 +105,16 @@ class AndersonSolver(BaseNonlinearSolver):
                 # Backtracking line search globalises the Anderson step
                 rnorm = self._line_search(t, u_reg, f_reg, self._nl_delta,
                                           residual_fn, rnorm)
-                nrhs += 2
             else:
                 # u = u_k + f_k - Σ γ_i (Δx_i + Δf_i), unscaling by S
                 regs = [u_reg, g, *xcols, *cols]
                 self._addv([1, -1, *ng, *ng], regs, in_scale=self._scales,
                            in_scale_idxs=tuple(range(1, len(regs))))
                 rnorm = self._residual_norm(t, u_reg, f_reg, residual_fn)
-                nrhs += 1
 
             niters += 1
 
         converged, stalled = self._nl_outcome(rnorm0, rnorm, tol)
 
-        return (niters, nrhs, nprec, rnorm0, rnorm, self._nl_rtol,
-                converged, stalled)
+        return SolveStats(niters, nprec, rnorm0, rnorm, int(converged),
+                          int(stalled))

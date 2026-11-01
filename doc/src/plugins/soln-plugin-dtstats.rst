@@ -13,6 +13,15 @@ Parameterised with
 
     *string*
 
+   Each row records the step number ``n``, the time ``t`` at the start
+   of the step, the step size ``dt``, the ``action`` taken, the wall
+   time ``wtime`` of the attempt, and the ``error`` estimate, if any.
+   The action is ``accept`` or ``reject`` for steps judged by the
+   controller and, for implicit integrators whose nonlinear solver
+   failed to converge, ``retry`` if the step is to be retried with a
+   rebuilt preconditioner or ``fail`` if the step size is to be
+   reduced.
+
 #. ``flushsteps`` --- flush to disk every ``flushsteps``:
 
     *int*
@@ -31,6 +40,16 @@ Parameterised with
    file is written:
 
     *string*
+
+   Each row records, for one stage of one step, the nonlinear
+   iteration count, residual norms and convergence status; the Krylov
+   tolerance, retries, matrix-vector products and preconditioner
+   applications; the right-hand side evaluations of the stage and the
+   wall time of the solve; and the state of the preconditioner,
+   including whether it was built during the stage, the wall time of
+   that build, and the drift of :math:`\gamma \Delta t` since it was
+   built.  Columns which do not
+   apply to the nonlinear solver in use are left empty.
 
 Example:
 
