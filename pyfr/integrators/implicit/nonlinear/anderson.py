@@ -45,8 +45,9 @@ class AndersonSolver(BaseNonlinearSolver):
 
         self._compute_fd_eps(u_reg)
 
-        nrhs, nprec = 1, 0
-        tol = max(rnorm*self._nl_rtol, self._nl_atol)
+        niters, nrhs, nprec = 0, 1, 0
+        tol = self._nl_tol(rnorm)
+        rhist = []
 
         # Build the block preconditioner once and freeze it over the stage
         self._compute_precond(t, u_reg, gamma_dt, self._rhs, f_reg,
@@ -57,6 +58,15 @@ class AndersonSolver(BaseNonlinearSolver):
                 raise NonlinearDivergenceError('Non-finite residual')
             if k > 0 and rnorm < tol:
                 break
+            # Give up once the residual has grown well beyond its initial value
+            elif self._nl_diverged(rnorm0, rnorm):
+                break
+            # Stop at a stalled residual; near the tolerance it has converged
+            elif self._nl_stalled(rhist, rnorm):
+                tol *= self._nl_stall_fact
+                break
+
+            rhist.append(rnorm)
 
             # Preconditioned step g = M̃⁻¹·F; the increment is f_k = -g
             precond(self._nl_resid, g)
@@ -103,4 +113,9 @@ class AndersonSolver(BaseNonlinearSolver):
                 rnorm = self._residual_norm(t, u_reg, f_reg, residual_fn)
                 nrhs += 1
 
-        return (k + 1, nrhs, nprec, rnorm0, rnorm, self._nl_rtol)
+            niters += 1
+
+        converged, stalled = self._nl_outcome(rnorm0, rnorm, tol)
+
+        return (niters, nrhs, nprec, rnorm0, rnorm, self._nl_rtol,
+                converged, stalled)

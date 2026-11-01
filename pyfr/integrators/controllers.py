@@ -25,19 +25,15 @@ class CFLControllerMixin:
         global_max = scal_coll(comm.Allreduce, local_max, op=mpi.MAX)
         return self._cfl / (global_max * (2*self._order + 1))
 
-    def advance_to(self, t):
-        if t < self.tcurr:
-            raise ValueError('Advance time is in the past')
+    def _cfl_due(self):
+        return self.nacptsteps % self._cfl_nsteps == 0
 
-        while self.tcurr < t and self.tcurr < self.tend:
-            if self.nacptsteps % self._cfl_nsteps == 0:
-                self.dt = self._compute_dt_cfl(self.idxcurr)
+    def _next_dt(self, t):
+        # Update the CFL time step when due
+        if self._cfl_due():
+            self.dt = self._compute_dt_cfl(self.idxcurr)
 
-            dt = self._clamp_dt(min(self.dt, self.dtmax), t)
-
-            idxcurr, wtime = self._timed_step(self.tcurr, dt)
-
-            self._accept_step(dt, idxcurr, wtime)
+        return super()._next_dt(t)
 
 
 class PIControllerMixin:
@@ -100,7 +96,11 @@ class PIControllerMixin:
 
         # If restarting attempt to restore our state
         if initsoln and (sd := initsoln.state.get('intg/ctrl')) is not None:
-            self.dt, self._errprev = sd
+            self.dt = sd[0]
+
+            # Take the previous error only from another PI controller
+            if len(sd) > 1:
+                self._errprev = sd[1]
 
             # Void previous error if tolerance values have changed
             diff = self.cfg.sect_diff(initsoln.config, sect)

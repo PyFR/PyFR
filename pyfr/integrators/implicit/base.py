@@ -95,8 +95,9 @@ class BaseImplicitIntegrator(BaseIntegrator):
         self.gndofs = self._get_gndofs()
 
         # Adaptive controller for the inner linear (Krylov) tolerance
-        self._tol_controller = get_linear_tol_controller(cfg, self.serialiser,
-                                                         initsoln)
+        self._tol_controller = get_linear_tol_controller(
+            cfg, self.serialiser, initsoln, self.nimplicit, self._nl_maxiter
+        )
 
     def _pre_commit(self):
         ext = self.backend.get_extent('solve')

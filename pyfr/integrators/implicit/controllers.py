@@ -1,114 +1,88 @@
+import time
+
 import numpy as np
 
 from pyfr.integrators.base import StepInfo
 from pyfr.integrators.controllers import CFLControllerMixin, PIControllerMixin
 from pyfr.integrators.implicit.base import BaseImplicitIntegrator
 from pyfr.integrators.implicit.nonlinear import NonlinearDivergenceError
+from pyfr.mpiutil import get_comm_rank_root, mpi, scal_coll
 from pyfr.nputil import LogGPOptimiser
 
 
 class PrecondDriftMonitor:
-    # Windows to average when establishing a baseline
-    _baseline_windows = 2
+    def __init__(self, interval):
+        self._interval = interval
+        self._key = None
 
-    # Minimum improvement ratio to consider a refresh successful
-    _refresh_improvement = 0.9
-
-    # Consecutive failed refreshes before disabling
-    _max_refresh_failures = 3
-
-    # (min gdt mismatch, drift threshold, consecutive windows)
-    _drift_tiers = [(0.3, 1.5, 1), (0.1, 1.5, 2), (-1, 2.0, 3)]
-
-    def __init__(self):
-        self.reset()
-        self._refresh_failures = 0
-        self._refresh_disabled = False
-        self._prev_baseline = None
-
-    def reset(self):
+    def _reset(self):
         self._baseline = None
-        self._baseline_buf = []
-        self._drift_count = 0
-        self._krylov_total = 0
-        self._newton_total = 0
+        self._excess = 0.0
+        self._nmatvec = 0
+        self._wtime = 0.0
+        self._nsteps = 0
 
-    def record(self, nkrylov, niters):
-        self._krylov_total += nkrylov
-        self._newton_total += niters
+    def record(self, key, nmatvec, wtime, build_wtime):
+        # Start afresh when the preconditioner or Krylov tolerance changes
+        if key != self._key:
+            self._key = key
+            self._reset()
+            return False
 
-    def check(self, dt, gamma, gdt_built, invalidate_fn):
-        # No iteration data accumulated this window
-        if self._newton_total == 0:
-            return
+        # Accumulate the Krylov work and wall time of this step
+        self._nmatvec += nmatvec
+        self._wtime += wtime
+        self._nsteps += 1
 
-        # Mean Krylov iterations per Newton step for this window
-        mean_k = self._krylov_total / self._newton_total
-        self._krylov_total = self._newton_total = 0
+        # Check for drift at the end of each window
+        if self._nsteps == self._interval:
+            return self._check(build_wtime)
+        else:
+            return False
 
-        # Establish a baseline before checking for drift
+    def _check(self, build_wtime):
+        # Collect the Krylov work and wall time of this window
+        nmatvec, wtime, nsteps = self._nmatvec, self._wtime, self._nsteps
+        self._nmatvec, self._wtime, self._nsteps = 0, 0.0, 0
+
+        # No Krylov work accumulated this window
+        if not nmatvec:
+            return False
+
+        # Mean Krylov work per step
+        mean_mv = nmatvec / nsteps
+
+        # Take the first window after a build as the baseline
         if self._baseline is None:
-            self._update_baseline(mean_k)
+            self._baseline = mean_mv
+            return False
+        # Otherwise accumulate the wall time spent on excess Krylov work
         else:
-            self._detect_drift(mean_k, dt, gamma, gdt_built, invalidate_fn)
+            excess = self._excess + (1 - self._baseline / mean_mv)*wtime
+            self._excess = max(excess, 0.0)
 
-    def _update_baseline(self, mean_k):
-        # Accumulate windows until we have enough to average
-        self._baseline_buf.append(mean_k)
-        if len(self._baseline_buf) < self._baseline_windows:
-            return
-
-        # Set the baseline from the accumulated windows
-        self._baseline = np.mean(self._baseline_buf)
-        self._baseline_buf = []
-
-        # If this baseline follows a refresh, check if it helped
-        if self._prev_baseline is not None:
-            if self._baseline < self._refresh_improvement*self._prev_baseline:
-                self._refresh_failures = 0
-            else:
-                self._refresh_failures += 1
-                if self._refresh_failures >= self._max_refresh_failures:
-                    self._refresh_disabled = True
-            self._prev_baseline = None
-
-    def _detect_drift(self, mean_k, dt, gamma, gdt_built, invalidate_fn):
-        # Gamma*dt mismatch relative to the dt at last build
-        gdt_mismatch = abs(np.log10(gamma*dt / gdt_built))
-
-        # Tiered response: larger mismatch => act sooner
-        thresh, nwindows = next(
-            (t, n) for lo, t, n in self._drift_tiers if gdt_mismatch > lo
-        )
-
-        # Count consecutive windows with Krylov drift above the threshold
-        if mean_k / self._baseline > thresh:
-            self._drift_count += 1
-        else:
-            self._drift_count = 0
-
-        # Trigger a rebuild once the drift persists long enough
-        if self._drift_count >= nwindows and not self._refresh_disabled:
-            self._prev_baseline = self._baseline
-            invalidate_fn()
-            self.reset()
+            # Rebuild once the drift has cost more wall time than a build
+            return self._excess > build_wtime
 
 
 class ThroughputLimitMixin:
     # GP optimiser sliding window size
     _tput_gp_wsize = 20
 
-    # dt adjustment factor bounds
-    _tput_fac_lo, _tput_fac_hi = 0.6, 1.67
+    # Clean windows before the post-failure dt ceiling starts to lift
+    _tput_hold_windows = 2
 
-    # Throughput fraction below settled to count as degraded
-    _tput_degrade_thresh = 0.7
+    # Throughput fraction within which two time steps are tied
+    _tput_tie_tol = 0.05
 
-    # Consecutive degraded windows before re-exploring
-    _tput_degrade_windows = 3
+    # Retries at one dt within a window before dt itself is blamed
+    _tput_max_retries = 2
 
-    # Grace windows after settling to establish throughput baseline
-    _tput_grace_windows = 2
+    # Probability of a sound model being discarded as shifted
+    _tput_shift_delta = 0.1
+
+    # Windows the model must hold before it can be contradicted
+    _tput_shift_nmin = 3
 
     def _init_tput_limit(self, initsoln):
         sect = 'solver-time-integrator'
@@ -118,231 +92,415 @@ class ThroughputLimitMixin:
                                                   100)
         self._growth_fact = self.cfg.getfloat(sect, 'growth-fact', 1.2)
 
+        # Size Krylov tolerance probes to fit within a window of steps
+        if self._tput_limit:
+            nsolves = self.dt_update_interval*self.nimplicit
+            self._tol_controller.fit_window(nsolves)
+
         self._wtime_window = np.empty(self.dt_update_interval)
         self._fac_buffer = np.empty(self.dt_update_interval)
-        self._dt_gp = LogGPOptimiser(self._tput_gp_wsize, (1, 1))
-        self._krylov_was_settled = False
-        self._explore_targets = []
-        self._pc_monitor = PrecondDriftMonitor()
-        self._zero_window_state()
+        # Windows over which a throughput observation is forgotten
+        decay = self.cfg.getint(sect, 'dt-reexplore-interval', 50)
 
-        # Free-solve gate: ignore windows where the linear solve is trivial
-        self._tput_kpn_min = 1.0
+        # Windows a dt is held before a neighbouring dt is re-measured
+        self._reexplore_windows = max(decay // 2, 1)
+        self._hold_windows = 0
 
-        # Periodic dt re-exploration with exponential backoff (in windows)
-        self._reexplore_base = self.cfg.getint(sect, 'dt-reexplore-interval',
-                                               50)
-        self._reexplore_max = 3200
-        self._reexplore_interval = self._reexplore_base
-        self._reexplore_countdown = self._reexplore_base
-        self._reexplore_dt = None
+        # Log throughput difference within which two time steps are tied
+        self._ltie = np.log(1 + self._tput_tie_tol)
 
-    def _zero_window_state(self):
-        self._settled = False
-        self._settled_tput = 0.0
-        self._degrade_count = 0
-        self._grace_count = 0
+        # Model log throughput against log dt
+        self._dt_gp = LogGPOptimiser(self._tput_gp_wsize, (1, 1), trend=True,
+                                     decay=decay,
+                                     ls=2*np.log(self._growth_fact))
+        self._tput_started = False
+        self._reset_window()
+
+        # Cap on dt after a failed step, lifted over clean windows
+        self._dt_ceiling = float('inf')
+        self._ceiling_hold = self._ceiling_steps = 0
+
+        # Largest dt and total wall time of the failed attempts at a step
+        self._fail_dt, self._fail_wtime = 0.0, 0.0
+
+        # Retries at one dt since the last completed window
+        self._retry_dt, self._nretries = 0.0, 0
+
+        # Whether the next preconditioner build was forced by a failure
+        self._charge_build = False
+
+        # Windows recorded since the model was last started afresh
+        self._shift_nwin = 0
+
+        # Set once a window of solves has needed more than one iteration
+        self._tput_stiff = False
+
+        # Cost of the incumbent Krylov tolerance the model was measured at
+        self._tput_tol_cost = 0.0
+
+    def _reset_window(self):
         self._steps_in_window = 0
-        self._expand_cooldown = 0
-        self._win_krylov = 0
-        self._win_newton = 0
+        self._win_iters = self._win_stages = 0
 
-    def _reset_tput(self, dt):
-        lo = max(dt / 10**1.5, self.dtmin)
-        hi = min(dt*10**1.5, self.dtmax)
-        self._dt_gp.reset((lo, hi))
-        self._zero_window_state()
+    def _reset_tput(self):
+        self._reset_model()
+        self._tput_stiff = False
+        self._reset_window()
 
-        # Bidirectional exploration: grow first, then shrink from initial
+    def _record_failed_attempt(self, dt, wtime, retry):
+        # Count the failed attempt towards the step which eventually succeeds
+        self._fail_dt = max(self._fail_dt, dt)
+        self._fail_wtime += self._solve_wtime(wtime)
+
+        # Charge the rebuild forced by the previous failure to this step too
+        if self._charge_build:
+            self._fail_wtime += wtime - self._solve_wtime(wtime)
+        self._charge_build = True
+
+        # A retry blames the preconditioner; count retries at this dt
+        if retry:
+            self._nretries = self._nretries + 1 if dt == self._retry_dt else 1
+            self._retry_dt = dt
+
+            # Only repeated retries at one dt within a window implicate dt
+            if self._nretries < self._tput_max_retries:
+                return
+
+        # Cap dt one growth step below the failure until windows run clean
+        self._dt_ceiling = min(self._dt_ceiling, dt / self._growth_fact)
+        self._ceiling_hold = self._tput_hold_windows
+        self._ceiling_steps = 0
+
+    def _solve_wtime(self, wtime):
+        # Wall time of the step less that of any preconditioner build
+        if any(s.precond_built for s in self._stage_stats):
+            return max(wtime - self._preconditioner.build_wtime, 0.0)
+        else:
+            return wtime
+
+    def _lift_ceiling(self):
+        if self._ceiling_hold > 0:
+            self._ceiling_hold -= 1
+        else:
+            self._dt_ceiling = min(self._dt_ceiling*self._growth_fact,
+                                   self.dtmax)
+
+    def _explore_fac(self, best_dt, dt):
         g = self._growth_fact
-        facs = (1, g, g*g, 1/g, 1/(g*g))
-        self._explore_targets = [np.clip(dt*f, self.dtmin, self.dtmax)
-                                 for f in facs]
+        lo, hi = self._dt_gp.x_range
 
-    def _check_expand_bounds(self, best_dt):
-        if not self._settled:
-            return
+        # Climb while the top of the data is not significantly worse
+        hi_lim = min(self.dtmax, self._dt_ceiling)
+        if self._tput_tied(best_dt, hi):
+            # Step beyond the top of the data from the top itself
+            if dt > hi / g**0.5:
+                target = hi*g
+            # Re-measure the top only once its observation has gone stale
+            elif self._dt_gp.age_at(hi) >= self._reexplore_windows:
+                target = hi
+            else:
+                return None
 
-        if self._expand_cooldown > 0:
-            self._expand_cooldown -= 1
-            return
+            if target <= hi_lim:
+                return min(target / dt, g)
+            else:
+                return None
+        # Descend only when the bottom of the data beats the level above it
+        elif best_dt < lo*g**0.5 and lo/g >= self.dtmin:
+            if self._tput_tied(lo, lo*g):
+                return None
+            else:
+                return max(lo / (g*dt), 1/g)
+        else:
+            return None
 
-        # Current GP search bounds with a margin to detect edge hits
-        gp = self._dt_gp
-        lo, hi = gp.x_lo, gp.x_hi
-        margin = (hi - lo) / 50
+    def _tput_tied(self, best_dt, dt):
+        # Count dt as tied with the best unless it is significantly worse
+        mu_best = self._dt_gp.mean_at(best_dt)
+        mu = self._dt_gp.mean_at(dt)
+        return mu_best - mu < self._ltie
 
-        # Expansion step and absolute dt limits
-        step = np.log(self._growth_fact**2)
-        lo_lim, hi_lim = np.log(self.dtmin), np.log(self.dtmax)
-        best_log = np.log(best_dt)
+    def _hold_fac(self, dt):
+        # Hold until a re-explore interval of windows has run at this dt
+        self._hold_windows += 1
+        if self._hold_windows < self._reexplore_windows:
+            return 1.0
 
-        # Expand the search range if the optimum is at the edge
-        if best_log >= hi - margin and hi < hi_lim:
-            gp.x_hi = min(hi + step, hi_lim)
-            self._expand_cooldown = 5
-        elif best_log <= lo + margin and lo > lo_lim:
-            gp.x_lo = max(lo - step, lo_lim)
-            self._expand_cooldown = 5
+        # Re-measure whichever neighbouring dt was measured longest ago
+        g = self._growth_fact
+        hi_lim = min(self.dtmax, self._dt_ceiling)
+        cands = [c for c in (dt*g, dt/g) if self.dtmin <= c <= hi_lim]
+        if cands:
+            target = max(cands, key=self._dt_gp.age_at)
+            return target / dt
+        else:
+            return 1.0
 
     def _throughput_limit(self, dt, wtime, fac):
+        # Charge the rebuild forced by a failed attempt to that attempt
+        if self._charge_build:
+            self._fail_wtime += wtime - self._solve_wtime(wtime)
+            self._charge_build = False
+
+        fac = self._window_fac(dt, wtime, fac)
+
+        # Record the failed attempts as a poor throughput at the failed dt
+        if self._fail_dt and self._tput_started:
+            tput = dt / (self._fail_wtime + self._solve_wtime(wtime))
+
+            # A failure the model did not foresee is a shift like any other
+            if self._tput_shifted(self._fail_dt, np.log(tput), self._ltie**2):
+                self._reset_model()
+
+            self._dt_gp.record(self._fail_dt, np.log(tput))
+
+        self._fail_dt, self._fail_wtime = 0.0, 0.0
+
+        # Release the ceiling after each window of steps without a failure
+        self._ceiling_steps += 1
+        if self._ceiling_steps >= self.dt_update_interval:
+            self._ceiling_steps = 0
+            self._lift_ceiling()
+
+        # Cap growth at the post-failure ceiling
+        return min(fac, self._dt_ceiling / dt)
+
+    def _window_fac(self, dt, wtime, fac):
         if not self._tput_limit:
             return fac
 
-        # Wait for the Krylov tolerance controller, if any, to settle
-        if not self._tol_controller.settled:
-            self._steps_in_window = 0
-            self._krylov_was_settled = False
+        # Skip steps taken at a Krylov tolerance other than the incumbent
+        if self._tol_controller.probing_other:
             return min(1.0, fac)
 
-        # First window after settling; reset throughput exploration
-        if not self._krylov_was_settled:
-            self._krylov_was_settled = True
-            self._reset_tput(dt)
+        # First window; reset throughput exploration
+        if not self._tput_started:
+            self._tput_started = True
+            self._reset_tput()
 
-        # Accumulate iteration data from stages at the settled tolerance
-        best_tol = self._tol_controller.best_tol
-        for s in self._stage_stats:
-            if abs(np.log10(s.inner_tol / best_tol)) <= 0.15:
-                self._pc_monitor.record(s.nmatvec, s.niters)
+        # Rescale the model by the cost change of a new incumbent tolerance
+        tol_cost = self._tol_controller.relative_cost
+        if tol_cost != self._tput_tol_cost:
+            cfac = 10**(self._tput_tol_cost - tol_cost)
+            self._dt_gp.shift(np.log(cfac))
+            self._tput_tol_cost = tol_cost
 
-        # Check if the preconditioner was rebuilt during this step
-        step_had_build = any(s.precond_built for s in self._stage_stats)
-
-        # Exclude build steps so the rebuild cost does not pollute the GP
-        if step_had_build:
-            if self._steps_in_window < self.dt_update_interval:
-                return min(1.0, fac)
-        else:
-            i = self._steps_in_window
-            self._wtime_window[i] = wtime
-            self._fac_buffer[i] = fac
-            self._steps_in_window += 1
-            self._win_krylov += sum(s.nmatvec for s in self._stage_stats)
-            self._win_newton += sum(s.niters for s in self._stage_stats)
+        # Measure the step without the cost of any preconditioner build
+        i = self._steps_in_window
+        self._wtime_window[i] = self._solve_wtime(wtime)
+        self._fac_buffer[i] = fac
+        self._steps_in_window += 1
+        self._win_iters += sum(s.niters for s in self._stage_stats)
+        self._win_stages += len(self._stage_stats)
 
         if self._steps_in_window < self.dt_update_interval:
             return min(1.0, fac)
 
         n = self._steps_in_window
-        med_tput = dt / np.mean(self._wtime_window[:n])
+        wtimes = self._wtime_window[:n]
+        wmed = np.median(wtimes)
+        med_tput = dt / wmed
         med_fac = np.exp(np.median(np.log(self._fac_buffer[:n])))
         self._steps_in_window = 0
 
-        # Mean Krylov iterations per Newton iteration over the window
-        kpn = self._win_krylov / max(self._win_newton, 1)
-        self._win_krylov = 0
-        self._win_newton = 0
+        # A completed window clears the retry count at this dt
+        self._nretries = 0
 
-        if self._preconditioner.active:
-            self._pc_monitor.check(dt, self._gamma, self._precond_gdt_built,
-                                   self._invalidate_precond)
+        # Sampling variance of the window throughput, robust to bursts
+        wsd = max(1.4826*np.median(np.abs(wtimes - wmed)), 1e-3*wmed)
+        tput_var = (med_tput / wmed)**2*(1.2533*wsd)**2 / n
 
-        # Trivial solve => dt below stiff regime; grow, do not record it
-        if kpn < self._tput_kpn_min:
+        # Mean nonlinear iterations per stage over the window
+        nps = self._win_iters / max(self._win_stages, 1)
+        self._win_iters = self._win_stages = 0
+
+        # Grow without recording while the solves are trivial
+        if not self._tput_stiff and nps <= 1 and self._nl_maxiter > 1:
             return self._growth_fact
+        else:
+            self._tput_stiff = True
 
-        return self._update_tput(dt, med_tput, med_fac)
+        return self._model_fac(dt, med_tput, tput_var, med_fac)
 
-    def _update_tput(self, dt, med_tput, med_fac):
+    def _tput_shifted(self, dt, ltput, lvar):
+        comm, rank, root = get_comm_rank_root()
+
+        # Too few windows for a prediction worth contradicting
+        if self._shift_nwin < self._tput_shift_nmin:
+            return False
+
+        # Model prediction at this dt
+        mu, var = self._dt_gp.predict(dt)
+
+        # Confidence width over every observation the model holds
+        rho = 2*np.log((np.pi*self._dt_gp.n)**2 / (3*self._tput_shift_delta))
+
+        # A shift is a residual outside the model and noise confidence bands
+        shifted = abs(ltput - mu) > np.sqrt(rho)*(np.sqrt(var) + np.sqrt(lvar))
+
+        # Take the root's verdict so that every rank keeps the same model
+        return comm.bcast(bool(shifted), root=root)
+
+    def _reset_model(self):
+        # Start the model afresh, keeping the stiff flag and the ceiling
+        self._dt_gp.reset((self.dtmin, self.dtmax))
+        self._hold_windows = 0
+        self._shift_nwin = 0
+
+    def _model_fac(self, dt, med_tput, tput_var, med_fac):
+        comm, rank, root = get_comm_rank_root()
+        lvar = max(tput_var / med_tput**2, self._ltie**2)
+
+        # Discard a model which this window contradicts
+        if self._tput_shifted(dt, np.log(med_tput), lvar):
+            self._reset_model()
+
         # Update the GP model with the new throughput measurement
-        self._dt_gp.record(dt, med_tput)
+        self._dt_gp.record(dt, np.log(med_tput), lvar)
+        self._shift_nwin += 1
 
         g = self._growth_fact
-        n_explore = len(self._explore_targets)
 
-        # Exploration phase; follow bidirectional targets
-        if self._dt_gp.n < n_explore:
-            return self._explore_targets[self._dt_gp.n] / dt
+        # Exploit; find the best dt within the range of the observations
+        best_dt = self._dt_gp.optimum(minimise=False, pad=0.0)
 
-        # Exploit; find best dt
-        best_dt = self._dt_gp.optimum(minimise=False)
-        self._check_expand_bounds(best_dt)
-        fac = np.clip(best_dt / dt, self._tput_fac_lo, self._tput_fac_hi)
-
-        # Settle once the GP-optimal dt is close to the current dt
-        if not self._settled and 1/g < fac < g:
-            self._on_settle(dt, med_tput)
-
-        # Resolve the step factor from the post-settle state machine
-        return self._resolve_tput_fac(dt, med_tput, med_fac, fac)
-
-    def _on_settle(self, dt, med_tput):
-        self._settled = True
-        self._settled_tput = med_tput
-        self._grace_count = self._tput_grace_windows
-
-        # Re-evaluate tolerance if dt drifted from where Krylov built its model
-        initial_dt = self._explore_targets[0]
-        if abs(np.log10(dt / initial_dt)) > 0.1:
-            self._tol_controller.soft_reset()
-
-        # Backoff: grow interval if re-explored dt confirmed, else reset
-        if self._reexplore_dt is not None:
-            if abs(np.log10(dt / self._reexplore_dt)) < 0.1:
-                nxt = 2*self._reexplore_interval
-                self._reexplore_interval = min(nxt, self._reexplore_max)
-            else:
-                self._reexplore_interval = self._reexplore_base
-            self._reexplore_dt = None
-        self._reexplore_countdown = self._reexplore_interval
-
-        # On a long freeze, rebuild precond if built at a different dt
-        gdt_built = self._precond_gdt_built
-        long_freeze = self._reexplore_interval > self._reexplore_base
-        if self._preconditioner.active and gdt_built > 0 and long_freeze:
-            gdt = self._gamma*dt
-            if abs(np.log10(gdt / gdt_built)) > 0.1:
-                self._invalidate_precond()
-
-    def _resolve_tput_fac(self, dt, med_tput, med_fac, fac):
-        # Still exploring; only constrain if dt controller wants to shrink
-        if not self._settled:
-            fac = min(fac, med_fac) if med_fac < 1.0 else fac
-        # Grace period after settling; track baseline throughput
-        elif self._grace_count > 0:
-            self._grace_count -= 1
-            self._settled_tput = med_tput
-            fac = med_fac
-        # Throughput healthy; no action required
-        elif med_tput > self._tput_degrade_thresh*self._settled_tput:
-            self._settled_tput = max(self._settled_tput, med_tput)
-            self._degrade_count = 0
-
-            # Periodically re-explore dt even when healthy (exp. backoff)
-            self._reexplore_countdown -= 1
-            if self._reexplore_countdown <= 0:
-                self._reexplore_dt = dt
-                self._reset_tput(dt)
-
-            fac = med_fac
-        # Throughput degraded; re-explore after consecutive bad windows
+        # Too few observations to compare; climb
+        if best_dt is None:
+            fac = g
+        # Keep exploring outwards while the optimum is not bracketed
+        elif (efac := self._explore_fac(best_dt, dt)):
+            fac = efac
+        # Hold while the current dt is as good as the best
+        elif self._tput_tied(best_dt, dt):
+            fac = self._hold_fac(dt)
         else:
-            self._degrade_count += 1
-            if self._degrade_count < self._tput_degrade_windows:
-                fac = med_fac
-            else:
-                self._settled = False
-                self._degrade_count = 0
-                fac = min(fac, med_fac) if med_fac < 1.0 else fac
+            fac = np.clip(best_dt / dt, 1/g, g)
+
+        # Never grow a dt the error controller is shrinking
+        if med_fac < 1.0:
+            fac = min(fac, med_fac)
+
+        # Take the root's factor so that every rank steps with the same dt
+        fac = comm.bcast(float(fac), root=root)
+
+        # A move ends the hold
+        if fac != 1.0:
+            self._hold_windows = 0
 
         return fac
 
 
 class BaseImplicitController(BaseImplicitIntegrator):
+    # Maximum time step; adaptive controllers read this from the config
+    dtmax = float('inf')
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        sect = 'solver-time-integrator'
 
         # Stats on the most recent step
         self._stage_stats = []
         self.stepinfo = []
 
+        # Response to nonlinear solver failures
+        self._nfailures = 0
+        self._failure_fact = self.cfg.getfloat(sect, 'failure-fact', 0.5)
+        self._max_failures = self.cfg.getint(sect, 'max-failures', 5)
+
+        # Preconditioner drift monitoring
+        interval = self.cfg.getint(sect, 'precond-check-interval', 50)
+        self._pc_monitor = PrecondDriftMonitor(interval)
+
         # Start the plugins and, if not restarting, fire off any event handlers
         self._start_plugins()
+
+    def advance_to(self, t):
+        if t < self.tcurr:
+            raise ValueError('Advance time is in the past')
+
+        while self.tcurr < t and self.tcurr < self.tend:
+            self._step(self._next_dt(t))
+
+    def _next_dt(self, t):
+        return self._clamp_dt(min(self.dt, self.dtmax), t)
+
+    def _step(self, dt):
+        comm, _, _ = get_comm_rank_root()
+        pc, backend = self._preconditioner, self.backend
+        tstart = time.perf_counter() - backend.kernel_setup_wtime
+
+        # Note which preconditioner build, if any, the step starts with
+        build = pc.nbuilds if pc.active and pc.computed else None
+
+        # Let the Krylov tolerance controller change tolerance for this step
+        self._tol_controller.begin_step()
+
+        try:
+            ret = self._timed_step(self.tcurr, dt)
+        except NonlinearDivergenceError as err:
+            # Agree on the time of the failed attempt across ranks
+            wtime = time.perf_counter() - backend.kernel_setup_wtime - tstart
+            wtime = scal_coll(comm.Allreduce, wtime, op=mpi.MAX)
+
+            # Recover; retry as is only if the preconditioner predates the step
+            self._recover_step(dt, wtime, pc.nbuilds == build, err)
+        else:
+            self._nfailures = 0
+            self._finish_step(dt, *ret)
+
+    def _record_failed_attempt(self, dt, wtime, retry):
+        pass
+
+    def _finish_step(self, dt, idxcurr, wtime):
+        self._accept_step(dt, idxcurr, wtime)
+
+    def _recover_step(self, dt, wtime, retry, err):
+        # Bail if we have exceeded the failure limit
+        self._nfailures += 1
+        if self._nfailures > self._max_failures:
+            msg = f'Failed {self._nfailures} consecutive times at {dt=:.2e}'
+            raise NonlinearDivergenceError(msg) from err
+
+        # Rebuild the preconditioner
+        self._invalidate_precond()
+
+        # Retry as is, else reduce the time step if we are able to
+        if retry:
+            pass
+        elif self.controller_has_variable_dt:
+            self.dt = self._failure_fact*dt
+            if self.dt < self.dtmin:
+                msg = f'dt={self.dt:.2e} below minimum {self.dtmin:.2e}'
+                raise RuntimeError(msg) from err
+        else:
+            msg = f'{err} at t={self.tcurr:.6g}, {dt=:.2e}'
+            raise NonlinearDivergenceError(msg) from err
+
+        # Let the time step controller respond to the failure
+        self._record_failed_attempt(dt, wtime, retry)
+
+        self._reject_step(dt, self.idxcurr, wtime)
+
+    def _monitor_precond(self, wtime):
+        pc, tc = self._preconditioner, self._tol_controller
+
+        # Only monitor steps taken at the incumbent Krylov tolerance
+        if not pc.active or tc.probing:
+            return
+
+        # Rebuild if the Krylov work has drifted since the last build
+        nmatvec = sum(s.nmatvec for s in self._stage_stats)
+        key = (pc.nbuilds, round(4*np.log10(tc.best_tol)))
+        if self._pc_monitor.record(key, nmatvec, wtime, pc.build_wtime):
+            self._invalidate_precond()
 
     def _accept_step(self, dt, idxcurr, wtime, err=None):
         self._advance_time(dt)
         self.nacptsteps += 1
+
+        # Check if the preconditioner needs refreshing
+        self._monitor_precond(wtime)
 
         self.stepinfo.append(StepInfo(dt, 'accept', err, wtime,
                                       self._stage_stats))
@@ -377,20 +535,6 @@ class ImplicitNoneController(BaseImplicitController):
     controller_needs_errest = False
     controller_needs_cfl = False
 
-    def advance_to(self, t):
-        if t < self.tcurr:
-            raise ValueError('Advance time is in the past')
-
-        while self.tcurr < t and self.tcurr < self.tend:
-            # Decide on the time step
-            dt = self._clamp_dt(self.dt, t)
-
-            # Take the step
-            idxcurr, wtime = self._timed_step(self.tcurr, dt)
-
-            # We are not adaptive, so accept every step
-            self._accept_step(dt, idxcurr, wtime)
-
 
 class ImplicitPIController(ThroughputLimitMixin, PIControllerMixin,
                            BaseImplicitController):
@@ -400,43 +544,37 @@ class ImplicitPIController(ThroughputLimitMixin, PIControllerMixin,
         self._init_pi_controller(initsoln)
         self._init_tput_limit(initsoln)
 
-    def advance_to(self, t):
-        if t < self.tcurr:
-            raise ValueError('Advance time is in the past')
+        # Exponents for the error-based step size adjustment
+        self._expa = self._pi_alpha / self.stepper_order
+        self._expb = self._pi_beta / self.stepper_order
 
-        expa = self._pi_alpha / self.stepper_order
-        expb = self._pi_beta / self.stepper_order
+    def _finish_step(self, dt, idxs, wtime):
+        icurr, iprev, ierr = idxs
 
-        while self.tcurr < t and self.tcurr < self.tend:
-            # Decide on the time step
-            dt = self._clamp_dt(min(self.dt, self.dtmax), t)
+        # Estimate the error
+        err = self._errest(icurr, ierr)
 
-            # Take the step
-            (icurr, iprev, ierr), wtime = self._timed_step(self.tcurr, dt)
+        # Determine the time step adjustment factor
+        fac = err**-self._expa*self._errprev**self._expb
+        fac = min(self._maxfac, max(self._minfac, self._saffac*fac))
 
-            # Estimate the error
-            err = self._errest(icurr, ierr)
+        # Apply throughput-based limiting
+        fac = self._throughput_limit(dt, wtime, fac)
 
-            # Determine the time step adjustment factor
-            fac = err**-expa*self._errprev**expb
-            fac = min(self._maxfac, max(self._minfac, self._saffac*fac))
+        # Compute the size of the next step
+        self.dt = fac*dt
 
-            # Apply throughput-based limiting
-            fac = self._throughput_limit(dt, wtime, fac)
-
-            # Compute the size of the next step
-            self.dt = fac*dt
-
-            # Decide if to accept or reject the step
-            if err < 1.0:
-                self._errprev = err
-                self._accept_step(dt, icurr, wtime, err=err)
-            else:
-                self._reject_step(dt, iprev, wtime, err=err)
+        # Decide if to accept or reject the step
+        if err < 1.0:
+            self._errprev = err
+            self._accept_step(dt, icurr, wtime, err=err)
+        else:
+            self._reject_step(dt, iprev, wtime, err=err)
 
 
 class ImplicitCFLController(CFLControllerMixin, BaseImplicitController):
-    pass
+    def _cfl_due(self):
+        return not self._nfailures and super()._cfl_due()
 
 
 class ImplicitThroughputController(ThroughputLimitMixin,
@@ -452,10 +590,6 @@ class ImplicitThroughputController(ThroughputLimitMixin,
         sect = 'solver-time-integrator'
 
         self.dtmax = cfg.getfloat(sect, 'dt-max', 1e2)
-
-        self._nfailures = 0
-        self._failure_fact = cfg.getfloat(sect, 'failure-fact', 0.5)
-        self._max_failures = cfg.getint(sect, 'max-failures', 5)
 
         self._init_dt(initsoln)
         self._init_tput_limit(initsoln)
@@ -474,40 +608,8 @@ class ImplicitThroughputController(ThroughputLimitMixin,
         if fac != 1.0:
             self.dt = max(min(fac*self.dt, self.dtmax), self.dtmin)
 
-    def advance_to(self, t):
-        if t < self.tcurr:
-            raise ValueError('Advance time is in the past')
+    def _finish_step(self, dt, idxcurr, wtime):
+        # Adapt dt based on throughput
+        self._adapt_dt(dt, wtime)
 
-        while self.tcurr < t and self.tcurr < self.tend:
-            # Decide on the time step
-            dt = self._clamp_dt(min(self.dt, self.dtmax), t)
-
-            try:
-                # Take the step
-                idxcurr, wtime = self._timed_step(self.tcurr, dt)
-
-                # Adapt dt based on throughput
-                self._adapt_dt(dt, wtime)
-
-                self._nfailures = 0
-                self._accept_step(dt, idxcurr, wtime)
-            except NonlinearDivergenceError:
-                # Force a preconditioner rebuild
-                self._invalidate_precond()
-                self._nfailures += 1
-
-                # Bail if we have exceeded the failure limit
-                if self._nfailures > self._max_failures:
-                    raise NonlinearDivergenceError(
-                        f'Failed {self._nfailures} times consecutively at '
-                        f'dt={dt:.2e}'
-                    )
-
-                # Reduce dt and retry
-                dt = self._failure_fact*dt
-                if dt < self.dtmin:
-                    raise RuntimeError(f'dt={dt:.2e} below minimum '
-                                       f'{self.dtmin:.2e}')
-
-                self.dt = dt
-                self._reject_step(dt, self.idxcurr, 0.0)
+        self._accept_step(dt, idxcurr, wtime)

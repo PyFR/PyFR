@@ -1,9 +1,10 @@
+import math
 import time
 
 import numpy as np
 
 from pyfr.cache import memoize
-from pyfr.mpiutil import get_comm_rank_root, mpi
+from pyfr.mpiutil import get_comm_rank_root, mpi, scal_coll
 from pyfr.nputil import npdtype_to_ctype
 from pyfr.progress import NullProgressBar
 from pyfr.util import first, ndrange
@@ -136,6 +137,9 @@ class Preconditioner:
     build_t = 0.0
     nbuilds = 0
 
+    # Decades of gamma*dt drift from the build which force a rebuild
+    _gdt_shift = 0.5
+
     def __init__(self, backend, system, ext, *, fd_eps=0, pcdtype=None):
         self.backend = backend
         self.system = system
@@ -210,10 +214,16 @@ class BlockJacobiPreconditioner(Preconditioner):
 
     def construct(self, t, u_reg, gamma_dt, rhs_fn, f0_reg, up_reg, add_fn,
                   ptmp, eps_scales=()):
+        # Rebuild once gamma*dt has moved well away from the build
+        if self.computed and self.gdt_built:
+            if abs(math.log10(gamma_dt / self.gdt_built)) > self._gdt_shift:
+                self.invalidate()
+
         if self.computed:
             return
 
-        t0 = time.perf_counter()
+        comm, _, _ = get_comm_rank_root()
+        t0 = time.perf_counter() - self.backend.kernel_setup_wtime
 
         # Default to uniform scaling if not provided
         self._escales = eps_scales or (1,)*self.nvars
@@ -230,11 +240,15 @@ class BlockJacobiPreconditioner(Preconditioner):
         # Build the block Jacobian via finite differences
         self._construct(t, gamma_dt, rhs_fn, up_reg, ptmp)
 
+        # Agree on the build time across ranks
+        wtime = time.perf_counter() - self.backend.kernel_setup_wtime - t0
+        wtime = scal_coll(comm.Allreduce, wtime, op=mpi.MAX)
+
         self.computed = True
         self.gdt_built = gamma_dt
         self.build_t = t
-        self.build_wtime = time.perf_counter() - t0
-        self.build_wtime_total += self.build_wtime
+        self.build_wtime = wtime
+        self.build_wtime_total += wtime
         self.nbuilds += 1
 
     def _construct(self, t, gamma_dt, rhs_fn, up_reg, ptmp):

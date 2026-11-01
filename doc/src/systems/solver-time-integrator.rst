@@ -284,13 +284,37 @@ Controller Selection
 
         *float* (default: 1.2)
 
-    - ``failure-fact`` --- time-step reduction factor on Newton
-        divergence
+    - ``dt-reexplore-interval`` --- number of windows over which a
+        throughput observation loses its weight in the model; a held
+        time step re-measures a neighbouring time step every half interval
+
+        *int* (default: 50)
+
+    After each window the measured throughput, and its sampling
+    variance, are added to the model and the time step is moved one
+    growth step towards the optimum.  While the optimum lies at the
+    edge of the data the time step is moved past it, so that the
+    model keeps exploring until the throughput stops improving.
+    Windows needing no more than one nonlinear iteration per stage are
+    not recorded and the time step is simply grown, and steps taken
+    while a ``linear-tol-controller`` is probing are excluded.  A
+    window, or a failed step, whose throughput falls outside the
+    confidence band of the model's prediction marks a change in the
+    landscape, and the model is started afresh from it.
+
+    A step on which the nonlinear solver fails to converge is
+    abandoned.  If the preconditioner predates the step it is rebuilt
+    and the step retried; otherwise ``pi``, ``cfl``, and
+    ``throughput`` reduce the time step and retry while ``none``
+    raises an error.  The response is governed by:
+
+    - ``failure-fact`` --- time-step reduction factor on nonlinear
+        solver failure
 
         *float* (default: 0.5)
 
-    - ``max-failures`` --- maximum consecutive Newton failures
-        before raising an error
+    - ``max-failures`` --- maximum consecutive nonlinear solver
+        failures before raising an error
 
         *int* (default: 5)
 
@@ -317,13 +341,19 @@ These apply only when ``nonlinear-solver = newton``.
 
     When set to ``windowed-gp``, the Krylov tolerance is
     adaptively adjusted using a GP-based optimiser to balance
-    solve cost against accuracy.  When set to ``list``, the
+    solve cost against accuracy, periodically re-probing the
+    tolerance measured longest ago.  When set to ``list``, the
     controller cycles through a fixed set of candidate
     tolerances (see ``linear-rtol-list``) and exploits the
-    one with lowest cost.
+    one with lowest cost.  Both start from ``linear-rtol`` and
+    cost each candidate against the incumbent over alternating
+    time steps.  Newton never solves more tightly than it needs
+    to converge, so the tolerance only matters on stages taking
+    more than one iteration.
 
 #. ``linear-probe-nsolves`` --- number of solves per probe
-   window (used by ``windowed-gp`` and ``list``)
+   window (used by ``windowed-gp`` and ``list``) when no throughput
+   limiter is active; otherwise half a ``dt-update-interval`` window
 
     *int* (default: 20)
 
@@ -337,10 +367,25 @@ These apply only when ``nonlinear-solver = newton``.
 
     *float* (default: 1e-1)
 
-#. ``linear-max-retries`` --- maximum retries with loosened
+#. ``linear-max-retries`` --- maximum retries with a tightened
    tolerance on Newton failure (``windowed-gp`` controller)
 
     *int* (default: 2)
+
+    A stage which stalls short of the tolerance is continued from its
+    current iterate with the Krylov tolerance tightened by
+    ``linear-retry-fact``; if it stalls again the step is abandoned.  A
+    stage which diverges is restarted from its initial guess at the tighter
+    tolerance, up to this many times.  No retry is made if every
+    Krylov solve of the attempt used its full ``linear-max-iter``
+    budget, as the tolerance was then not the limiting factor.  The
+    tolerance controller is informed once per stage with the total
+    time over all attempts.
+
+#. ``linear-retry-fact`` --- factor applied to the Krylov tolerance
+   on each retry
+
+    *float* (default: 0.1)
 
 #. ``linear-rtol-list`` --- candidate tolerances for ``list``
    controller
@@ -388,7 +433,17 @@ Preconditioner Options
 
     where ``block-jacobi`` is an element-wise block Jacobi
     preconditioner.  The preconditioner is shared by the Newton
-    Krylov solve and the Anderson fixed point.
+    Krylov solve and the Anderson fixed point.  It is built on first
+    use and rebuilt after a nonlinear solver failure, once the wall
+    time spent on Krylov work in excess of that of the first window of
+    steps after a build exceeds the build time, or as soon as
+    :math:`\gamma \Delta t` differs by more than half a decade from
+    its value at the build.
+
+#. ``precond-check-interval`` --- number of accepted steps at the
+   incumbent Krylov tolerance in each preconditioner monitoring window
+
+    *int* (default: 50)
 
 #. ``precond-precision`` --- preconditioner storage precision
 
@@ -452,6 +507,33 @@ Nonlinear Solver Options
 #. ``nonlinear-max-iter`` --- maximum nonlinear iterations per stage
 
     *int* (default: 10)
+
+#. ``nonlinear-stall-fact`` --- factor above the nonlinear tolerance
+   within which a stalled residual is accepted as converged
+
+    *float* (default: 2.0)
+
+    The solve stops once the residual has fallen by less than
+    ``nonlinear-stall-ratio`` per iteration over the last
+    ``nonlinear-stall-iters`` iterations, as happens at the
+    finite-difference noise floor.  A stalled residual within this
+    factor of the tolerance is deemed converged; otherwise the step
+    is abandoned as described under ``controller``.
+
+#. ``nonlinear-stall-iters`` --- number of iterations over which
+   progress is assessed when detecting a stall
+
+    *int* (default: 2)
+
+#. ``nonlinear-stall-ratio`` --- per-iteration residual reduction
+   below which progress counts as stalled
+
+    *float* (default: 0.5)
+
+#. ``nonlinear-diverge-fact`` --- growth of the residual relative to
+   the initial guess at which a solve is deemed to have diverged
+
+    *float* (default: 10.0)
 
 #. ``nonlinear-atol-<var>`` --- per-variable absolute tolerance
 

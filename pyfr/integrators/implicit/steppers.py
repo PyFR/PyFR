@@ -3,7 +3,8 @@ import math
 import numpy as np
 
 from pyfr.integrators.implicit.base import BaseImplicitIntegrator
-from pyfr.integrators.implicit.nonlinear import StageStats
+from pyfr.integrators.implicit.nonlinear import (NonlinearDivergenceError,
+                                                 StageStats)
 from pyfr.integrators.registers import (DynamicScalarRegister,
                                         DynamicVectorRegister, VectorRegister)
 
@@ -48,6 +49,10 @@ class BaseSDIRKStepper(BaseImplicitStepper):
     @property
     def stepper_has_errest(self):
         return self.controller_needs_errest and len(self.bhat)
+
+    @property
+    def nimplicit(self):
+        return sum(Ai[i] != 0 for i, Ai in enumerate(self.A))
 
     def _compute_guess_weights(self):
         pfit = np.polynomial.Polynomial.fit
@@ -149,7 +154,14 @@ class BaseSDIRKStepper(BaseImplicitStepper):
                     t_i, r_ui, f_reg, residual_fn, initial_guess_fn,
                     self._gamma*dt
                 )
-                self._stage_stats.append(StageStats(i, *stats))
+                self._stage_stats.append(stats := StageStats(i, *stats))
+
+                # If the stage has not converged, abandon the step
+                if not stats.converged:
+                    raise NonlinearDivergenceError(
+                        f'Stage {i} failed to converge: residual '
+                        f'{stats.resid:.2e} from {stats.resid0:.2e}'
+                    )
 
                 if i < self._nstages - 1:
                     self._rhs(t_i, r_ui, f_reg)

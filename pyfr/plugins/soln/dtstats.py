@@ -28,8 +28,8 @@ class DtStatsPlugin(BaseSolnPlugin):
             if (intg.formulation == 'implicit' and
                 self.cfg.hasopt(cfgsect, 'stage-file')):
                 header = ('n,stage,nonlin_iters,nmatvec,precond_apps,'
-                          'init_resid,final_resid,inner_tol,'
-                          'precond_gdt_ratio,precond_built')
+                          'init_resid,final_resid,inner_tol,converged,'
+                          'stalled,precond_gdt_ratio,precond_built')
                 self.stage_csv = init_csv(
                     self.cfg, cfgsect, header, filekey='stage-file',
                     isrestart=intg.isrestart

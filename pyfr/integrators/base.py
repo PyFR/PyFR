@@ -329,14 +329,14 @@ class BaseIntegrator(metaclass=RegisterMeta):
 
     def _timed_step(self, t, dt):
         comm, _, _ = get_comm_rank_root()
-        tstart = time.perf_counter()
+        tstart = time.perf_counter() - self.backend.kernel_setup_wtime
 
         with self.backend.region('step'):
             idxs = self.step(t, dt)
             self.backend.wait()
 
         # Compute the wall time
-        wtime = time.perf_counter() - tstart
+        wtime = time.perf_counter() - self.backend.kernel_setup_wtime - tstart
         wtime = scal_coll(comm.Allreduce, wtime, op=mpi.MAX)
 
         return idxs, wtime
@@ -371,6 +371,10 @@ class BaseIntegrator(metaclass=RegisterMeta):
                 k += f'-{psuffix}'
 
             stats.set('solver-time-integrator', k, t)
+
+        # Kernel setup wall clock time
+        stats.set('solver-time-integrator', 'kernel-setup-wall-time',
+                  self.backend.kernel_setup_wtime)
 
         # Step and function evaluation counts
         stats.set('solver-time-integrator', 'nsteps', self.nsteps)

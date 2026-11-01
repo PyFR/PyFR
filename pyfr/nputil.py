@@ -1,7 +1,6 @@
 import contextlib
 import ctypes as ct
 import functools as ft
-from math import erf
 from pathlib import Path
 import sys
 
@@ -307,15 +306,26 @@ class BLASThreadCtrl:
 
 class GPOptimiser:
     _ls_pad = 0.1
-    _base_noise = 0.01
 
-    def __init__(self, wsize, x_bounds):
+    # Noise variance, relative to that of the data, when none is given
+    _base_noise = 0.1
+
+    # Points at which the posterior is evaluated
+    _ngrid = 500
+
+    # Separation in x below which observations repeat the same point
+    _rep_tol = 0.05
+
+    def __init__(self, wsize, x_bounds, trend=False, decay=None, ls=None):
         self._X, self._y = np.empty((2, wsize))
-        self._nv = np.full(wsize, self._base_noise)
+        self._nv = np.full(wsize, np.nan)
         self._seq = np.empty(wsize, dtype=int)
         self.n = 0
         self._idx = self._step = 0
         self.x_lo, self.x_hi = x_bounds
+        self._trend = trend
+        self._decay = decay
+        self._ls = ls
 
     def reset(self, x_bounds=None):
         self.n = 0
@@ -323,11 +333,16 @@ class GPOptimiser:
         if x_bounds is not None:
             self.x_lo, self.x_hi = x_bounds
 
+    @property
+    def x_range(self):
+        # Extent of the recorded observations
+        X = self._X[:self.n]
+        return X.min(), X.max()
+
     def record(self, x, y, noise_var=None):
         self._X[self._idx] = x
         self._y[self._idx] = y
-        nv = self._base_noise if noise_var is None else noise_var
-        self._nv[self._idx] = nv
+        self._nv[self._idx] = np.nan if noise_var is None else noise_var
         self._seq[self._idx] = self._step
         self._step += 1
         self._idx = (self._idx + 1) % len(self._X)
@@ -339,64 +354,115 @@ class GPOptimiser:
         if len(nearby):
             newest = nearby[self._seq[nearby].argmax()]
             self._y[newest] = y
-            if noise_var is not None:
-                self._nv[newest] = noise_var
+            self._nv[newest] = np.nan if noise_var is None else noise_var
             self._seq[newest] = self._step
             self._step += 1
         else:
-            self.record(x, y, noise_var)
+            GPOptimiser.record(self, x, y, noise_var)
 
-    def _norm_cdf(self, z):
-        return np.array([0.5*(1.0 + erf(zi*2**-0.5)) for zi in z])
+    def shift(self, delta):
+        # Move every observation by a constant offset
+        self._y[:self.n] += delta
 
-    def _norm_pdf(self, z):
-        return np.exp(-0.5*z**2) / (2*np.pi)**0.5
+    def scale(self, fac):
+        # Rescale every observation by a constant factor
+        self._y[:self.n] *= fac
+        self._nv[:self.n] *= fac**2
 
-    def _fit(self):
+    def mean_at(self, x):
+        # Posterior mean of the model at a point
+        if self.n < 2:
+            return 0.0
+        else:
+            return self._fit(np.array([x]))[0][0]
+
+    def predict(self, x):
+        # Posterior mean and variance of the model at a point
+        mu, var = self._fit(np.array([x]))
+        return mu[0], var[0]
+
+    def _fit(self, x_test):
         X, y = self._X[:self.n], self._y[:self.n]
-        nv_diag = np.diag(self._nv[:self.n])
         y_mean = y.mean()
-        y_c = y - y_mean
 
-        ls = 0.5*(np.ptp(X) + self._ls_pad)
+        # Standardise the observations so the noise level is meaningful
+        y_sd = y.std() or 1.0
+        y_c = (y - y_mean) / y_sd
+
+        # Use the measured noise of each observation where it is known
+        nv = self._nv[:self.n] / y_sd**2
+        nv = np.where(np.isnan(nv), self._base_noise, nv)
+
+        # Trust observations less the more updates have passed since them
+        if self._decay:
+            age = self._step - self._seq[:self.n]
+            nv = nv + (age / self._decay)**2
+
+        nv_diag = np.diag(nv)
+
+        # Carry the global slope through the mean so the GP extrapolates it
+        x_mean = X.mean()
+        dx = X - x_mean
+        if self._trend and self.n >= 3 and np.ptp(X) > 0:
+            slope = (dx @ y_c) / (dx @ dx)
+        else:
+            slope = 0.0
+        y_c = y_c - slope*dx
+
+        # Correlation length; half the span of the data unless prescribed
+        if self._ls is None:
+            ls = 0.5*(np.ptp(X) + self._ls_pad)
+        else:
+            ls = self._ls
 
         K = np.exp(-0.5*((X[:, None] - X[None, :])/ls)**2)
         K += nv_diag
         alpha = np.linalg.solve(K, y_c)
 
-        x_test = np.linspace(self.x_lo, self.x_hi, 50)
         k = np.exp(-0.5*((x_test[:, None] - X[None, :])/ls)**2)
-        mu = k @ alpha + y_mean
+        mu = y_sd*(k @ alpha + slope*(x_test - x_mean)) + y_mean
 
         v = np.linalg.solve(K, k.T)
-        var = np.maximum(1.0 - np.sum(k*v.T, axis=1), 1e-10)
+        var = y_sd**2*np.maximum(1.0 - np.sum(k*v.T, axis=1), 1e-10)
 
-        return x_test, mu, var
+        return mu, var
 
-    def optimum(self, minimise=True, explore=False):
+    def optimum(self, minimise=True, pad=None):
         if self.n < 2:
             return None
 
-        x_test, mu, var = self._fit()
-
-        # Expected Improvement acquisition
-        if explore:
-            ys = self._y[:self.n]
-            f_best = np.min(ys) if minimise else np.max(ys)
-            sigma = var**0.5
-            imp = (f_best - mu) if minimise else (mu - f_best)
-            z = imp / sigma
-            ei = imp*self._norm_cdf(z) + sigma*self._norm_pdf(z)
-            return x_test[np.argmax(ei)]
-        # Pure exploitation; return the GP mean optimum
+        # Limit extrapolation beyond the observed points
+        if pad is None:
+            x_lo, x_hi = self.x_lo, self.x_hi
         else:
-            idx = np.argmin(mu) if minimise else np.argmax(mu)
-            return x_test[idx]
+            X = self._X[:self.n]
+            x_lo = max(X.min() - pad, self.x_lo)
+            x_hi = min(X.max() + pad, self.x_hi)
+
+        x_test = np.linspace(x_lo, x_hi, self._ngrid)
+        mu, var = self._fit(x_test)
+
+        # Return the GP mean optimum
+        idx = np.argmin(mu) if minimise else np.argmax(mu)
+        return x_test[idx]
+
+    def stalest(self):
+        # Point whose observation has gone longest without an update
+        return self._X[np.argmin(self._seq[:self.n])]
+
+    def age_at(self, x, tol=None):
+        # Updates since the newest observation at a point
+        tol = self._rep_tol if tol is None else tol
+        nearby = np.flatnonzero(np.abs(self._X[:self.n] - x) < tol)
+        if len(nearby):
+            return self._step - self._seq[nearby].max()
+        else:
+            return np.inf
 
 
 class LogGPOptimiser(GPOptimiser):
-    def __init__(self, wsize, x_bounds):
-        super().__init__(wsize, map(np.log, x_bounds))
+    def __init__(self, wsize, x_bounds, trend=False, decay=None, ls=None):
+        super().__init__(wsize, map(np.log, x_bounds), trend, decay, ls)
 
     def record(self, x, y, noise_var=None):
         super().record(np.log(x), y, noise_var)
@@ -404,9 +470,26 @@ class LogGPOptimiser(GPOptimiser):
     def update(self, x, y, noise_var=None, tol=0.05):
         super().update(np.log(x), y, noise_var, tol)
 
-    def optimum(self, minimise=True, explore=False):
-        opt = super().optimum(minimise, explore)
+    def optimum(self, minimise=True, pad=None):
+        opt = super().optimum(minimise, pad)
         return np.exp(opt) if opt is not None else None
+
+    def stalest(self):
+        return np.exp(super().stalest())
+
+    def age_at(self, x, tol=None):
+        return super().age_at(np.log(x), tol)
+
+    def mean_at(self, x):
+        return super().mean_at(np.log(x))
+
+    def predict(self, x):
+        return super().predict(np.log(x))
+
+    @property
+    def x_range(self):
+        lo, hi = super().x_range
+        return np.exp(lo), np.exp(hi)
 
     def reset(self, x_bounds=None):
         if x_bounds is not None:

@@ -10,6 +10,9 @@ class NewtonSolver(BaseNonlinearSolver):
     nonlinear_name = 'newton'
     requires_linear_solver = True
 
+    # Loosest forcing term the oversolving safeguard may select
+    _eta_max = 0.9
+
     def _jfnk_matvec(self, t, u, f, gamma_dt, eps, v_s, result):
         self._add(0, self._nl_temp, 1, u, eps, v_s, in_scale=self._scales,
                   in_scale_idxs=(2,))
@@ -19,7 +22,8 @@ class NewtonSolver(BaseNonlinearSolver):
                   out_scale=self._inv_scales)
 
     def _newton_iterate(self, t, u_reg, f_reg, gamma_dt, residual_fn,
-                        initial_guess_fn, precond, rtol):
+                        initial_guess_fn, precond, rtol, safeguard,
+                        rnorm_init=None):
         # Matrix-vector product; eps = eps_base/‖v‖ (pass ‖v‖ to skip norm)
         def matvec(v, result, vnorm=None):
             if vnorm is None:
@@ -31,7 +35,8 @@ class NewtonSolver(BaseNonlinearSolver):
         # Pick an initial starting guess
         rnorm = initial_guess_fn(u_reg)
 
-        krylov_total = precond_total = 0
+        niters = krylov_total = precond_total = 0
+        rhist = []
 
         for i in range(self._nl_maxiter):
             # Ensure we have a valid (scaled) residual norm
@@ -43,8 +48,10 @@ class NewtonSolver(BaseNonlinearSolver):
 
             # Set the relative tolerance based on the initial residual
             if i == 0:
-                rnorm_init = rnorm
-                tol = max(rnorm*self._nl_rtol, self._nl_atol)
+                if rnorm_init is None:
+                    rnorm_init = rnorm
+
+                tol = self._nl_tol(rnorm_init)
 
                 # An already converged guess needs no solve (avoids 0 residual)
                 if rnorm < tol:
@@ -52,6 +59,15 @@ class NewtonSolver(BaseNonlinearSolver):
             # After we've done at least one step check for converge
             elif rnorm < tol:
                 break
+            # Give up once the residual has grown well beyond its initial value
+            elif self._nl_diverged(rnorm_init, rnorm):
+                break
+            # Stop at a stalled residual; near the tolerance it has converged
+            elif self._nl_stalled(rhist, rnorm):
+                tol *= self._nl_stall_fact
+                break
+
+            rhist.append(rnorm)
 
             # Choose a suitable finite difference perturbation
             self._compute_fd_eps(u_reg)
@@ -63,30 +79,40 @@ class NewtonSolver(BaseNonlinearSolver):
             # Scale the residual vector for the Krylov solver
             self._add(1, self._nl_resid, out_scale=self._inv_scales)
 
+            # Solve no more tightly than this iteration needs to finish
+            if safeguard:
+                ktol = min(max(rtol, 0.5*tol / rnorm), self._eta_max)
+            else:
+                ktol = rtol
+
             if self._linesearch:
-                niters, nprecond = self._krylov_solve(
+                nkrylov, nprecond = self._krylov_solve(
                     matvec, self._nl_resid, self._nl_delta,
-                    precond, rtol=rtol, accumulate=False
+                    precond, rtol=ktol, accumulate=False
                 )
 
                 # Line search applies the damped step and returns the new norm
                 rnorm = self._line_search(t, u_reg, f_reg, self._nl_delta,
                                           residual_fn, rnorm)
             else:
-                niters, nprecond = self._krylov_solve(
-                    matvec, self._nl_resid, u_reg, precond, rtol=rtol,
+                nkrylov, nprecond = self._krylov_solve(
+                    matvec, self._nl_resid, u_reg, precond, rtol=ktol,
                     accumulate=True, accumulate_scale=self._scales
                 )
                 rnorm = None
 
-            krylov_total += niters
+            niters += 1
+            krylov_total += nkrylov
             precond_total += nprecond
         # If we failed to converge ensure we have a valid residual
         else:
             if rnorm is None:
                 rnorm = self._residual_norm(t, u_reg, f_reg, residual_fn)
 
-        return i + 1, krylov_total, precond_total, rnorm_init, rnorm, tol
+        converged, stalled = self._nl_outcome(rnorm_init, rnorm, tol)
+
+        return (niters, krylov_total, precond_total, rnorm_init, rnorm,
+                converged, stalled)
 
     def _solve(self, t, u_reg, f_reg, residual_fn, initial_guess_fn, gamma_dt):
         comm, _, _ = get_comm_rank_root()
@@ -99,27 +125,65 @@ class NewtonSolver(BaseNonlinearSolver):
         else:
             precond = None
 
+        # Residual norm of the current iterate for warm-started retries
+        def warm_guess_fn(u):
+            return self._residual_norm(t, u, f_reg, residual_fn)
+
+        pc_built_before = self._precond_computed
+        guess_fn, rnorm_init = initial_guess_fn, None
+        niters = nmatvec = nprecond = 0
+
+        # Select a Krylov tolerance for this operator and preconditioner
+        build = self._preconditioner.nbuilds
+        krylov_rtol = self._tol_controller.select_tolerance(gamma_dt, build)
+
+        # Treat the tolerance as a cap unless it is fixed or a retry
+        safeguard = self._tol_controller.safeguard
+
+        tstart = time.perf_counter() - self.backend.kernel_setup_wtime
+
         for i in range(self._tol_controller.max_retries + 1):
-            pc_built_before_retry = self._precond_computed
-
-            # Select a Krylov tolerance
-            krylov_rtol = self._tol_controller.select_tolerance()
-
             # Iterate
-            tstart = time.perf_counter()
-            *stats, rnorm, tol = self._newton_iterate(
-                t, u_reg, f_reg, gamma_dt, residual_fn, initial_guess_fn,
-                precond, krylov_rtol
+            stats = self._newton_iterate(
+                t, u_reg, f_reg, gamma_dt, residual_fn, guess_fn, precond,
+                krylov_rtol, safeguard, rnorm_init
             )
-            dt = time.perf_counter() - tstart
-            wtime = scal_coll(comm.Allreduce, dt, op=mpi.MAX)
+            n, nmv, npc, rnorm_init, rnorm, converged, stalled = stats
 
-            built_this_retry = (not pc_built_before_retry and
-                                self._precond_computed)
-            if not built_this_retry:
-                self._tol_controller.update(wtime, gamma_dt, rnorm < tol)
+            # Accumulate the work done by this attempt
+            niters += n
+            nmatvec += nmv
+            nprecond += npc
 
-            if rnorm < tol or i == self._tol_controller.max_retries:
+            # Stop once converged or out of retries
+            if converged or i == self._tol_controller.max_retries:
                 break
 
-        return (*stats, rnorm, krylov_rtol)
+            # A tighter tolerance cannot help once Krylov is at its budget
+            if nmv >= self._krylov_nmax*n:
+                break
+
+            # Continue a stalled solve from where it stopped
+            if stalled:
+                # Give up after a stall on a retry
+                if i > 0:
+                    break
+
+                guess_fn = warm_guess_fn
+            # Restart a diverged solve from the initial guess
+            else:
+                guess_fn = initial_guess_fn
+
+            krylov_rtol *= self._retry_tol_fact
+            safeguard = False
+
+        dt = time.perf_counter() - self.backend.kernel_setup_wtime - tstart
+        wtime = scal_coll(comm.Allreduce, dt, op=mpi.MAX)
+
+        # Inform the tolerance controller unless a build inflated the time
+        built = not pc_built_before and self._precond_computed
+        if not built:
+            self._tol_controller.update(wtime, gamma_dt, converged, niters)
+
+        return (niters, nmatvec, nprecond, rnorm_init, rnorm, krylov_rtol,
+                converged, stalled)

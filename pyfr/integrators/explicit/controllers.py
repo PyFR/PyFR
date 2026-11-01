@@ -4,6 +4,9 @@ from pyfr.integrators.explicit.base import BaseExplicitIntegrator
 
 
 class BaseExplicitController(BaseExplicitIntegrator):
+    # Maximum allowed time step
+    dtmax = float('inf')
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -12,6 +15,23 @@ class BaseExplicitController(BaseExplicitIntegrator):
 
         # Start the plugins and, if not restarting, fire off any event handlers
         self._start_plugins()
+
+    def advance_to(self, t):
+        if t < self.tcurr:
+            raise ValueError('Advance time is in the past')
+
+        while self.tcurr < t and self.tcurr < self.tend:
+            # Decide on the time step
+            dt = self._next_dt(t)
+
+            # Take the step
+            idxcurr, wtime = self._timed_step(self.tcurr, dt)
+
+            # We are not adaptive, so accept every step
+            self._accept_step(dt, idxcurr, wtime)
+
+    def _next_dt(self, t):
+        return self._clamp_dt(min(self.dt, self.dtmax), t)
 
     def _accept_step(self, dt, idxcurr, wtime, err=None):
         self._advance_time(dt)
@@ -43,20 +63,6 @@ class ExplicitNoneController(BaseExplicitController):
     controller_has_variable_dt = False
     controller_needs_errest = False
     controller_needs_cfl = False
-
-    def advance_to(self, t):
-        if t < self.tcurr:
-            raise ValueError('Advance time is in the past')
-
-        while self.tcurr < t and self.tcurr < self.tend:
-            # Decide on the time step
-            dt = self._clamp_dt(self.dt, t)
-
-            # Take the step
-            idxcurr, wtime = self._timed_step(self.tcurr, dt)
-
-            # We are not adaptive, so accept every step
-            self._accept_step(dt, idxcurr, wtime)
 
 
 class ExplicitCFLController(CFLControllerMixin, BaseExplicitController):

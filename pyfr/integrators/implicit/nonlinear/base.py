@@ -7,7 +7,7 @@ from pyfr.integrators.registers import DynamicScalarRegister, ScalarRegister
 
 StageStats = namedtuple('StageStats',
                         'stage niters nmatvec nprecond resid0 resid inner_tol '
-                        'precond_gdt_ratio precond_built')
+                        'converged stalled precond_gdt_ratio precond_built')
 
 
 class NonlinearDivergenceError(Exception):
@@ -31,6 +31,19 @@ class BaseNonlinearSolver(BaseImplicitIntegrator):
         self._nl_rtol = f('rtol', 1e-4)
         self._nl_atol = f('atol', 1e-8)
         self._nl_maxiter = i('max-iter', 10)
+
+        # Iterations and per-iteration reduction which define a stall
+        self._nl_stall_iters = i('stall-iters', 2)
+        self._nl_stall_ratio = f('stall-ratio', 0.5)
+
+        # Treat a stalled residual within this factor of the tolerance as met
+        self._nl_stall_fact = f('stall-fact', 2.0)
+
+        # Give up on a solve once the residual has grown by this factor
+        self._nl_diverge_fact = f('diverge-fact', 10.0)
+
+        # Tighten the Krylov tolerance by this factor on each retry
+        self._retry_tol_fact = cfg.getfloat(sect, 'linear-retry-fact', 0.1)
 
         if self._nl_rtol < 10*backend.fpdtype_eps:
             raise ValueError('Nonlinear relative tolerance too small for '
@@ -68,6 +81,27 @@ class BaseNonlinearSolver(BaseImplicitIntegrator):
     def _calc_rnorm(self, r):
         weights = self._nl_atols if self._use_weighted_atol else ()
         return self._norm2(r, weights=weights, norm_gndofs=True)
+
+    def _nl_tol(self, rnorm0):
+        return max(rnorm0*self._nl_rtol, self._nl_atol)
+
+    def _nl_stalled(self, rhist, rnorm):
+        # A stall is little progress over the last few iterations
+        if len(rhist) < self._nl_stall_iters:
+            return False
+        else:
+            ref = rhist[-self._nl_stall_iters]
+            return rnorm > self._nl_stall_ratio**self._nl_stall_iters*ref
+
+    def _nl_diverged(self, rnorm_init, rnorm):
+        return rnorm > self._nl_diverge_fact*rnorm_init
+
+    def _nl_outcome(self, rnorm_init, rnorm, tol):
+        # Converged, or else stalled unless it has diverged
+        converged = rnorm < tol
+        stalled = not converged and not self._nl_diverged(rnorm_init, rnorm)
+
+        return converged, stalled
 
     def _residual_norm(self, t, u_reg, f_reg, residual_fn):
         self._rhs(t, u_reg, f_reg)
