@@ -199,12 +199,14 @@ Scheme Selection
 
     - ``euler`` --- first-order backward Euler (L-stable)
     - ``trapezium`` --- second-order trapezoidal rule (A-stable)
-    - ``trbdf2`` --- second-order TR-BDF2 (L-stable)
+    - ``trbdf2`` --- second-order TR-BDF2 with embedded first-order
+      error estimator (L-stable)
     - ``kvaerno43`` --- third-order ESDIRK with embedded second-order
       error estimator (L-stable)
 
-    Schemes with embedded error estimators (i.e., ``kvaerno43``) are
-    required for adaptive time-stepping with the ``pi`` controller.
+    Schemes with embedded error estimators (i.e., ``trbdf2`` and
+    ``kvaerno43``) are required for adaptive time-stepping with the
+    ``pi`` controller.
 
 Controller Selection
 --------------------

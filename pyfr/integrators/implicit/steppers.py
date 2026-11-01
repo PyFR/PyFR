@@ -212,6 +212,9 @@ class TRBDF2Stepper(BaseSDIRKStepper):
          [_w, _w, _gamma]]
     b = [_w, _w, _gamma]
 
+    # 1st order A-stable embedded method for error estimation
+    bhat = [1.75 - 2**0.5, 1.75 - 2**0.5, 2*2**0.5 - 2.5]
+
 
 class Kvaerno43Stepper(BaseSDIRKStepper):
     stepper_name = 'kvaerno43'
