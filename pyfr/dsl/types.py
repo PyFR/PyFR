@@ -3,8 +3,8 @@ from functools import reduce
 
 from pyfr.dsl.derivs import Differentiator
 from pyfr.dsl.nodes import (Assign, Binary, Call, Cast, DslCall, DslVar,
-                            Float, Index, Int, Postfix, Ternary, Unary, Var,
-                            unwrap_index)
+                            Float, Index, Int, MultiDecl, Postfix, Ternary,
+                            Unary, Var, VarDecl, unwrap_index)
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +61,7 @@ class Environment:
         self.enclosing = None
         self.default = default
         self.names = {}
+        self.decls = {}
 
     def scope(self):
         env = Environment(self.default)
@@ -68,22 +69,37 @@ class Environment:
 
         return env
 
-    def lookup(self, name):
+    def _scope_of(self, name):
         # Search the innermost scope first, then those enclosing it
         env = self
-        while env is not None:
-            if name in env.names:
-                return env.names[name]
-
+        while env is not None and name not in env.names:
             env = env.enclosing
 
-        return None
+        return env
+
+    def lookup(self, name):
+        env = self._scope_of(name)
+        return env.names[name] if env is not None else None
+
+    def lookup_decl(self, name):
+        env = self._scope_of(name)
+        return env.decls[name] if env is not None else None
 
     def resolve(self, ctype):
         return self.lookup(ctype) or SCALAR_TYPES.get(ctype, UNKNOWN)
 
-    def define(self, name, ctype):
+    def define(self, name, ctype, sizes=None):
         self.names[name] = self.resolve(ctype)
+        self.decls[name] = (ctype, sizes)
+
+    def declare(self, stmt):
+        # Define the names introduced by a declaration statement
+        match stmt:
+            case VarDecl(_, vtype, name, sizes, _):
+                self.define(name, vtype, sizes)
+            case MultiDecl(decls):
+                for d in decls:
+                    self.define(d.name, d.vtype, d.sizes)
 
     def get(self, name):
         return self.lookup(name) or self.default

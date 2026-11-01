@@ -12,22 +12,6 @@ def build_index(base, indices):
     return base
 
 
-def extract_loop_offset(idx_expr, loop_var):
-    match idx_expr:
-        # loop_var
-        case Var(name) if name == loop_var:
-            return 0
-        # loop_var + k or k + loop_var
-        case Binary('+', Var(name), Int(k)) | Binary('+', Int(k), Var(name)):
-            return k if name == loop_var else None
-        # loop_var - k
-        case Binary('-', Var(name), Int(k)) if name == loop_var:
-            return -k
-        # Anything else, literals included, is not an offset from loop_var
-        case _:
-            return None
-
-
 def _sq(x):
     return Binary('**', x, Int(2))
 
@@ -54,8 +38,8 @@ def _dfabs(x):
     return call('copysign', [Float(1.0), x])
 
 
-_dfmin = (lambda x, y: Ternary(Binary('<', x, y), Int(1), Int(0)),
-          lambda x, y: Ternary(Binary('<', x, y), Int(0), Int(1)))
+_dfmin = (lambda x, y: Ternary(Binary('<=', x, y), Int(1), Int(0)),
+          lambda x, y: Ternary(Binary('<=', x, y), Int(0), Int(1)))
 _dfmax = (lambda x, y: Ternary(Binary('<', x, y), Int(0), Int(1)),
           lambda x, y: Ternary(Binary('<', x, y), Int(1), Int(0)))
 
@@ -100,17 +84,20 @@ class Differentiator:
         'fmax': _dfmax, 'max': _dfmax
     }
 
-    def __init__(self, var, dependent_vars=set(), deriv_namer=None, *,
-                 array_vars=set(), dependent_arrays=set(), tangent_mode=False,
-                 loop_var=None, seed_index=None):
-        self.var = var
+    def __init__(self, inputs, dependent_vars, dependent_arrays, tangent):
+        self.inputs = inputs
         self.dependent_vars = dependent_vars
         self.dependent_arrays = dependent_arrays
-        self.deriv_namer = deriv_namer or (lambda n: f'd_{n}')
-        self.array_vars = array_vars
-        self.tangent_mode = tangent_mode
-        self.loop_var = loop_var
-        self.seed_index = seed_index
+
+        # Name of the tangent carried by an active name
+        self.tangent = tangent
+
+    def _is_active(self, name, arrays=False):
+        # Test if the name is an input or depends on one
+        if name in self.inputs or name in self.dependent_vars:
+            return True
+        else:
+            return arrays and name in self.dependent_arrays
 
     def diff(self, expr):
         D = self.diff
@@ -120,12 +107,8 @@ class Differentiator:
                 return Int(0)
             # Variables
             case Var(name):
-                # Seeded scalar inputs also carry a tangent in tangent mode
-                seeded = self.tangent_mode and name in self.array_vars
-                if name == self.var:
-                    return Int(1)
-                elif seeded or name in self.dependent_vars:
-                    return Var(self.deriv_namer(name))
+                if self._is_active(name):
+                    return Var(self.tangent(name))
                 else:
                     return Int(0)
             # Linear operators
@@ -171,9 +154,11 @@ class Differentiator:
             # Array indexing
             case Index(_, _) as idx_expr:
                 return self._diff_index(idx_expr)
-            # Cast
-            case Cast(_, inner):
-                return D(inner)
+            # Casts to an integer type are piecewise constant
+            case Cast(ctype, inner):
+                from pyfr.dsl.types import INT_TYPES
+
+                return Int(0) if ctype in INT_TYPES else D(inner)
             # Non-differentiable operators
             case Binary('%', _, _):
                 raise NotImplementedError('Modulo not differentiable')
@@ -195,52 +180,24 @@ class Differentiator:
             else:
                 return Int(0)
         else:
-            # Indices must not depend on the variable
+            # Indices must not depend on the inputs
             for idx in indices:
                 if self.contains_var(idx):
                     raise NotImplementedError('Cannot differentiate where '
-                                              f'index depends on {self.var}')
+                                              'index depends on the inputs')
 
-            # Read the tangent directly from the supplied derivative array
-            if self.tangent_mode and aname in self.array_vars:
-                darr = Var(self.deriv_namer(aname))
-                return build_index(darr, indices)
-            # Differentiate input array access with seed index
-            elif aname == self.var and self.var in self.array_vars:
-                if len(indices) == 1 and self.seed_index is not None:
-                    idx, si = indices[0], self.seed_index
-                    offset = extract_loop_offset(idx, self.loop_var)
-                    soff = extract_loop_offset(si, self.loop_var)
-
-                    # Compare offsets if both can be extracted
-                    if offset is not None and soff is not None:
-                        return Int(1) if offset == soff else Int(0)
-                    # Compare integer indices directly
-                    elif isinstance(idx, Int) and isinstance(si, Int):
-                        return Int(1) if idx.value == si.value else Int(0)
-                    # General case uses runtime comparison
-                    else:
-                        cond = Binary('==', idx, si)
-                        return Ternary(cond, Int(1), Int(0))
-                else:
-                    return Int(1)
-            # Dependent arrays use derivative arrays
-            elif aname in self.dependent_vars | self.dependent_arrays:
-                darr = Var(self.deriv_namer(aname))
-                return build_index(darr, indices)
+            # Read the tangent directly from the derivative array
+            if self._is_active(aname, arrays=True):
+                return build_index(Var(self.tangent(aname)), indices)
             else:
                 return Int(0)
 
     def contains_var(self, expr):
         match expr:
             case Var(name):
-                return name == self.var or name in self.dependent_vars
+                return self._is_active(name)
             case Index(_, _):
                 aname, _ = unwrap_index(expr)
-                if aname == self.var and self.var in self.array_vars:
-                    return True
-                else:
-                    return (aname in self.dependent_vars or
-                            aname in self.dependent_arrays)
+                return self._is_active(aname, arrays=True)
             case _:
                 return any(self.contains_var(c) for c in expr_children(expr))

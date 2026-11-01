@@ -96,6 +96,62 @@ dictionary of specifications in a Mako code block and pass it via the
         f = ${' + '.join(f'x{i}' for i in range(nv))};
     </%pyfr:kernel>
 
+Differentiation Regions
+^^^^^^^^^^^^^^^^^^^^^^^
+
+A block of code may be differentiated in forward mode by prefixing it
+with a ``#pragma pyfr tangent(...)`` or a ``#pragma pyfr jacobian(...)``
+directive whose arguments bind the names used by the block to the
+storage for their derivatives: ``y -> dy`` names where the derivative
+of an output is written and ``x <- dx`` names where the derivative of
+an input is read.  A ``tangent`` region computes the directional
+derivative of each output from those of the inputs:
+
+.. code-block:: none
+
+    fpdtype_t f[${nvars}], df[${nvars}];
+    #pragma pyfr tangent(f -> df, u <- du)
+    ${pyfr.expand('flux', 'u', 'f')};
+
+A ``jacobian`` region takes a single output followed by its array
+inputs, each bound to the tile which receives the derivatives of every
+entry of the output with respect to every entry of that input:
+
+.. code-block:: none
+
+    fpdtype_t f[${nvars}], jfu[${nvars}][${nvars}];
+    #pragma pyfr jacobian(f, u -> jfu)
+    ${pyfr.expand('flux', 'u', 'f')};
+
+Bound storage is declared before the region with the type of its
+primal: a tangent has the extents of its output and a tile those of
+the output followed by the number of entries of its input in row major
+order.  A region writes only the derivatives it computes, so storage
+may be shared by the branches of a conditional or accumulated by a
+loop around the region; an output is a constant on entry unless it
+also binds its storage as an input.  Conditionals are differentiated
+branch by branch with the condition held constant.  Loops are allowed
+in ``tangent`` regions only, the output of a ``jacobian`` region may
+not also be an input and regions may not nest.
+
+Statements in a nested ``#pragma pyfr nodiff`` block are copied
+without differentiation and the names they write are constants, which
+keeps piecewise constant quantities such as limiter switches out of
+the derivative.
+
+Where a function is not differentiable ``fabs`` differentiates to
+``copysign(1, x)``, ``fmin`` and ``fmax`` follow their first argument
+on ties, ``sign``, comparisons and casts to integer types are
+constants, ``?:`` differentiates only its branches and ``%`` is not
+differentiable.
+
+Requesting a kernel with ``tangent={'u': 'du', ...}`` wraps its body
+in a ``tangent`` region: each mapped argument gains a twin of the same
+specification under the given name, the twins of ``in`` and ``inout``
+arguments are read, those of ``out`` and ``inout`` arguments written,
+and every output must be mapped.  Mapped arguments must be floating
+point and the kernel may have no reduction arguments.
+
 PyFR-Mako Macros
 ----------------
 

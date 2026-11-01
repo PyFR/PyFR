@@ -254,15 +254,15 @@ def region_kinds(node):
 
 
 # Replace regions of the given kinds with plain blocks
-def unwrap_regions(node, kinds):
-    def unwrap(n):
-        n = map_ast(n, unwrap)
+def strip_regions(node, kinds):
+    def strip(n):
+        n = map_ast(n, strip)
         if isinstance(n, Region) and n.kind in kinds:
             return Block(n.body, comments=n.comments)
         else:
             return n
 
-    return unwrap(node)
+    return strip(node)
 
 
 def map_ast(node, t):

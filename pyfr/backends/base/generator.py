@@ -4,13 +4,13 @@ import re
 import numpy as np
 
 from pyfr.backends.base.mathfns import lower_math_fns
+from pyfr.dsl.ad import lower_ad_regions
 from pyfr.dsl.codegen import CodeGenerator
 from pyfr.dsl.nodes import (Assign, Binary, Call, DslCall, DslVar, ExprStmt,
                             Float, Index, Int, Program, Unary, Var, VarDecl,
-                            map_ast, region_kinds, unwrap_regions, walk_ast)
+                            map_ast, region_kinds, walk_ast)
 from pyfr.dsl.rewriter import (FloatSuffixer, Rewriter, parse_expr,
                                parse_program, rename_vars)
-from pyfr.dsl.simplifier import Simplifier
 from pyfr.dsl.types import Environment
 
 
@@ -100,9 +100,6 @@ class BaseKernelGenerator:
     # Code generator class used to render the AST
     codegen_cls = CodeGenerator
 
-    # Region kinds which are directives for the generator itself
-    _unwrap_regions = frozenset({'simplify'})
-
     # Math functions we rewrite on all backends
     lower_fns = frozenset({'pow'})
 
@@ -187,14 +184,18 @@ class BaseKernelGenerator:
         # Parse the body of our kernel into an AST
         self._ast = parse_program(body, types=atypes)
 
+        # Differentiate the tangent and Jacobian regions of the body
+        env = Environment()
+        for v in sargs:
+            env.define(v.name, v.dtype, [Int(d) for d in v.cdims] or None)
+
+        self._ast = lower_ad_regions(self._ast, env)
+
         # Note the variables present in the body
         used = {n.name for n in walk_ast(self._ast) if isinstance(n, Var)}
 
-        # Region kinds are exposed for provider build-time decisions
+        # Note the region kinds present in the body
         self.regions = region_kinds(self._ast)
-
-        # Unwrap regions which are directives for the generator itself
-        self._ast = unwrap_regions(self._ast, self._unwrap_regions)
 
         # Eliminate any arguments which go unreferenced in the body
         sargs = [v for v in sargs if v.name in used]
@@ -209,14 +210,6 @@ class BaseKernelGenerator:
                 raise ValueError('2D view args must be input-only')
             if any(v.ismpi for v in vargs):
                 raise ValueError('2D kernels do not support MPI matrices')
-
-        # Non-IEEE simplification is opted into by AD-generated kernels
-        if 'simplify' in self.regions:
-            env = Environment()
-            for v in sargs:
-                env.define(v.name, v.dtype)
-
-            self._ast = Simplifier(env).simplify_program(self._ast)
 
         # Math helper functions required by the kernel
         self._helper_calls = {}

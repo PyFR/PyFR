@@ -7,9 +7,11 @@ import re
 from mako.runtime import capture, supports_caller
 import numpy as np
 
+from pyfr.backends.base.generator import Arg
 from pyfr.dsl.codegen import CodeGenerator
 from pyfr.dsl.nodes import Var, VarDecl, map_ast
 from pyfr.dsl.rewriter import parse_expr, parse_program, rename_vars
+from pyfr.dsl.types import INT_TYPES
 import pyfr.nputil as nputil
 import pyfr.util as util
 
@@ -257,6 +259,46 @@ def gpukernel(context, name, bounds=None, kargs=None, **kwargs):
     return f'{decl}(\n    {astr})\n{{\n{body}\n}}'
 
 
+def _dualise(name, args, body, tangent):
+    # Give each mapped argument a twin with the same specification
+    sargs = {k: Arg(k, v) for k, v in args.items()}
+    if unknown := set(tangent) - set(sargs):
+        raise ValueError(f'Kernel {name!r}: unknown tangent arguments '
+                         f'{sorted(unknown)}')
+
+    targs = [sargs[k] for k in tangent]
+    if all(v.intent == 'in' for v in targs):
+        raise ValueError(f'Kernel {name!r}: tangent mode needs an out or '
+                         'inout argument')
+    if all(v.intent == 'out' for v in targs):
+        raise ValueError(f'Kernel {name!r}: tangent mode needs an in or '
+                         'inout argument')
+    outs = [k for k, v in sargs.items() if v.intent != 'in']
+    if unbound := [n for n in outs if n not in tangent]:
+        raise ValueError(f'Kernel {name!r}: output arguments {unbound} need '
+                         'a tangent')
+    if any(v.isreduce for v in targs):
+        raise ValueError(f'Kernel {name!r}: reduction arguments have no '
+                         'tangent')
+    if any(v.dtype in INT_TYPES for v in targs):
+        raise ValueError(f'Kernel {name!r}: integer arguments have no '
+                         'tangent')
+
+    twins = list(tangent.values())
+    if len(set(twins)) != len(twins) or set(twins) & set(sargs):
+        raise ValueError(f'Kernel {name!r}: tangent argument names must be '
+                         'distinct from each other and the kernel arguments')
+
+    # Wrap the body in a region writing the output and reading the input twins
+    spec = [f'{v.name} -> {tangent[v.name]}' for v in targs
+            if v.intent != 'in']
+    spec += [f'{v.name} <- {tangent[v.name]}' for v in targs
+             if v.intent != 'out']
+    body = f'#pragma pyfr tangent({', '.join(spec)})\n{{\n{body}\n}}'
+
+    return args | {tangent[v.name]: args[v.name] for v in targs}, body
+
+
 @supports_caller
 def kernel(context, name, ndim, kargs={}, **kwargs):
     extrns = context['_extrns']
@@ -277,6 +319,10 @@ def kernel(context, name, ndim, kargs={}, **kwargs):
         body = capture(context, context['caller'].body)
     except Exception as e:
         raise ExceptionGroup(f'In kernel: {name}', [e]) from None
+
+    # Twin the arguments of a kernel requested with a tangent mapping
+    if tangent := context.get('_tangent', {}).get(name):
+        kwargs, body = _dualise(name, kwargs, body, tangent)
 
     # Get the generator class and data types
     kerngen = context['_kernel_generator']

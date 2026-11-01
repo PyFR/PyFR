@@ -147,12 +147,15 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
     kernel_generator_cls = None
 
     @memoize
-    def _render_kernel(self, name, mod, extrns, tplargs):
+    def _render_kernel(self, name, mod, extrns, tplargs, tangent):
         # Copy the provided argument list
         tplargs = dict(tplargs)
 
         # Backend-specfic generator classes
         tplargs['_kernel_generator'] = self.kernel_generator_cls
+
+        # Arguments the body of the named kernel is differentiated along
+        tplargs['_tangent'] = {name: tangent}
 
         # Macro definitions
         tplargs['_macros'] = {}
@@ -223,10 +226,11 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
                 return
 
         # Generate the kernel providing method
-        def kernel_meth(self, tplargs, dims, extrns={}, **kwargs):
+        def kernel_meth(self, tplargs, dims, extrns={}, tangent={},
+                        **kwargs):
             # Render the source of kernel
             src, ndim, argn, argt, regions = self._render_kernel(
-                name, mod, extrns, tplargs
+                name, mod, extrns, tplargs, tangent
             )
 
             # Compile the kernel
