@@ -26,6 +26,14 @@ Sets constants used in the simulation
 
    *float*
 
+#. ``mach-ref`` --- lower bound on the local Mach number by which the
+   ``roe-lm`` Riemann solver scales its acoustic dissipation; the
+   solver is low Mach number consistent only above this bound, a value
+   of zero gives the original scheme of Rieper and a value of one or
+   more recovers ``roe``:
+
+   *float* (default: 0.01)
+
 Other constant may be set by the user which can then be used throughout the
 ``.ini`` file.
 

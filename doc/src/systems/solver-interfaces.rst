@@ -6,7 +6,8 @@ Parameterises the interfaces with
 
 1. ``riemann-solver`` --- type of Riemann solver:
 
-    ``rusanov`` | ``hll`` | ``hllc`` | ``roe`` | ``roem`` | ``exact``
+    ``rusanov`` | ``hll`` | ``hllc`` | ``roe`` | ``roe-lm`` | ``roem`` |
+    ``exact``
 
 2. ``ldg-beta`` --- beta parameter used for LDG:
 
