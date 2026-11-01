@@ -10,6 +10,9 @@ class DottedTemplateLookup(TemplateLookup):
         self.dfltargs = dfltargs
         self.filters = []
 
+        # Compiled templates
+        self._templates = {}
+
     def _apply_filters(self, src):
         for filter in self.filters:
             src = filter(src)
@@ -20,6 +23,15 @@ class DottedTemplateLookup(TemplateLookup):
         return uri
 
     def get_template(self, name):
+        # Query the template cache
+        key = (name, tuple(self.filters))
+        try:
+            return self._templates[key]
+        except KeyError:
+            tpl = self._templates[key] = self._compile_template(name)
+            return tpl
+
+    def _compile_template(self, name):
         div = name.rfind('.')
 
         # Break apart name into a package and base file name
