@@ -1,4 +1,5 @@
 import time
+from statistics import NormalDist
 
 import numpy as np
 
@@ -83,6 +84,12 @@ class ThroughputLimitMixin:
 
     # Windows the model must hold before it can be contradicted
     _tput_shift_nmin = 3
+
+    # Scale a median absolute deviation to a normal standard deviation
+    _mad_to_sigma = 1/NormalDist().inv_cdf(3/4)
+
+    # Floor on the robust wall-time scale, relative to the window median
+    _tput_scale_floor = 1e-3
 
     def _init_tput_limit(self, initsoln):
         sect = 'solver-time-integrator'
@@ -307,8 +314,9 @@ class ThroughputLimitMixin:
         self._nretries = 0
 
         # Sampling variance of the window throughput, robust to bursts
-        wsd = max(1.4826*np.median(np.abs(wtimes - wmed)), 1e-3*wmed)
-        tput_var = (med_tput / wmed)**2*(1.2533*wsd)**2 / n
+        mad = np.median(np.abs(wtimes - wmed))
+        wsd = max(self._mad_to_sigma*mad, self._tput_scale_floor*wmed)
+        tput_var = (np.pi / (2*n))*(wsd*med_tput / wmed)**2
 
         # Mean nonlinear iterations per stage over the window
         nps = self._win_iters / max(self._win_stages, 1)
