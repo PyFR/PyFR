@@ -59,7 +59,7 @@ class ExtrudedSpanwise(_SpanwiseBase, AlltoallMixin):
         super().__init__(mesh, cfg, shapes, axis=axis, vis_pts_2d=vis_pts_2d)
 
         if set(self.pmesh.etypes) - {'hex', 'pri'}:
-            raise ValueError(f'Extruded spanwise needs a hex/pri mesh')
+            raise ValueError('Extruded spanwise needs a hex/pri mesh')
 
         self.nfields = nfields
 
