@@ -1,12 +1,12 @@
 import re
 
-from pyfr.dsl.nodes import (ArrayInit, Assign, Binary, Block, Break, Call,
-                            Cast, Comment, Continue, DoWhile, DslCall, DslVar,
-                            ExprStmt, Float, For, If, Index, Int, MultiDecl,
-                            Postfix, Program, Region, String, Ternary, Typedef,
-                            Unary, Var, VarDecl, While, BINARY_OPS,
-                            COMPOUND_ASSIGN, POSTFIX_OPS, PRECEDENCE,
-                            RIGHT_ASSOC, UNARY_OPS)
+from pyfr.dsl.nodes import (BINARY_OPS, COMPOUND_ASSIGN, POSTFIX_OPS,
+                            PRECEDENCE, RIGHT_ASSOC, UNARY_OPS, ArrayInit,
+                            Assign, Binary, Block, Break, Call, Cast, Comment,
+                            Continue, DoWhile, DslCall, DslVar, ExprStmt,
+                            Float, For, If, Index, Int, MultiDecl, Postfix,
+                            Program, Region, String, Ternary, Typedef, Unary,
+                            Var, VarDecl, While)
 
 
 class Parser:
@@ -183,17 +183,41 @@ class Parser:
             self.expect('SYMBOL', ']')
 
         if self.accept('='):
-            # An unsized array takes its extent from the initialiser
+            # Check if it is an array-style init
             if self.peek().value == '{':
                 init = self.array_initialiser()
                 if sizes and sizes[0] is None:
                     sizes[0] = Int(len(init.values))
+                self._check_initialiser(name, sizes, init)
             else:
                 init = self.expression(PRECEDENCE[','])
         else:
             init = None
 
+        # Ensure all array extents are sized
+        if None in sizes:
+            raise SyntaxError(f'Unsized extent on array {name!r}')
+
         return VarDecl(is_const, vtype, name, sizes or None, init)
+
+    def _check_initialiser(self, name, sizes, init):
+        # Skip checks for scalars and non-trivial extents such as x[1+1]
+        if not sizes or not all(isinstance(s, Int) for s in sizes):
+            return
+
+        def check(vals, dims):
+            if len(vals) > dims[0].value:
+                raise SyntaxError(f'Too many initialisers for array {name!r}')
+
+            for v in vals:
+                nested = isinstance(v, ArrayInit)
+                if nested and len(dims) > 1:
+                    check(v.values, dims[1:])
+                # Permit the {0} idiom for zero-filling a nested array
+                elif nested or (len(dims) > 1 and v != Int(0)):
+                    raise SyntaxError(f'Malformed initialiser on {name!r}')
+
+        check(init.values, sizes)
 
     def array_initialiser(self):
         self.expect('SYMBOL', '{')
