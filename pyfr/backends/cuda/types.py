@@ -105,9 +105,13 @@ class CUDAGraph(base.Graph):
 
         if deps:
             event = self.backend.cuda.create_event()
-            self.graph.add_event_record(event, [self.knodes[d] for d in deps])
+            dnodes = [self.knodes[d] for d in deps]
+            enode = self.graph.add_event_record(event, dnodes)
 
             self.mpi_events.append((event, req))
+
+            # Have subsequent dependents of these kernels wait on the event
+            self.knodes |= dict.fromkeys(deps, enode)
 
     def _commit(self):
         self.exc_graph = self.graph.instantiate()
