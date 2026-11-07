@@ -9,7 +9,7 @@ class BiCGStabMixin(BaseLinearSolver):
     def _krylov_solve(self, matvec, residual, out_reg, precond=None, *,
                       rtol, accumulate=True, accumulate_scale=()):
         r, rhat, p, v, s, t, x = self._bcg
-        niters, xset = 0, False
+        niters, xset, relerr = 0, False, 0.0
 
         # Matrix-vector product operator with optional right-preconditioning
         def op(src, dst):
@@ -28,6 +28,7 @@ class BiCGStabMixin(BaseLinearSolver):
         if (r0norm := self._norm2(residual)):
             self._add(0, r, -1/r0norm, residual)
             self._add(0, rhat, 1, r)
+            relerr = 1.0
 
             while niters < self._krylov_nmax:
                 # Check for breakdown
@@ -55,7 +56,8 @@ class BiCGStabMixin(BaseLinearSolver):
                 xset = True
 
                 # Half-step convergence saves the second matvec
-                if self._norm2(s) < rtol or niters >= self._krylov_nmax:
+                relerr = self._norm2(s)
+                if relerr < rtol or niters >= self._krylov_nmax:
                     break
 
                 # t = A·M⁻¹·s; shat = M⁻¹·s
@@ -73,7 +75,8 @@ class BiCGStabMixin(BaseLinearSolver):
                 rho = nrho
 
                 # Converged, or omega ≈ 0 (next p update divides by omega)
-                if self._norm2(r) < rtol or abs(omega) < self._breakdown_tol:
+                relerr = self._norm2(r)
+                if relerr < rtol or abs(omega) < self._breakdown_tol:
                     break
 
         # Fold the correction into out_reg, undoing the r0norm scaling
@@ -81,4 +84,4 @@ class BiCGStabMixin(BaseLinearSolver):
         self._add(float(accumulate), out_reg, r0norm if xset else 0, x,
                   in_scale=accumulate_scale, in_scale_idxs=sidxs)
 
-        return niters, niters if precond else 0
+        return niters, niters if precond else 0, relerr

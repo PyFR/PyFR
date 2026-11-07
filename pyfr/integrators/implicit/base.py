@@ -1,14 +1,34 @@
+from collections import namedtuple
+import time
+
 import numpy as np
 
 from pyfr.integrators.base import (BaseIntegrator, _common_plugin_prop,
                                    kernel_getter)
 from pyfr.integrators.implicit.precond import Preconditioner
 from pyfr.integrators.implicit.tolerance import get_linear_tol_controller
-from pyfr.integrators.registers import DynamicScalarRegister
+from pyfr.integrators.registers import DynamicScalarRegister, ScalarRegister
 from pyfr.mpiutil import get_comm_rank_root, mpi, scal_coll
 from pyfr.nputil import bfloat16, is_bf16
 from pyfr.progress import format_s
 from pyfr.util import subclass_where
+
+
+# Statistics from a stage solve; Krylov-only fields default to blank
+SolveStats = namedtuple('SolveStats',
+                        'nonlin_iters precond_apps init_resid final_resid '
+                        'converged stalled nmatvec nretries inner_tol probe',
+                        defaults=('',)*4)
+
+# Solve statistics for a stage along with its cost and preconditioner state
+StageStats = namedtuple('StageStats',
+                        ['stage', *SolveStats._fields, 'nrhs', 'wtime',
+                         'precond_gdt_ratio', 'precond_built',
+                         'precond_wtime', 'precond_nbuilds'])
+
+
+class DivergenceError(Exception):
+    pass
 
 
 class BaseImplicitIntegrator(BaseIntegrator):
@@ -17,8 +37,14 @@ class BaseImplicitIntegrator(BaseIntegrator):
     # If a linear solver is required or not
     requires_linear_solver = False
 
+    # Columns of the per-stage statistics
+    stage_stats_fields = StageStats._fields
+
     # Scratch space for a preconditioner
     _precond_temp = DynamicScalarRegister()
+
+    # Scratch space for perturbed and trial states
+    _solve_temp = ScalarRegister()
 
     _pcdtype_map = {
         'double': np.float64,
@@ -47,6 +73,28 @@ class BaseImplicitIntegrator(BaseIntegrator):
         else:
             self._fd_eps = float(fdeps)
             self._fd_eps_adapt = False
+
+        # Get variable names for per-variable solve tolerances
+        convars = systemcls.elementscls.convars(mesh.ndims, cfg)
+
+        # Reject the superseded nonlinear atol keys
+        for k in ['nonlinear-atol', *[f'nonlinear-atol-{v}' for v in convars]]:
+            if cfg.hasopt(sect, k):
+                raise ValueError(f'{k} has been replaced by solve-{k[10:]}')
+
+        # Check for per-variable atol
+        pvar_set = [cfg.hasopt(sect, f'solve-atol-{v}') for v in convars]
+        self._use_weighted_atol = any(pvar_set)
+
+        # Build the per-variable solve atol list
+        self._solve_atol = cfg.getfloat(sect, 'solve-atol', 1e-8)
+        self._solve_atols = [cfg.getfloat(sect, f'solve-atol-{v}',
+                                          self._solve_atol) for v in convars]
+
+        # Nondimensionalising scale factors for the solve
+        min_atol = min(self._solve_atols)
+        self._scales = tuple(a / min_atol for a in self._solve_atols)
+        self._inv_scales = tuple(min_atol / a for a in self._solve_atols)
 
         # Obtain the preconditioner class, if any
         pname = cfg.get(sect, 'precond', 'none').lower()
@@ -96,7 +144,8 @@ class BaseImplicitIntegrator(BaseIntegrator):
 
         # Adaptive controller for the inner linear (Krylov) tolerance
         self._tol_controller = get_linear_tol_controller(
-            cfg, self.serialiser, initsoln, self.nimplicit, self._nl_maxiter
+            cfg, self.serialiser, initsoln, self.nimplicit,
+            self.requires_nonlinear_solver
         )
 
     def _pre_commit(self):
@@ -139,6 +188,77 @@ class BaseImplicitIntegrator(BaseIntegrator):
         if self._fd_eps_adapt:
             unorm = self._norm2(u_reg)
             self._fd_eps = ((1 + unorm)*self.backend.fpdtype_eps)**0.5
+
+    def _calc_rnorm(self, r):
+        weights = self._solve_atols if self._use_weighted_atol else ()
+        return self._norm2(r, weights=weights, norm_gndofs=True)
+
+    def _jfnk_matvec(self, t, u, f, gamma_dt, eps, v_s, result):
+        self._add(0, self._solve_temp, 1, u, eps, v_s, in_scale=self._scales,
+                  in_scale_idxs=(2,))
+        self._rhs(t, self._solve_temp, self._solve_temp)
+        self._add(0, result, 1, v_s, -gamma_dt/eps, self._solve_temp,
+                  gamma_dt/eps, f, in_scale=self._scales, in_scale_idxs=(1,),
+                  out_scale=self._inv_scales)
+
+    def _linear_operator(self, t, u_reg, f_reg, gamma_dt):
+        # Scaled matrix-vector product (pass ‖v‖ to spare the norm)
+        def matvec(v, result, vnorm=None):
+            if vnorm is None:
+                vnorm = self._norm2(v)
+
+            self._jfnk_matvec(t, u_reg, f_reg, gamma_dt, self._fd_eps/vnorm,
+                              v, result)
+
+        # Scaled preconditioner: M̃⁻¹ = S⁻¹ M⁻¹ S
+        if self._preconditioner.active:
+            def precond(in_reg, out_reg):
+                self._apply_precond(in_reg, out_reg, in_scale=self._scales,
+                                    out_scale=self._inv_scales)
+        else:
+            precond = None
+
+        return matvec, precond
+
+    def _select_krylov_tol(self, gamma_dt):
+        tc = self._tol_controller
+
+        # Select a Krylov tolerance for this operator and preconditioner
+        build = self._preconditioner.nbuilds
+        return tc.select_tolerance(gamma_dt, build), tc.probing
+
+    def _timed_stage(self, stage, gamma_dt, solve_fn):
+        comm, _, _ = get_comm_rank_root()
+        pc = self._preconditioner
+
+        # Note the RHS evaluation and preconditioner build counters
+        nrhs = self.nrhsevals
+        pc_wtime, nbuilds = pc.build_wtime_total, pc.nbuilds
+
+        # Run the core solve
+        tstart = time.perf_counter() - self.backend.kernel_setup_wtime
+        stats = solve_fn()
+        wtime = time.perf_counter() - self.backend.kernel_setup_wtime - tstart
+
+        # Agree on the stage time across ranks
+        wtime = scal_coll(comm.Allreduce, wtime, op=mpi.MAX)
+
+        # Split the time between the solve and any build
+        pc_wtime = pc.build_wtime_total - pc_wtime
+        nrhs = self.nrhsevals - nrhs
+        wtime = max(wtime - pc_wtime, 0.0)
+
+        # Note if the preconditioner was rebuilt and how gamma*dt has drifted
+        precond_built = int(pc.nbuilds > nbuilds)
+        gdt_ratio = gamma_dt / pc.gdt_built if pc.gdt_built else 1.0
+
+        # Inform the tolerance controller unless a build inflated the time
+        if self.requires_linear_solver and not precond_built:
+            self._tol_controller.update(wtime, gamma_dt, stats.converged,
+                                        stats.nonlin_iters)
+
+        return StageStats(stage, *stats, nrhs, wtime, gdt_ratio,
+                          precond_built, pc_wtime, pc.nbuilds)
 
     @property
     def _precond_computed(self):

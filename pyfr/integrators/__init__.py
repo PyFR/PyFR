@@ -22,17 +22,24 @@ def get_integrator(backend, systemcls, mesh, initsoln, cfg):
         cc = subclass_where(BaseImplicitController, controller_name=cn)
         sc = subclass_where(BaseImplicitStepper, stepper_name=sn)
 
-        # Nonlinear solver
-        nn = cfg.get('solver-time-integrator', 'nonlinear-solver', 'newton')
-        nc = subclass_where(BaseNonlinearSolver, nonlinear_name=nn)
+        # Linear solver
+        ln = cfg.get('solver-time-integrator', 'linear-solver', 'gmres')
+        lc = subclass_where(BaseLinearSolver, linear_name=ln)
 
-        # If the nonlinear solver requires a linear solver then mix it in
-        if nc.requires_linear_solver:
-            ln = cfg.get('solver-time-integrator', 'linear-solver', 'gmres')
-            lc = subclass_where(BaseLinearSolver, linear_name=ln)
-            nc = type(f'{nn}_{ln}', (nc, lc), {})
+        # Nonlinear solver, if the stepper needs one
+        if sc.requires_nonlinear_solver:
+            nn = cfg.get('solver-time-integrator', 'nonlinear-solver',
+                         'newton')
+            nc = subclass_where(BaseNonlinearSolver, nonlinear_name=nn)
 
-        bases = (cc, sc, nc)
+            # If the nonlinear solver requires a linear solver then mix it in
+            if nc.requires_linear_solver:
+                nc = type(f'{nn}_{ln}', (nc, lc), {})
+
+            bases = (cc, sc, nc)
+        # Otherwise the linear solver drives the stages directly
+        else:
+            bases = (cc, sc, lc)
     else:
         raise ValueError(f'Invalid formulation {form!r}')
 

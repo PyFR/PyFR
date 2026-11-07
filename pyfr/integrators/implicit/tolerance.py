@@ -6,12 +6,12 @@ from pyfr.util import subclass_where
 
 
 def get_linear_tol_controller(cfg, serialiser, initsoln, nimplicit,
-                              nl_maxiter):
+                              nonlinear):
     sect = 'solver-time-integrator'
     name = cfg.get(sect, 'linear-tol-controller', 'none')
     cls = subclass_where(BaseToleranceController, name=name)
 
-    return cls(cfg, serialiser, initsoln, nimplicit, nl_maxiter)
+    return cls(cfg, serialiser, initsoln, nimplicit, nonlinear)
 
 
 class BaseToleranceController:
@@ -45,7 +45,7 @@ class NullToleranceController(BaseToleranceController):
     name = 'none'
 
     def __init__(self, cfg, serialiser, initsoln, nimplicit,
-                 nl_maxiter):
+                 nonlinear):
         sect = 'solver-time-integrator'
         self._best_tol = self._tol = cfg.getfloat(sect, 'linear-rtol', 1e-2)
 
@@ -60,7 +60,7 @@ class BaseProbeController(BaseToleranceController):
     _gdt_shift = 0.5
 
     def __init__(self, cfg, serialiser, initsoln, nimplicit,
-                 nl_maxiter):
+                 nonlinear):
         sect = 'solver-time-integrator'
         self._probe_nsolves = cfg.getint(sect, 'linear-probe-nsolves', 20)
         self._best_tol = cfg.getfloat(sect, 'linear-rtol', 1e-2)
@@ -68,8 +68,8 @@ class BaseProbeController(BaseToleranceController):
         # Implicit solves per time step
         self._nimplicit = nimplicit
 
-        # Nonlinear iteration cap of the solver
-        self._nl_maxiter = nl_maxiter
+        # If the stage solves are nonlinear
+        self._nonlinear = nonlinear
 
         # Set once a probe has seen solves needing more than one iteration
         self._stiff = False
@@ -159,7 +159,7 @@ class BaseProbeController(BaseToleranceController):
         self._drop_probes()
 
         # Discard a probe of trivial solves and wait before probing again
-        trivial = np.mean(iters) <= 1 and self._nl_maxiter > 1
+        trivial = np.mean(iters) <= 1 and self._nonlinear
         if not self._stiff and trivial:
             self._steps_until_probe = 2*self._probe_nsolves
             return
@@ -253,9 +253,9 @@ class WindowedGPController(BaseProbeController):
     _base_interval = 100
 
     def __init__(self, cfg, serialiser, initsoln, nimplicit,
-                 nl_maxiter):
+                 nonlinear):
         super().__init__(cfg, serialiser, initsoln, nimplicit,
-                         nl_maxiter)
+                         nonlinear)
 
         sect = 'solver-time-integrator'
         f, i = cfg.getfloat, cfg.getint
@@ -363,9 +363,9 @@ class ListController(BaseProbeController):
     name = 'list'
 
     def __init__(self, cfg, serialiser, initsoln, nimplicit,
-                 nl_maxiter):
+                 nonlinear):
         super().__init__(cfg, serialiser, initsoln, nimplicit,
-                         nl_maxiter)
+                         nonlinear)
 
         sect = 'solver-time-integrator'
 

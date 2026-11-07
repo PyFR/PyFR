@@ -186,14 +186,17 @@ For implicit time-stepping (``formulation = implicit``), PyFR employs
 a Jacobian-free Newton-Krylov (JFNK) method. Each time step requires
 solving a nonlinear system using Newton's method, where the linear
 systems arising at each Newton iteration are solved using a Krylov
-subspace method.
+subspace method.  Linearly implicit (Rosenbrock-W) schemes instead
+linearise about the start of the step and solve one linear system per
+stage with the same Krylov machinery, bypassing the nonlinear solver.
 
 Scheme Selection
 ----------------
 
 #. ``scheme`` --- implicit time-integration scheme
 
-    ``euler`` | ``trapezium`` | ``trbdf2`` | ``kvaerno43``
+    ``euler`` | ``trapezium`` | ``trbdf2`` | ``kvaerno43`` | ``ros2`` |
+    ``ros34pw2``
 
     where
 
@@ -203,10 +206,16 @@ Scheme Selection
       error estimator (L-stable)
     - ``kvaerno43`` --- third-order ESDIRK with embedded second-order
       error estimator (L-stable)
+    - ``ros2`` --- second-order two-stage linearly implicit
+      Rosenbrock-W scheme with embedded first-order error estimator
+      (L-stable)
+    - ``ros34pw2`` --- third-order four-stage linearly implicit
+      Rosenbrock-W scheme with embedded second-order error estimator
+      (L-stable)
 
-    Schemes with embedded error estimators (i.e., ``trbdf2`` and
-    ``kvaerno43``) are required for adaptive time-stepping with the
-    ``pi`` controller.
+    Schemes with embedded error estimators (i.e., ``trbdf2``,
+    ``kvaerno43``, ``ros2`` and ``ros34pw2``) are required for
+    adaptive time-stepping with the ``pi`` controller.
 
 Controller Selection
 --------------------
@@ -486,6 +495,30 @@ Preconditioner Options
     product and the block-Jacobi construction.  ``auto`` selects an
     adaptive value from the solution norm; a numeric value pins it.
 
+#. ``solve-atol`` --- absolute tolerance for the stage solves
+
+    *float* (default: 1e-8)
+
+    Sets the floor of the nonlinear convergence tolerance and the
+    scaling of the residual seen by the Krylov solver.
+
+#. ``solve-atol-<var>`` --- per-variable absolute tolerance
+
+    *float*
+
+    For problems with disparate variable scales (e.g., high-pressure
+    compressible flow where energy is much larger than density),
+    per-variable tolerances can improve convergence. The variable
+    names depend on the system; for Euler and Navier-Stokes in 2D
+    these are ``rho``, ``rhou``, ``rhov``, ``E``. Example:
+
+    .. code-block:: ini
+
+        solve-atol-rho = 1e-8
+        solve-atol-rhou = 1e-6
+        solve-atol-rhov = 1e-8
+        solve-atol-E = 1e-3
+
 Nonlinear Solver Options
 ------------------------
 
@@ -501,10 +534,6 @@ Nonlinear Solver Options
 #. ``nonlinear-rtol`` --- relative tolerance for nonlinear convergence
 
     *float* (default: 1e-4)
-
-#. ``nonlinear-atol`` --- absolute tolerance for nonlinear convergence
-
-    *float* (default: 1e-8)
 
 #. ``nonlinear-max-iter`` --- maximum nonlinear iterations per stage
 
@@ -536,23 +565,6 @@ Nonlinear Solver Options
    the initial guess at which a solve is deemed to have diverged
 
     *float* (default: 10.0)
-
-#. ``nonlinear-atol-<var>`` --- per-variable absolute tolerance
-
-    *float*
-
-    For problems with disparate variable scales (e.g., high-pressure
-    compressible flow where energy is much larger than density),
-    per-variable tolerances can improve convergence. The variable
-    names depend on the system; for Euler and Navier-Stokes in 2D
-    these are ``rho``, ``rhou``, ``rhov``, ``E``. Example:
-
-    .. code-block:: ini
-
-        nonlinear-atol-rho = 1e-8
-        nonlinear-atol-rhou = 1e-6
-        nonlinear-atol-rhov = 1e-8
-        nonlinear-atol-E = 1e-3
 
 #. ``nonlinear-linesearch`` --- enable backtracking line search
 
@@ -676,7 +688,7 @@ For high-pressure compressible flow with large dynamic range:
     precond = none
 
     nonlinear-rtol = 1e-4
-    nonlinear-atol-rho = 1e-8
-    nonlinear-atol-rhou = 1e-6
-    nonlinear-atol-rhov = 1e-8
-    nonlinear-atol-E = 1e-3
+    solve-atol-rho = 1e-8
+    solve-atol-rhou = 1e-6
+    solve-atol-rhov = 1e-8
+    solve-atol-E = 1e-3

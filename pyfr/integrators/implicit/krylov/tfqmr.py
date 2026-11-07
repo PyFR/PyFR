@@ -14,6 +14,7 @@ class TFQMRMixin(BaseLinearSolver):
                       rtol, accumulate=True, accumulate_scale=()):
         w, y1, y2, u1, u2, v, d, x, rt = self._tq
         niters = m = 0
+        tau = 0.0
 
         # Matrix-vector product operator with optional right-preconditioning
         def op(src, dst):
@@ -110,4 +111,4 @@ class TFQMRMixin(BaseLinearSolver):
                   in_scale=accumulate_scale, in_scale_idxs=sidxs)
 
         # Each matvec applies M⁻¹ once; recovery adds one more when m > 0
-        return niters, niters + (m > 0) if precond else 0
+        return niters, niters + (m > 0) if precond else 0, tau

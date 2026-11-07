@@ -2,10 +2,11 @@ import math
 
 import numpy as np
 
-from pyfr.integrators.implicit.base import BaseImplicitIntegrator
-from pyfr.integrators.implicit.nonlinear import NonlinearDivergenceError
+from pyfr.integrators.implicit.base import (BaseImplicitIntegrator,
+                                            DivergenceError, SolveStats)
 from pyfr.integrators.registers import (DynamicScalarRegister,
-                                        DynamicVectorRegister, VectorRegister)
+                                        DynamicVectorRegister,
+                                        ScalarRegister, VectorRegister)
 
 
 class BaseImplicitStepper(BaseImplicitIntegrator):
@@ -18,7 +19,7 @@ class BaseSDIRKStepper(BaseImplicitStepper):
     bhat = []
     _gamma = 0
 
-    stepper_order = 1
+    requires_nonlinear_solver = True
 
     _r_u = VectorRegister(n=2)
     _r_f = DynamicVectorRegister()
@@ -76,9 +77,9 @@ class BaseSDIRKStepper(BaseImplicitStepper):
         return weights
 
     def _compute_stage_residual(self, u_n, r_f_prev, u_i, f_i, dt, result):
+        Ai = [-dt*Aij for Aij in self.A[len(r_f_prev)]]
         pairs = [(1, u_i), (-1, u_n), (-dt*self._gamma, f_i)]
-        pairs += [(-dt*Aij, fj)
-                  for Aij, fj in zip(self.A[len(r_f_prev)], r_f_prev)]
+        pairs += zip(Ai, r_f_prev)
 
         self._addv_nz(result, pairs)
 
@@ -105,8 +106,8 @@ class BaseSDIRKStepper(BaseImplicitStepper):
                 self._add(0, u_i_reg, 1, u_n, c_i*adt, self._r_f[-1])
             # Lagrange interpolation: u = u_n + c_i * dt * sum_j(w_j * f_j)
             else:
-                pairs = [(1, u_n)]
-                pairs += [(wj*c_i*adt, fj) for wj, fj in zip(w, f_prev_list)]
+                wi = [wj*c_i*adt for wj in w]
+                pairs = [(1, u_n)] + list(zip(wi, f_prev_list))
                 self._addv_nz(u_i_reg, pairs)
 
             rnorm = self._residual_norm(t_i, u_i_reg, f_reg, residual_fn)
@@ -157,7 +158,7 @@ class BaseSDIRKStepper(BaseImplicitStepper):
 
                 # If the stage has not converged, abandon the step
                 if not stats.converged:
-                    raise NonlinearDivergenceError(
+                    raise DivergenceError(
                         f'Stage {i} failed to converge: residual '
                         f'{stats.final_resid:.2e} from {stats.init_resid:.2e}'
                     )
@@ -178,8 +179,8 @@ class BaseSDIRKStepper(BaseImplicitStepper):
         return r_ui
 
     def _compute_error_estimate(self, dt, r_f):
-        pairs = [(dt*ei, fi) for ei, fi in zip(self._err_coeffs, r_f)]
-        self._addv_nz(self._r_err, pairs)
+        ecoeffs = [dt*ei for ei in self._err_coeffs]
+        self._addv_nz(self._r_err, zip(ecoeffs, r_f))
 
 
 class ImplicitEulerStepper(BaseSDIRKStepper):
@@ -230,3 +231,172 @@ class Kvaerno43Stepper(BaseSDIRKStepper):
 
     # 2nd order embedded method for error estimation
     bhat = [0.490563388419108, 0.073570090080892, _gamma, 0]
+
+
+class BaseRosenbrockStepper(BaseImplicitStepper):
+    A = []
+    G = []
+    b = []
+    bhat = []
+    _gamma = 0
+
+    requires_nonlinear_solver = False
+    requires_linear_solver = True
+
+    _r_u = VectorRegister(n=2)
+    _r_f0 = ScalarRegister()
+    _r_fv = ScalarRegister()
+    _r_resid = ScalarRegister(rhs=False)
+    _r_us = DynamicVectorRegister(rhs=False, extent='solve')
+    _r_err = DynamicScalarRegister(rhs=False)
+
+    def __init__(self, *args, **kwargs):
+        self._nstages = len(self.b)
+        self._size_register(self._r_us, self._nstages)
+
+        A, G, b = np.array(self.A), np.array(self.G), np.array(self.b)
+        Ginv = np.linalg.inv(G)
+
+        self.c = A.sum(axis=1).tolist()
+
+        # Coefficients for the transformed stage increments U = G k
+        self._at = np.tril(A @ Ginv, -1).tolist()
+        self._ct = np.tril(np.diag(1 / np.diag(G)) - Ginv, -1).tolist()
+        self._mt = (b @ Ginv).tolist()
+
+        if self.bhat:
+            self._size_register(self._r_err, 1)
+            self._err_coeffs = ((b - np.array(self.bhat)) @ Ginv).tolist()
+
+        super().__init__(*args, **kwargs)
+
+    @property
+    def stepper_has_errest(self):
+        return self.controller_needs_errest and len(self.bhat)
+
+    @property
+    def nimplicit(self):
+        return self._nstages
+
+    def _stage_solve(self, stage, t, r_un, f_reg, gdt, matvec, precond,
+                     rtol, probe):
+        r_us, resid = self._r_us, self._r_resid
+
+        def solve_fn():
+            # Choose a suitable finite difference perturbation
+            self._compute_fd_eps(r_un)
+
+            # Compute the preconditioner
+            self._compute_precond(t, r_un, gdt, self._rhs, self._r_f0,
+                                  self._solve_temp, eps_scales=self._scales)
+
+            # Form the negated stage right-hand side
+            ct = [-self._gamma*cj for cj in self._ct[stage]]
+            pairs = [(-gdt, f_reg)] + list(zip(ct, r_us))
+            self._addv_nz(resid, pairs)
+
+            rnorm = self._calc_rnorm(resid)
+            if not math.isfinite(rnorm):
+                raise DivergenceError('Non-finite residual')
+
+            # Scale the residual vector for the Krylov solver
+            self._add(1, resid, out_scale=self._inv_scales)
+
+            # Solve for the stage increment
+            niters, nprecond, relerr = self._krylov_solve(
+                matvec, resid, r_us[stage], precond, rtol=rtol,
+                accumulate=False, accumulate_scale=self._scales
+            )
+
+            return SolveStats(nonlin_iters=1, precond_apps=nprecond,
+                              init_resid=rnorm, final_resid=relerr*rnorm,
+                              converged=int(relerr < rtol), stalled=0,
+                              nmatvec=niters, nretries=0, inner_tol=rtol,
+                              probe=int(probe))
+
+        return self._timed_stage(stage, gdt, solve_fn)
+
+    def step(self, t, dt):
+        r_un, r_ui = self._r_u
+        r_us = self._r_us
+
+        # Ensure r_un references the bank containing u(t)
+        if r_un != self.idxcurr:
+            r_un, r_ui = r_ui, r_un
+
+        gdt = self._gamma*dt
+
+        # Linearise the operator about u_n
+        self._rhs(t, r_un, self._r_f0)
+        matvec, precond = self._linear_operator(t, r_un, self._r_f0, gdt)
+        rtol, probe = self._select_krylov_tol(gdt)
+
+        for i in range(self._nstages):
+            # First stage argument is u_n itself, so reuse f(t, u_n)
+            if i == 0:
+                f_reg = self._r_f0
+            # Otherwise evaluate f at the stage argument u_n + sum(a_ij*U_j)
+            else:
+                pairs = [(1, r_un)] + list(zip(self._at[i], r_us))
+                self._addv_nz(self._solve_temp, pairs)
+
+                f_reg = self._r_fv
+                self._rhs(t + self.c[i]*dt, self._solve_temp, f_reg)
+
+            stats = self._stage_solve(i, t, r_un, f_reg, gdt, matvec,
+                                      precond, rtol, probe)
+            self._stage_stats.append(stats)
+
+        # Obtain the solution as u_n + sum(m_j*U_j)
+        pairs = [(1, r_un)] + list(zip(self._mt, r_us))
+        self._addv_nz(r_ui, pairs)
+
+        # Compute error estimate if this scheme has an embedded pair
+        if self.stepper_has_errest:
+            self._addv_nz(self._r_err, zip(self._err_coeffs, r_us))
+            return r_ui, r_un, self._r_err
+
+        return r_ui
+
+
+class ROS2Stepper(BaseRosenbrockStepper):
+    stepper_name = 'ros2'
+    stepper_order = 2
+
+    _gamma = 1 + 2**-0.5
+
+    A = [[0, 0],
+         [1, 0]]
+
+    G = [[_gamma, 0],
+         [-2*_gamma, _gamma]]
+
+    b = [0.5, 0.5]
+
+    # 1st order embedded method for error estimation
+    bhat = [1, 0]
+
+
+class ROS34PW2Stepper(BaseRosenbrockStepper):
+    stepper_name = 'ros34pw2'
+    stepper_order = 3
+
+    _gamma = 4.3586652150845900e-01
+
+    A = [[0, 0, 0, 0],
+         [8.7173304301691801e-01, 0, 0, 0],
+         [8.4457060015369423e-01, -1.1299064236484185e-01, 0, 0],
+         [0, 0, 1, 0]]
+
+    G = [[_gamma, 0, 0, 0],
+         [-8.7173304301691801e-01, _gamma, 0, 0],
+         [-9.0338057013044082e-01, 5.4180672388095326e-02, _gamma, 0],
+         [2.4212380706095346e-01, -1.2232505839045147e+00,
+          5.4526025533510214e-01, _gamma]]
+
+    b = [2.4212380706095346e-01, -1.2232505839045147e+00,
+         1.5452602553351020e+00, _gamma]
+
+    # 2nd order embedded method for error estimation
+    bhat = [3.7810903145819369e-01, -9.6042292212423178e-02, 0.5,
+            2.1793326075422950e-01]

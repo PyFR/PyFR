@@ -5,8 +5,8 @@ import numpy as np
 
 from pyfr.integrators.base import StepInfo
 from pyfr.integrators.controllers import CFLControllerMixin, PIControllerMixin
-from pyfr.integrators.implicit.base import BaseImplicitIntegrator
-from pyfr.integrators.implicit.nonlinear import NonlinearDivergenceError
+from pyfr.integrators.implicit.base import (BaseImplicitIntegrator,
+                                            DivergenceError)
 from pyfr.mpiutil import get_comm_rank_root, mpi, scal_coll
 from pyfr.nputil import LogGPOptimiser
 
@@ -323,7 +323,8 @@ class ThroughputLimitMixin:
         self._win_iters = self._win_stages = 0
 
         # Grow without recording while the solves are trivial
-        if not self._tput_stiff and nps <= 1 and self._nl_maxiter > 1:
+        trivial = nps <= 1 and self.requires_nonlinear_solver
+        if not self._tput_stiff and trivial:
             return self._growth_fact
         else:
             self._tput_stiff = True
@@ -446,7 +447,7 @@ class BaseImplicitController(BaseImplicitIntegrator):
 
         try:
             ret = self._timed_step(self.tcurr, dt)
-        except NonlinearDivergenceError as err:
+        except DivergenceError as err:
             # Agree on the time of the failed attempt across ranks
             wtime = time.perf_counter() - backend.kernel_setup_wtime - tstart
             wtime = scal_coll(comm.Allreduce, wtime, op=mpi.MAX)
@@ -468,7 +469,7 @@ class BaseImplicitController(BaseImplicitIntegrator):
         self._nfailures += 1
         if self._nfailures > self._max_failures:
             msg = f'Failed {self._nfailures} consecutive times at {dt=:.2e}'
-            raise NonlinearDivergenceError(msg) from err
+            raise DivergenceError(msg) from err
 
         # Rebuild the preconditioner
         self._invalidate_precond()
@@ -483,7 +484,7 @@ class BaseImplicitController(BaseImplicitIntegrator):
                 raise RuntimeError(msg) from err
         else:
             msg = f'{err} at t={self.tcurr:.6g}, {dt=:.2e}'
-            raise NonlinearDivergenceError(msg) from err
+            raise DivergenceError(msg) from err
 
         # Let the time step controller respond to the failure
         self._record_failed_attempt(dt, wtime, retry)

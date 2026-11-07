@@ -82,8 +82,14 @@ class GMRESMixin(BaseLinearSolver):
 
         niters = ncycles = 0
 
-        # Compute initial residual norm and first Krylov vector
-        r0norm = self._norm2(residual)
+        # A zero residual needs no solve
+        if not (r0norm := self._norm2(residual)):
+            if not accumulate:
+                self._add(0, out_reg)
+
+            return 0, 0, 0.0
+
+        # Compute the first Krylov vector
         self._add(0, v[0], -1/r0norm, residual)
         rnorm = r0norm
 
@@ -167,4 +173,4 @@ class GMRESMixin(BaseLinearSolver):
             self._add(0, v[0], 1, v[j + 1])
 
         # Each matvec applies M⁻¹ once; recovery adds one more per cycle
-        return niters, niters + ncycles if precond else 0
+        return niters, niters + ncycles if precond else 0, float(err)

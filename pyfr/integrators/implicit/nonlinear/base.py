@@ -1,37 +1,14 @@
-from collections import namedtuple
 import math
-import time
 
-from pyfr.integrators.implicit.base import BaseImplicitIntegrator
+from pyfr.integrators.implicit.base import (BaseImplicitIntegrator,
+                                            DivergenceError)
 from pyfr.integrators.registers import DynamicScalarRegister, ScalarRegister
-from pyfr.mpiutil import get_comm_rank_root, mpi, scal_coll
-
-
-# Statistics from a nonlinear solve
-SolveStats = namedtuple('SolveStats',
-                        'nonlin_iters precond_apps init_resid final_resid '
-                        'converged stalled nmatvec nretries inner_tol probe',
-                        defaults=('',)*4)
-
-# Solve statistics for a stage along with its cost and preconditioner state
-StageStats = namedtuple('StageStats',
-                        ['stage', *SolveStats._fields, 'nrhs', 'wtime',
-                         'precond_gdt_ratio', 'precond_built',
-                         'precond_wtime', 'precond_nbuilds'])
-
-
-class NonlinearDivergenceError(Exception):
-    pass
 
 
 class BaseNonlinearSolver(BaseImplicitIntegrator):
     nonlinear_name = None
 
-    # Columns of the per-stage statistics
-    stage_stats_fields = StageStats._fields
-
     _nl_resid = ScalarRegister(rhs=False)
-    _nl_temp = ScalarRegister()
     _nl_delta = DynamicScalarRegister(rhs=False, extent='solve')
 
     def __init__(self, backend, systemcls, mesh, initsoln, cfg):
@@ -39,10 +16,8 @@ class BaseNonlinearSolver(BaseImplicitIntegrator):
         b = lambda k, d: cfg.getbool(sect, f'nonlinear-{k}', d)
         f = lambda k, d: cfg.getfloat(sect, f'nonlinear-{k}', d)
         i = lambda k, d: cfg.getint(sect, f'nonlinear-{k}', d)
-        h = lambda k: cfg.hasopt(sect, f'nonlinear-{k}')
 
         self._nl_rtol = f('rtol', 1e-4)
-        self._nl_atol = f('atol', 1e-8)
         self._nl_maxiter = i('max-iter', 10)
 
         # Iterations and per-iteration reduction which define a stall
@@ -62,25 +37,6 @@ class BaseNonlinearSolver(BaseImplicitIntegrator):
             raise ValueError('Nonlinear relative tolerance too small for '
                              'current precision')
 
-        # Get variable names for per-variable tolerances
-        convars = systemcls.elementscls.convars(mesh.ndims, cfg)
-
-        # Check for per-variable atol
-        self._use_weighted_atol = any(h(f'atol-{v}') for v in convars)
-
-        # Build per-variable atol list
-        self._nl_atols = [f(f'atol-{v}', self._nl_atol)
-                              for v in convars]
-
-        # For weighted norm, atol is already baked in
-        if self._use_weighted_atol:
-            self._nl_atol = 1.0
-
-        # Scaling factors for the nonlinear solve
-        min_atol = min(self._nl_atols)
-        self._scales = tuple(a / min_atol for a in self._nl_atols)
-        self._inv_scales = tuple(min_atol / a for a in self._nl_atols)
-
         # Configure the shared line-search globalisation
         self._linesearch = b('linesearch', False)
         if self._linesearch:
@@ -91,9 +47,8 @@ class BaseNonlinearSolver(BaseImplicitIntegrator):
 
         super().__init__(backend, systemcls, mesh, initsoln, cfg)
 
-    def _calc_rnorm(self, r):
-        weights = self._nl_atols if self._use_weighted_atol else ()
-        return self._norm2(r, weights=weights, norm_gndofs=True)
+        # For weighted norms the atol is already baked into the scales
+        self._nl_atol = 1.0 if self._use_weighted_atol else self._solve_atol
 
     def _nl_tol(self, rnorm0):
         return max(rnorm0*self._nl_rtol, self._nl_atol)
@@ -126,11 +81,11 @@ class BaseNonlinearSolver(BaseImplicitIntegrator):
         rnorm_best = math.inf
 
         for _ in range(self._linesearch_maxiter):
-            self._add(0, self._nl_temp, 1, u_reg, alpha, delta_reg,
+            self._add(0, self._solve_temp, 1, u_reg, alpha, delta_reg,
                       in_scale=self._scales, in_scale_idxs=(2,))
 
-            self._rhs(t, self._nl_temp, f_reg)
-            residual_fn(self._nl_temp, f_reg, self._nl_resid)
+            self._rhs(t, self._solve_temp, f_reg)
+            residual_fn(self._solve_temp, f_reg, self._nl_resid)
             rnorm_new = self._calc_rnorm(self._nl_resid)
 
             # Note the best trial step; false for non-finite norms
@@ -144,8 +99,7 @@ class BaseNonlinearSolver(BaseImplicitIntegrator):
         # Failed to satisfy the Armijo condition; take the best finite step
         else:
             if math.isinf(rnorm_best):
-                raise NonlinearDivergenceError('Non-finite residual in line '
-                                               'search')
+                raise DivergenceError('Non-finite residual in line search')
 
             alpha = alpha_best
 
@@ -158,30 +112,9 @@ class BaseNonlinearSolver(BaseImplicitIntegrator):
 
     def _stage_solve(self, stage, t, u_reg, f_reg, residual_fn,
                      initial_guess_fn, gamma_dt):
-        comm, _, _ = get_comm_rank_root()
-        pc = self._preconditioner
-
-        # Note the RHS evaluation and preconditioner build counters
-        nrhs = self.nrhsevals
-        pc_wtime, nbuilds = pc.build_wtime_total, pc.nbuilds
-
         # Run the core solve
-        tstart = time.perf_counter() - self.backend.kernel_setup_wtime
-        stats = self._solve(t, u_reg, f_reg, residual_fn, initial_guess_fn,
-                            gamma_dt)
-        wtime = time.perf_counter() - self.backend.kernel_setup_wtime - tstart
+        def solve_fn():
+            return self._solve(t, u_reg, f_reg, residual_fn,
+                               initial_guess_fn, gamma_dt)
 
-        # Agree on the stage time across ranks
-        wtime = scal_coll(comm.Allreduce, wtime, op=mpi.MAX)
-
-        # Split the time between the solve and any build
-        pc_wtime = pc.build_wtime_total - pc_wtime
-        nrhs = self.nrhsevals - nrhs
-        wtime = max(wtime - pc_wtime, 0.0)
-
-        # Note if the preconditioner was rebuilt and how gamma*dt has drifted
-        precond_built = int(pc.nbuilds > nbuilds)
-        gdt_ratio = gamma_dt / pc.gdt_built if pc.gdt_built else 1.0
-
-        return StageStats(stage, *stats, nrhs, wtime, gdt_ratio,
-                          precond_built, pc_wtime, pc.nbuilds)
+        return self._timed_stage(stage, gamma_dt, solve_fn)

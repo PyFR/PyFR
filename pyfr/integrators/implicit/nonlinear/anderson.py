@@ -2,9 +2,8 @@ import math
 
 import numpy as np
 
-from pyfr.integrators.implicit.nonlinear.base import (BaseNonlinearSolver,
-                                                      NonlinearDivergenceError,
-                                                      SolveStats)
+from pyfr.integrators.implicit.base import DivergenceError, SolveStats
+from pyfr.integrators.implicit.nonlinear.base import BaseNonlinearSolver
 from pyfr.integrators.registers import DynamicVectorRegister, VectorRegister
 
 
@@ -42,7 +41,7 @@ class AndersonSolver(BaseNonlinearSolver):
 
         rnorm = rnorm0 = initial_guess_fn(u_reg)
         if not math.isfinite(rnorm):
-            raise NonlinearDivergenceError('Non-finite residual')
+            raise DivergenceError('Non-finite residual')
 
         self._compute_fd_eps(u_reg)
 
@@ -52,11 +51,11 @@ class AndersonSolver(BaseNonlinearSolver):
 
         # Build the block preconditioner once and freeze it over the stage
         self._compute_precond(t, u_reg, gamma_dt, self._rhs, f_reg,
-                              self._nl_temp, eps_scales=self._scales)
+                              self._solve_temp, eps_scales=self._scales)
 
         for k in range(self._nl_maxiter):
             if not math.isfinite(rnorm):
-                raise NonlinearDivergenceError('Non-finite residual')
+                raise DivergenceError('Non-finite residual')
             if k > 0 and rnorm < tol:
                 break
             # Give up once the residual has grown well beyond its initial value
