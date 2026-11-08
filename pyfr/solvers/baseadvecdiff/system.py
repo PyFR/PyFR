@@ -84,7 +84,7 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
             g_grad_flux.add(l, deps=ldeps)
 
         # Set dependencies for interface flux interpolation
-        ideps = k['eles/gradcoru_fpts'] or k['eles/disf_fused']
+        ideps = k['eles/gradcoru_fpts'] + k['eles/disf_fused']
 
         # Pack and send these interpolated gradients to our neighbours
         g_grad_flux.add_all(k['mpiint/vect_fpts_pack'], deps=ideps)
