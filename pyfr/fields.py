@@ -5,6 +5,7 @@ import numpy as np
 
 from pyfr.bases import get_basis
 from pyfr.cache import memoize
+from pyfr.metrics import MeshMetrics
 from pyfr.mpiutil import (DistributedDirectory, first_coll,
                           get_comm_rank_root)
 from pyfr.nputil import zip_chunks
@@ -273,23 +274,22 @@ class FieldRecovery:
         self.mesh, self.cfg = mesh, cfg
         self.elementscls, self.ndims = elementscls, mesh.ndims
 
-        # Per-etype element containers and nodal transfer operators
-        self.eles, self.gops, self.up2n, self.n2up = {}, {}, {}, {}
+        # Per-etype metric terms and nodal transfer operators
+        self.metrics, self.gops, self.up2n, self.n2up = {}, {}, {}, {}
         cnodemap, divmap, nsvptsmap = {}, {}, {}
         for et in mesh.spts:
             shapecls = subclass_where(BaseShape, name=et)
-            eles = elementscls(shapecls, mesh.spts[et], cfg,
-                               mesh.spts_curved[et])
-            basis = eles.basis
+            basis = shapecls(len(mesh.spts[et]), cfg)
+            metrics = MeshMetrics(basis, mesh.spts[et], mesh.spts_curved[et])
             nodes = shapecls.std_ele(p)
 
             # Gradient operator flattened for BLAS; J^-1 from the smats
             jac = basis.ubasis.jac_nodal_basis_at(basis.upts)
             jacop = jac.swapaxes(1, 2).reshape(-1, basis.nupts)
-            rcpd = eles.rcpdjac_at_np('upts')
-            jinv = eles.smat_at_np('upts')*rcpd[None, :, None, :]
+            rcpd = metrics.rcpdjac_at('upts')
+            jinv = metrics.smat_at('upts')*rcpd[None, :, None, :]
 
-            self.eles[et] = eles
+            self.metrics[et] = metrics
             self.gops[et] = (jacop, jinv)
             nbasis = get_basis(et, p, nodes)
             self.up2n[et] = basis.ubasis.nodal_basis_at(nodes)
@@ -353,12 +353,11 @@ class FieldRecovery:
         kind, vidxs = bcrows
 
         for et, fidx, eidxs in con.items():
-            eles, basis = self.eles[et], self.eles[et].basis
+            metrics, basis = self.metrics[et], self.metrics[et].basis
             fp = basis.facefpts[fidx]
 
             # Unit outward normals at the face flux points
-            _, _, norm = basis.faces[fidx]
-            pn = eles.pnorm_at(basis.fpts[fp], np.tile(norm, (len(fp), 1)))
+            pn = metrics.pnorm_at(basis.fpts[fp], fidx)
             pn = pn[:, eidxs].transpose(2, 0, 1)
             nl = pn / np.linalg.norm(pn, axis=0)
 
@@ -379,7 +378,7 @@ class FieldRecovery:
         # Flux-point jumps between the common values and local states
         out = {}
         for et, f in fmap.items():
-            out[et] = interp_pts(self.eles[et].basis.m0, favg[et] - f)
+            out[et] = interp_pts(self.metrics[et].basis.m0, favg[et] - f)
 
         # Boundaries with known common states refine the deltas
         if bcrows is not None:
@@ -394,7 +393,7 @@ class FieldRecovery:
 
         out = {}
         for et, f in fmap.items():
-            basis = self.eles[et].basis
+            basis = self.metrics[et].basis
             jacop, jinv = self.gops[et]
 
             # Compute the corrected gradients in transformed space

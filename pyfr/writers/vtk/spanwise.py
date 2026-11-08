@@ -5,10 +5,10 @@ import numpy as np
 
 from pyfr.bases import get_basis
 from pyfr.cache import memoize
+from pyfr.metrics import MeshMetrics
 from pyfr.mpiutil import (AlltoallMixin, get_comm_rank_root, home_rank, mpi,
                           scal_coll)
 from pyfr.nputil import fuzzysort, range_offsets, search_unsorted
-from pyfr.plugins.common import get_elementscls
 from pyfr.points import PointLocator
 from pyfr.shapes import BaseShape, interp_pts, proj_pts
 from pyfr.subdiv import get_subdiv
@@ -63,14 +63,14 @@ class ExtrudedSpanwise(_SpanwiseBase, AlltoallMixin):
 
         self.nfields = nfields
 
-        # Geometry-only element containers for the physical face normals
-        ecls = get_elementscls(cfg)
-        eles = {et: ecls(subclass_where(BaseShape, name=et), spts, cfg,
-                         self.pmesh.spts_curved[et])
-                for et, spts in self.pmesh.spts.items()}
+        # Metric terms for the physical face normals
+        metrics = {et: MeshMetrics(shapes[et], spts,
+                                   self.pmesh.spts_curved[et])
+                   for et, spts in self.pmesh.spts.items()}
 
         # Classify the faces of each element by their physical normals
-        self.ends = {et: self._classify_faces(et, e) for et, e in eles.items()}
+        self.ends = {et: self._classify_faces(et, m)
+                     for et, m in metrics.items()}
         bad = any(bad.any() for _, _, bad in self.ends.values())
 
         # The extrusion verdict must be collective for a clean fallback
@@ -88,17 +88,16 @@ class ExtrudedSpanwise(_SpanwiseBase, AlltoallMixin):
         # Pre-compute per-element column ids
         self.col_ids = self._compute_col_ids()
 
-    def _classify_faces(self, et, eles, tol=1e-6):
+    def _classify_faces(self, et, metrics, tol=1e-6):
         b = self.shape[et]
         neles = self.pmesh.spts[et].shape[1]
 
         bot, top = np.full(neles, -1), np.full(neles, -1)
         bad = np.zeros(neles, dtype=bool)
 
-        for fidx, (*_, norm) in enumerate(b.faces):
+        for fidx, fp in enumerate(b.facefpts):
             # Unit physical normals at the flux points of this face
-            fpts = b.fpts[b.facefpts[fidx]]
-            pn = eles.pnorm_at(fpts, np.tile(norm, (len(fpts), 1)))
+            pn = metrics.pnorm_at(b.fpts[fp], fidx)
             d = pn[..., self.axis] / np.linalg.norm(pn, axis=-1)
 
             # A face is an end or a lateral wall at every flux point

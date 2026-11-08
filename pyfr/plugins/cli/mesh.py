@@ -5,13 +5,14 @@ import shutil
 import numpy as np
 
 from pyfr.inifile import Inifile
+from pyfr.metrics import MeshMetrics
 from pyfr.mpiutil import get_comm_rank_root, init_mpi, mpi, scal_coll
 from pyfr.plugins.base import BaseCLIPlugin
 from pyfr.plugins.common import cli_external
 from pyfr.quality import element_metrics, neighbour_size_ratio
 from pyfr.readers.native import NativeReader
 from pyfr.shapes import BaseShape
-from pyfr.util import subclass_where, subclasses, tty
+from pyfr.util import subclasses, tty
 
 
 EleInfo = namedtuple(
@@ -148,8 +149,8 @@ class _MeshAnalyser:
              'n_high_aspect', 'n_curved')
     gmins = ('min_scaled_jac', 'min_curved_scaled_jac')
 
-    def __init__(self, mesh, elementscls, basismap, cfg, jac_thresh,
-                 ar_thresh, sr_thresh=0):
+    def __init__(self, mesh, basismap, cfg, jac_thresh, ar_thresh,
+                 sr_thresh=0):
         self.mesh = mesh
         self.cfg = cfg
         self.order = cfg.getint('solver', 'order')
@@ -164,8 +165,9 @@ class _MeshAnalyser:
 
         for etype, spts in mesh.spts.items():
             curved = mesh.spts_curved[etype]
-            ele = elementscls(basismap[etype], spts, cfg, curved)
-            m = element_metrics(ele)
+            basis = basismap[etype](len(spts), cfg)
+            mm = MeshMetrics(basis, spts, curved)
+            m = element_metrics(mm)
             n_curved = int(np.sum(curved))
 
             # Count issues per element (int cast for JSON serialization)
@@ -176,11 +178,11 @@ class _MeshAnalyser:
             n_ha = int(np.sum(np.any(m.aspect > ar_thresh, axis=0)))
 
             self.etypes[etype] = EleInfo(
-                ele.neles, ele.nupts, ele.nmpts, ele.basis.nsptsord, curved,
+                mm.neles, basis.nupts, mm.nmpts, basis.nsptsord, curved,
                 mesh.eidxs[etype], m, n_inv, n_nan, n_pj, n_ha
             )
 
-            counts = {'n_total': ele.neles, 'n_inverted': n_inv,
+            counts = {'n_total': mm.neles, 'n_inverted': n_inv,
                       'n_nan': n_nan, 'n_poor_scaled_jac': n_pj,
                       'n_high_aspect': n_ha, 'n_curved': n_curved}
 
@@ -505,8 +507,6 @@ class MeshCLIPlugin(BaseCLIPlugin):
 
     @cli_external
     def process_cmd(self, args):
-        from pyfr.solvers.base import BaseSystem
-
         init_mpi()
 
         reader = NativeReader(args.mesh, pname=args.pname,
@@ -518,10 +518,9 @@ class MeshCLIPlugin(BaseCLIPlugin):
             cfg.set('solver', 'order', args.order)
 
         basismap = {b.name: b for b in subclasses(BaseShape, just_leaf=True)}
-        system = subclass_where(BaseSystem, name=cfg.get('solver', 'system'))
 
-        ma = _MeshAnalyser(reader.mesh, system.elementscls, basismap, cfg,
-                           args.jac_thresh, args.ar_thresh, args.nsr_thresh)
+        ma = _MeshAnalyser(reader.mesh, basismap, cfg, args.jac_thresh,
+                           args.ar_thresh, args.nsr_thresh)
 
         if ma.reduce(args.worst):
             if args.json:

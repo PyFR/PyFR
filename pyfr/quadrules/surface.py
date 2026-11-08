@@ -16,12 +16,11 @@ class SurfaceIntegrator:
 
         for etype, fidx, eidxs in con.items():
             eles = elemap[etype]
-            itype, proj, norm = eles.basis.faces[fidx]
+            itype, proj, _ = eles.basis.faces[fidx]
             ppts, pwts = self._surf_quad(itype, proj, flags=flags)
-            nppts = len(ppts)
 
             ploc = eles.ploc_at_np(ppts)[..., eidxs]
-            pnorm = eles.pnorm_at(ppts, [norm]*nppts)[:, eidxs]
+            pnorm = eles.pnorm_at(ppts, fidx)[:, eidxs]
 
             self.m0[etype, fidx] = eles.basis.ubasis.nodal_basis_at(ppts)
             self.qwts[etype, fidx] = pwts

@@ -3,6 +3,7 @@ from functools import cached_property
 
 import numpy as np
 
+from pyfr.metrics import MeshMetrics
 from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where
 
@@ -44,17 +45,12 @@ class BoundaryPostProcData(PostProcData):
         return cls(len(self._spts), self.cfg)
 
     @cached_property
-    def _eles(self):
-        elementscls = self.source.elementscls
-        return elementscls(type(self._shape), self._spts, self.cfg,
-                           self._curved)
+    def _metrics(self):
+        return MeshMetrics(self._shape, self._spts, self._curved)
 
     @cached_property
     def pnorm(self):
-        svpts = self._finfo.svpts
-        norm = self._shape.faces[self._finfo.fidx][2]
-        norm_tiled = np.tile(norm, (len(svpts), 1))
-        pn = self._eles.pnorm_at(svpts, norm_tiled)
+        pn = self._metrics.pnorm_at(self._finfo.svpts, self._finfo.fidx)
 
         return pn.transpose(2, 0, 1)
 

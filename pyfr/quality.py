@@ -2,6 +2,7 @@ from collections import namedtuple
 
 import numpy as np
 
+from pyfr.metrics import MeshMetrics
 from pyfr.mpiutil import autofree, get_comm_rank_root
 from pyfr.shapes import BaseShape
 from pyfr.util import subclasses
@@ -11,11 +12,11 @@ Metrics = namedtuple('Metrics',
                      'djac h aspect scaled_jac jvar vol char_len ploc')
 
 
-def _scaled_jac(ele):
+def _scaled_jac(mm):
     sj = None
 
     for name in ('upts', 'fpts'):
-        jac = ele.jac_at_np(name)
+        jac = mm.jac_at(name)
 
         # Normalise the determinant by the tangent vector norms
         tnorm = np.prod(np.linalg.norm(jac, axis=-1), axis=-1)
@@ -29,14 +30,14 @@ def _scaled_jac(ele):
     return sj
 
 
-def element_metrics(ele):
+def element_metrics(mm):
     # Jacobian determinant at solution points
-    djac = np.linalg.det(ele.jac_at_np('upts'))
+    djac = np.linalg.det(mm.jac_at('upts'))
     with np.errstate(divide='ignore', invalid='ignore'):
         rcpdjac = 1.0 / djac
 
     # Metric terms at solution points
-    smats = ele.smat_at_np('upts')
+    smats = mm.smat_at('upts')
 
     # J^{-1} scaled by 1/det(J)
     jinv = smats * rcpdjac[None, :, None, :]
@@ -50,7 +51,7 @@ def element_metrics(ele):
     aspect = h_max / h_min
 
     # Scaled Jacobian at the solution and flux points
-    scaled_jac = _scaled_jac(ele)
+    scaled_jac = _scaled_jac(mm)
 
     # Variation of the Jacobian determinant within each element
     adjac = np.abs(djac)
@@ -58,14 +59,14 @@ def element_metrics(ele):
         jvar = np.min(adjac, axis=0) / np.max(adjac, axis=0)
 
     # Element volume from the solution point quadrature
-    wts = ele.basis.ubasis.invvdm[:, 0]
+    wts = mm.basis.ubasis.invvdm[:, 0]
     vol = wts.sum() * (wts @ djac)
 
     # Volume-based characteristic length
-    char_len = np.abs(np.mean(djac, axis=0))**(1.0 / ele.ndims)
+    char_len = np.abs(np.mean(djac, axis=0))**(1.0 / mm.ndims)
 
     # Physical locations
-    ploc = ele.ploc_at_np('upts')
+    ploc = mm.ploc_at('upts')
 
     return Metrics(djac, h_min, aspect, scaled_jac, jvar, vol, char_len, ploc)
 
@@ -102,16 +103,13 @@ class MeshQuality:
              'mesh-scale', 'aspect-ratio', 'size-ratio')
 
     def __init__(self, mesh, cfg):
-        from pyfr.plugins.common import get_elementscls
-
-        elementscls = get_elementscls(cfg)
         basismap = {b.name: b for b in subclasses(BaseShape, just_leaf=True)}
 
         self.metrics = {}
         for etype, spts in mesh.spts.items():
-            ele = elementscls(basismap[etype], spts, cfg,
-                              mesh.spts_curved[etype])
-            self.metrics[etype] = element_metrics(ele)
+            basis = basismap[etype](len(spts), cfg)
+            mm = MeshMetrics(basis, spts, mesh.spts_curved[etype])
+            self.metrics[etype] = element_metrics(mm)
 
         char_len = {et: m.char_len for et, m in self.metrics.items()}
         self.nsr = neighbour_size_ratio(mesh, char_len)
