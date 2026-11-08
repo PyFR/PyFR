@@ -20,9 +20,8 @@ class BaseNonlinearSolver(BaseImplicitIntegrator):
         self._nl_rtol = f('rtol', 1e-4)
         self._nl_maxiter = i('max-iter', 10)
 
-        # Iterations and per-iteration reduction which define a stall
-        self._nl_stall_iters = i('stall-iters', 2)
-        self._nl_stall_ratio = f('stall-ratio', 0.5)
+        # Iterations over which the rate of convergence is measured
+        self._nl_stall_iters = i('stall-iters', 3)
 
         # Treat a stalled residual within this factor of the tolerance as met
         self._nl_stall_fact = f('stall-fact', 2.0)
@@ -53,13 +52,20 @@ class BaseNonlinearSolver(BaseImplicitIntegrator):
     def _nl_tol(self, rnorm0):
         return max(rnorm0*self._nl_rtol, self._nl_atol)
 
-    def _nl_stalled(self, rhist, rnorm):
+    def _nl_stalled(self, rhist, rnorm, tol, nleft):
         # A stall is little progress over the last few iterations
-        if len(rhist) < self._nl_stall_iters:
+        n = self._nl_stall_iters
+        if len(rhist) < n:
             return False
         else:
-            ref = rhist[-self._nl_stall_iters]
-            return rnorm > self._nl_stall_ratio**self._nl_stall_iters*ref
+            # Rate of convergence over the window
+            rate = (rnorm / rhist[-n])**(1 / n)
+            if rate >= 1:
+                return True
+            else:
+                # Stalled if the iterations left can not reach the tolerance
+                need = math.log(rnorm / tol) / -math.log(rate)
+                return need > nleft
 
     def _nl_diverged(self, rnorm_init, rnorm):
         return rnorm > self._nl_diverge_fact*rnorm_init

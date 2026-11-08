@@ -43,13 +43,16 @@ Parameterised with
 
    Each row records, for one stage of one step, the nonlinear
    iteration count, residual norms and convergence status; the Krylov
-   tolerance, retries, matrix-vector products and preconditioner
-   applications; the right-hand side evaluations of the stage and the
-   wall time of the solve; and the state of the preconditioner,
-   including whether it was built during the stage, the wall time of
-   that build, and the drift of :math:`\gamma \Delta t` since it was
-   built.  Columns which do not
-   apply to the nonlinear solver in use are left empty.
+   tolerance, matrix-vector products and preconditioner applications;
+   the retries of the solve, at a tighter Krylov tolerance for Newton
+   or with a refreshed preconditioner for Anderson; the right-hand
+   side evaluations of the stage and the wall time of the solve,
+   excluding any scheduled preconditioner build but including one
+   forced by a retry; and the state of the preconditioner, including
+   whether it was built on schedule during the stage, the wall time
+   of any build, and the drift of :math:`\gamma \Delta t` since it
+   was built.  Columns which do not apply to the nonlinear solver in
+   use are left empty.
 
 Example:
 

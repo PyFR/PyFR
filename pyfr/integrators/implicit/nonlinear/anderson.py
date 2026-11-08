@@ -45,26 +45,39 @@ class AndersonSolver(BaseNonlinearSolver):
 
         self._compute_fd_eps(u_reg)
 
-        niters = nprec = 0
+        niters = nprec = nretries = 0
         tol = self._nl_tol(rnorm)
         rhist = []
 
         # Build the block preconditioner once and freeze it over the stage
+        nbuilds = self._preconditioner.nbuilds
         self._compute_precond(t, u_reg, gamma_dt, self._rhs, f_reg,
                               self._solve_temp, eps_scales=self._scales)
 
-        for k in range(self._nl_maxiter):
+        # Iteration count and budget since the preconditioner was built
+        k, nleft = 0, self._nl_maxiter
+
+        while nleft:
             if not math.isfinite(rnorm):
                 raise DivergenceError('Non-finite residual')
-            if k > 0 and rnorm < tol:
+            if niters > 0 and rnorm < tol:
                 break
             # Give up once the residual has grown well beyond its initial value
             elif self._nl_diverged(rnorm0, rnorm):
                 break
             # Stop at a stalled residual; near the tolerance it has converged
-            elif self._nl_stalled(rhist, rnorm):
-                tol *= self._nl_stall_fact
-                break
+            elif self._nl_stalled(rhist, rnorm, tol, nleft):
+                # Retry with a fresh build if the preconditioner is older
+                if self._preconditioner.nbuilds == nbuilds:
+                    self._refresh_precond(t, u_reg, gamma_dt, self._rhs,
+                                          f_reg, self._solve_temp,
+                                          eps_scales=self._scales)
+                    nretries += 1
+                    rhist.clear()
+                    k, nleft = 0, self._nl_maxiter
+                else:
+                    tol *= self._nl_stall_fact
+                    break
 
             rhist.append(rnorm)
 
@@ -112,8 +125,12 @@ class AndersonSolver(BaseNonlinearSolver):
                 rnorm = self._residual_norm(t, u_reg, f_reg, residual_fn)
 
             niters += 1
+            k += 1
+            nleft -= 1
 
         converged, stalled = self._nl_outcome(rnorm0, rnorm, tol)
 
-        return SolveStats(niters, nprec, rnorm0, rnorm, int(converged),
-                          int(stalled))
+        return SolveStats(nonlin_iters=niters, precond_apps=nprec,
+                          init_resid=rnorm0, final_resid=rnorm,
+                          converged=int(converged), stalled=int(stalled),
+                          nretries=nretries)

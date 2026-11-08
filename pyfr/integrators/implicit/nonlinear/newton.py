@@ -46,7 +46,7 @@ class NewtonSolver(BaseNonlinearSolver):
             elif self._nl_diverged(rnorm_init, rnorm):
                 break
             # Stop at a stalled residual; near the tolerance it has converged
-            elif self._nl_stalled(rhist, rnorm):
+            elif self._nl_stalled(rhist, rnorm, tol, self._nl_maxiter - i):
                 tol *= self._nl_stall_fact
                 break
 

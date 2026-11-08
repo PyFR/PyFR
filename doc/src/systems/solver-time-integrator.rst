@@ -452,7 +452,8 @@ Preconditioner Options
     its value at the build.
 
 #. ``precond-check-interval`` --- number of accepted steps at the
-   incumbent Krylov tolerance in each preconditioner monitoring window
+   incumbent Krylov tolerance which set the baseline for preconditioner
+   drift
 
     *int* (default: 50)
 
@@ -544,22 +545,17 @@ Nonlinear Solver Options
 
     *float* (default: 2.0)
 
-    The solve stops once the residual has fallen by less than
-    ``nonlinear-stall-ratio`` per iteration over the last
-    ``nonlinear-stall-iters`` iterations, as happens at the
+    The solve stops once the rate of convergence over the last
+    ``nonlinear-stall-iters`` iterations can not reach the tolerance
+    within the remaining iterations, as happens at the
     finite-difference noise floor.  A stalled residual within this
     factor of the tolerance is deemed converged; otherwise the step
     is abandoned as described under ``controller``.
 
 #. ``nonlinear-stall-iters`` --- number of iterations over which
-   progress is assessed when detecting a stall
+   the rate of convergence is measured when detecting a stall
 
-    *int* (default: 2)
-
-#. ``nonlinear-stall-ratio`` --- per-iteration residual reduction
-   below which progress counts as stalled
-
-    *float* (default: 0.5)
+    *int* (default: 3)
 
 #. ``nonlinear-diverge-fact`` --- growth of the residual relative to
    the initial guess at which a solve is deemed to have diverged

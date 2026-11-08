@@ -30,40 +30,27 @@ class PrecondDriftMonitor:
             self._reset()
             return False
 
-        # Accumulate the preconditioner applications and wall time of the step
-        self._napps += napps
-        self._wtime += wtime
-        self._nsteps += 1
-
-        # Check for drift at the end of each window
-        if self._nsteps == self._interval:
-            return self._check(build_wtime)
-        else:
-            return False
-
-    def _check(self, build_wtime):
-        # Collect the preconditioner applications and wall time of the window
-        napps, wtime, nsteps = self._napps, self._wtime, self._nsteps
-        self._napps, self._wtime, self._nsteps = 0, 0.0, 0
-
-        # No preconditioner work accumulated this window
-        if not napps:
-            return False
-
-        # Mean preconditioner applications per step
-        mean_apps = napps / nsteps
-
         # Take the first window after a build as the baseline
         if self._baseline is None:
-            self._baseline = mean_apps
+            # Accumulate the preconditioner applications and wall time
+            self._napps += napps
+            self._wtime += wtime
+            self._nsteps += 1
+
+            # Mean preconditioner applications per step
+            if self._nsteps >= self._interval and self._napps:
+                self._baseline = self._napps / self._nsteps
+
             return False
         # Otherwise accumulate the wall time spent on excess applications
-        else:
-            excess = self._excess + (1 - self._baseline / mean_apps)*wtime
+        elif napps:
+            excess = self._excess + (1 - self._baseline / napps)*wtime
             self._excess = max(excess, 0.0)
 
             # Rebuild once the drift has cost more wall time than a build
             return self._excess > build_wtime
+        else:
+            return False
 
 
 class ThroughputLimitMixin:

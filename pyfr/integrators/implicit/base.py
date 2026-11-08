@@ -156,6 +156,9 @@ class BaseImplicitIntegrator(BaseIntegrator):
             pcdtype=self._pcdtype
         )
 
+        # Count the builds forced by the nonlinear solver mid-stage
+        self._nprecond_refresh = 0
+
     def _post_commit(self):
         self._preconditioner.init_kernels()
 
@@ -234,6 +237,7 @@ class BaseImplicitIntegrator(BaseIntegrator):
         # Note the RHS evaluation and preconditioner build counters
         nrhs = self.nrhsevals
         pc_wtime, nbuilds = pc.build_wtime_total, pc.nbuilds
+        nrefresh = self._nprecond_refresh
 
         # Run the core solve
         tstart = time.perf_counter() - self.backend.kernel_setup_wtime
@@ -243,14 +247,18 @@ class BaseImplicitIntegrator(BaseIntegrator):
         # Agree on the stage time across ranks
         wtime = scal_coll(comm.Allreduce, wtime, op=mpi.MAX)
 
-        # Split the time between the solve and any build
+        # Charge a build the solver forced mid-stage to the solve itself
+        refreshed = self._nprecond_refresh > nrefresh
+
+        # Split the time between the solve and any scheduled build
         pc_wtime = pc.build_wtime_total - pc_wtime
         nrhs = self.nrhsevals - nrhs
-        wtime = max(wtime - pc_wtime, 0.0)
+        if not refreshed:
+            wtime = max(wtime - pc_wtime, 0.0)
 
         # Note if the preconditioner was rebuilt and how gamma*dt has drifted
-        precond_built = int(pc.nbuilds > nbuilds)
-        gdt_ratio = gamma_dt / pc.gdt_built if pc.gdt_built else 1.0
+        precond_built = int(pc.nbuilds > nbuilds and not refreshed)
+        gdt_ratio = gamma_dt / pc.gdt_built if pc.gdt_built > 0 else 1.0
 
         # Inform the tolerance controller unless a build inflated the time
         if self.requires_linear_solver and not precond_built:
@@ -277,6 +285,12 @@ class BaseImplicitIntegrator(BaseIntegrator):
             t, u_reg, gamma_dt, rhs_fn, f0_reg, up_reg, self._add,
             self._precond_temp, eps_scales=eps_scales
         )
+
+    def _refresh_precond(self, *args, **kwargs):
+        # Rebuild the preconditioner about the current iterate of a stage
+        self._invalidate_precond()
+        self._compute_precond(*args, **kwargs)
+        self._nprecond_refresh += 1
 
     def _apply_precond(self, in_reg, out_reg, in_scale=(), out_scale=()):
         kerns = self._get_precond_kerns(in_reg, out_reg,
