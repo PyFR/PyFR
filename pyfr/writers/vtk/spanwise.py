@@ -3,13 +3,13 @@ from collections import defaultdict, namedtuple
 
 import numpy as np
 
+from pyfr.bases import get_basis
 from pyfr.cache import memoize
 from pyfr.mpiutil import (AlltoallMixin, get_comm_rank_root, home_rank, mpi,
                           scal_coll)
 from pyfr.nputil import fuzzysort, range_offsets, search_unsorted
 from pyfr.plugins.common import get_elementscls
 from pyfr.points import PointLocator
-from pyfr.polys import get_polybasis
 from pyfr.shapes import BaseShape, interp_pts, proj_pts
 from pyfr.subdiv import get_subdiv
 from pyfr.util import subclass_where
@@ -37,7 +37,7 @@ class _SpanwiseBase:
 
     @memoize
     def _vis_op(self, itype):
-        basis = get_polybasis(itype, self.order, self._sample_pts_2d(itype))
+        basis = get_basis(itype, self.order, self._sample_pts_2d(itype))
         return basis.nodal_basis_at(self.vis_pts_2d[itype])
 
     def span_extent(self):
@@ -147,7 +147,7 @@ class ExtrudedSpanwise(_SpanwiseBase, AlltoallMixin):
 
         # Fused interpolation + span-averaging operator
         eqop = shape.ubasis.nodal_basis_at(eq3d)
-        swts = 0.5*2**0.5*get_polybasis('line', self.order, pts1d).invvdm[:, 0]
+        swts = 0.5*2**0.5*get_basis('line', self.order, pts1d).invvdm[:, 0]
         spanop = (swts @ eqop.reshape(len(pts1d), -1)).reshape(len(pts2d), -1)
 
         # Footprint geometry and sample point placement operators
@@ -167,7 +167,7 @@ class ExtrudedSpanwise(_SpanwiseBase, AlltoallMixin):
         ishapecls = subclass_where(BaseShape, name=itype)
         spts2d = ishapecls.std_ele(sptord)
 
-        basis = get_polybasis(itype, sptord, spts2d)
+        basis = get_basis(itype, sptord, spts2d)
         return basis.nodal_basis_at(self.vis_pts_2d[itype])
 
     def average(self, soln):

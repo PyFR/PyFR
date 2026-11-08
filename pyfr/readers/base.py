@@ -6,9 +6,9 @@ import h5py
 import numpy as np
 
 from pyfr._version import __version__
+from pyfr.bases import get_basis
 from pyfr.nputil import iter_struct, fuzzysort, range_offsets
 from pyfr.partitioners.renumber import ElementRenumberer
-from pyfr.polys import get_polybasis
 from pyfr.progress import NullProgressSequence, NullProgressSpinner
 from pyfr.readers.reorient import ElementReorienter
 from pyfr.shapes import BaseShape
@@ -488,11 +488,11 @@ class NodalMeshAssembler:
             # Construct the element array
             eles = nodepts[elesix].swapaxes(0, 1)
 
-            # Generate the associated polynomial bases
+            # Generate the high-order and linear nodal bases of the shape
             shape = subclass_where(BaseShape, name=petype)
             order = shape.order_from_npts(nnodes)
-            hbasis = get_polybasis(petype, order, shape.std_ele(order))
-            lbasis = get_polybasis(petype, 1, shape.std_ele(1))
+            hbasis = get_basis(petype, order, shape.std_ele(order))
+            lbasis = get_basis(petype, 1, shape.std_ele(1))
 
             htol = hbasis.nodal_basis_at(lbasis.pts)
             ltoh = lbasis.nodal_basis_at(hbasis.pts)

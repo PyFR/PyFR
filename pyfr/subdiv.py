@@ -1,7 +1,7 @@
 import numpy as np
 
+from pyfr.bases import get_basis
 from pyfr.cache import memoize
-from pyfr.polys import get_polybasis
 from pyfr.shapes import BaseShape, LineShape, QuadShape, TriShape, proj_pts
 from pyfr.util import subclass_where
 
@@ -160,7 +160,7 @@ class BaseSubDiv:
         flpts = fshape.std_ele(1)
 
         # Identify linear vertices on the face
-        basis = get_polybasis(kind, 1, flpts)
+        basis = get_basis(kind, 1, flpts)
         op = basis.nodal_basis_at(fhpts)
         supp = [tuple(np.flatnonzero(r)) for r in np.abs(op) > 1e-12]
 

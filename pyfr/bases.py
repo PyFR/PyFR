@@ -38,11 +38,11 @@ def jacobi_diff(n, a, b, z):
     return dj
 
 
-def get_polybasis(name, order, pts=[]):
-    return subclass_where(BasePolyBasis, name=name)(order, pts)
+def get_basis(name, order, pts=[]):
+    return subclass_where(ElementBasis, name=name)(order, pts)
 
 
-class BasePolyBasis:
+class ElementBasis:
     name = None
 
     def __init__(self, order, pts):
@@ -93,7 +93,7 @@ class BasePolyBasis:
         return np.linalg.inv(self.vdm)
 
 
-class LinePolyBasis(BasePolyBasis):
+class LineBasis(ElementBasis):
     name = 'line'
 
     def _ortho_basis_at(self, p):
@@ -109,7 +109,7 @@ class LinePolyBasis(BasePolyBasis):
         return [(i,) for i in range(self.order + 1)]
 
 
-class TriPolyBasis(BasePolyBasis):
+class TriBasis(ElementBasis):
     name = 'tri'
 
     def _ortho_basis_at(self, p, q):
@@ -160,7 +160,7 @@ class TriPolyBasis(BasePolyBasis):
                 for j in range(self.order - i + 1)]
 
 
-class QuadPolyBasis(BasePolyBasis):
+class QuadBasis(ElementBasis):
     name = 'quad'
 
     def _ortho_basis_at(self, p, q):
@@ -189,7 +189,7 @@ class QuadPolyBasis(BasePolyBasis):
                 for j in range(self.order + 1)]
 
 
-class TetPolyBasis(BasePolyBasis):
+class TetBasis(ElementBasis):
     name = 'tet'
 
     def _ortho_basis_at(self, p, q, r):
@@ -266,7 +266,7 @@ class TetPolyBasis(BasePolyBasis):
                 for k in range(self.order - i - j + 1)]
 
 
-class PriPolyBasis(BasePolyBasis):
+class PriBasis(ElementBasis):
     name = 'pri'
 
     def _ortho_basis_at(self, p, q, r):
@@ -329,7 +329,7 @@ class PriPolyBasis(BasePolyBasis):
                 for k in range(self.order + 1)]
 
 
-class PyrPolyBasis(BasePolyBasis):
+class PyrBasis(ElementBasis):
     name = 'pyr'
 
     def _ortho_basis_at(self, p, q, r):
@@ -399,7 +399,7 @@ class PyrPolyBasis(BasePolyBasis):
                 for k in range(self.order - max(i, j) + 1)]
 
 
-class HexPolyBasis(BasePolyBasis):
+class HexBasis(ElementBasis):
     name = 'hex'
 
     def _ortho_basis_at(self, p, q, r):

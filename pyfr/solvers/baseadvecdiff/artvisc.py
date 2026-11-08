@@ -2,8 +2,8 @@ from weakref import WeakKeyDictionary
 
 import numpy as np
 
+from pyfr.bases import get_basis
 from pyfr.mpiutil import autofree, get_comm_rank_root
-from pyfr.polys import get_polybasis
 from pyfr.solvers.base.elements import ExportableField
 from pyfr.solvers.baseadvec.shockcapturing import BaseShockCapturing
 
@@ -174,7 +174,7 @@ class ArtificialViscosity(BaseShockCapturing):
         ubdegs = eles.basis.ubasis.degrees
         uborder = eles.basis.ubasis.order
 
-        lubdegs = get_polybasis(ubname, max(0, uborder - 1)).degrees
+        lubdegs = get_basis(ubname, max(0, uborder - 1)).degrees
         ind_modes = [d not in lubdegs for d in ubdegs]
 
         mode_degs = [max(d) for d in ubdegs]

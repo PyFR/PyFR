@@ -4,8 +4,8 @@ import re
 
 import numpy as np
 
+from pyfr.bases import get_basis
 from pyfr.nputil import block_diag, clean
-from pyfr.polys import get_polybasis
 from pyfr.quadrules import get_quadrule
 from pyfr.util import subclass_where
 
@@ -51,11 +51,11 @@ class BaseShape:
         if self.antialias - {'flux', 'surf-flux'}:
             raise ValueError('Invalid anti-alias options')
 
-        self.ubasis = get_polybasis(self.name, self.order, self.upts)
+        self.ubasis = get_basis(self.name, self.order, self.upts)
 
         if nspts:
             self.nsptsord = nsptord = self.order_from_npts(nspts)
-            self.sbasis = get_polybasis(self.name, nsptord, self.spts)
+            self.sbasis = get_basis(self.name, nsptord, self.spts)
 
             # Basis for free-stream metric
             # We need p-th order pseudo grid points, which includes
@@ -64,8 +64,8 @@ class BaseShape:
             # on the both adjacent cells.
             # Ref. 1 JCP 281, 28-54, Sec 4.2
             # Ref. 2 JSC 26(3), 301-327, Definition 1
-            self.mbasis = get_polybasis(self.name, max(self.order, 1),
-                                        self.mpts)
+            self.mbasis = get_basis(self.name, max(self.order, 1),
+                                    self.mpts)
 
     @classmethod
     def npts_from_order(cls, sptord):
@@ -301,7 +301,7 @@ class BaseShape:
 
     @cached_property
     def lbasis(self):
-        return get_polybasis(self.name, 1, self.linspts)
+        return get_basis(self.name, 1, self.linspts)
 
     @cached_property
     def facebases(self):
@@ -313,7 +313,7 @@ class BaseShape:
 
             pts = get_quadrule(kind, rule, npts).pts
 
-            fb[kind] = get_polybasis(kind, self.order, pts)
+            fb[kind] = get_basis(kind, self.order, pts)
 
         return fb
 

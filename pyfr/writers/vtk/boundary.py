@@ -2,9 +2,9 @@ from collections import defaultdict
 
 import numpy as np
 
+from pyfr.bases import get_basis
 from pyfr.cache import memoize
 from pyfr.plugins.postproc import FaceInfo
-from pyfr.polys import get_polybasis
 from pyfr.shapes import BaseShape, interp_pts, proj_pts
 from pyfr.subdiv import get_subdiv
 from pyfr.util import expand_braces, subclass_where
@@ -69,7 +69,7 @@ class VTKBoundaryWriter(BaseVTKWriter):
 
         # Linear basis for P1 vertex data
         linspts = subclass_where(BaseShape, name=etype).std_ele(1)
-        lbasis = get_polybasis(etype, 1, linspts)
+        lbasis = get_basis(etype, 1, linspts)
         lin_op = lbasis.nodal_basis_at(svpts)
 
         finfo = FaceInfo(etype, fidx, svpts)

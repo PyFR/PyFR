@@ -3,11 +3,11 @@ from functools import partial
 
 import numpy as np
 
+from pyfr.bases import get_basis
 from pyfr.cache import memoize
 from pyfr.mpiutil import (DistributedDirectory, first_coll,
                           get_comm_rank_root)
 from pyfr.nputil import zip_chunks
-from pyfr.polys import get_polybasis
 from pyfr.readers.native import group_names
 from pyfr.shapes import BaseShape, interp_pts
 from pyfr.subdiv import get_subdiv
@@ -291,7 +291,7 @@ class FieldRecovery:
 
             self.eles[et] = eles
             self.gops[et] = (jacop, jinv)
-            nbasis = get_polybasis(et, p, nodes)
+            nbasis = get_basis(et, p, nodes)
             self.up2n[et] = basis.ubasis.nodal_basis_at(nodes)
             self.n2up[et] = nbasis.nodal_basis_at(basis.upts)
 

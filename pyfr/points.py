@@ -4,9 +4,9 @@ from functools import partial
 from boostree import RTree
 import numpy as np
 
+from pyfr.bases import get_basis
 from pyfr.cache import memoize
 from pyfr.mpiutil import autofree, get_comm_rank_root, get_start_end_csize, mpi
-from pyfr.polys import get_polybasis
 from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where
 
@@ -115,8 +115,8 @@ class PointLocator:
         hpts = shape.std_ele(order)
         lpts = shape.std_ele(1)
 
-        sbasis = get_polybasis(etype, order, hpts)
-        lbasis = get_polybasis(etype, 1, lpts)
+        sbasis = get_basis(etype, order, hpts)
+        lbasis = get_basis(etype, 1, lpts)
 
         lidx = np.argmin(np.linalg.norm(hpts[:, None] - lpts[None], axis=-1),
                          axis=0)

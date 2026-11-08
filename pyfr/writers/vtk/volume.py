@@ -1,7 +1,7 @@
 import numpy as np
 
+from pyfr.bases import get_basis
 from pyfr.cache import memoize
-from pyfr.polys import get_polybasis
 from pyfr.shapes import BaseShape, interp_pts
 from pyfr.subdiv import get_subdiv
 from pyfr.util import subclass_where
@@ -45,7 +45,7 @@ class BaseVolumeVTKWriter(BaseVTKWriter):
 
         # Shape point basis
         sord = self._spts_order(etype)
-        sbasis = get_polybasis(etype, sord, shapecls.std_ele(sord))
+        sbasis = get_basis(etype, sord, shapecls.std_ele(sord))
 
         return sbasis.nodal_basis_at(self._svpts(etype))
 
@@ -74,7 +74,7 @@ class VTKVolumeWriter(BaseVolumeVTKWriter):
 
         # Linear basis for vertex data
         linspts = shapecls.std_ele(1)
-        lbasis = get_polybasis(etype, 1, linspts)
+        lbasis = get_basis(etype, 1, linspts)
         lin_op = lbasis.nodal_basis_at(svpts)
 
         return soln_op, lin_op

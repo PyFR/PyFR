@@ -1,8 +1,8 @@
 import numpy as np
 
+from pyfr.bases import TriBasis
 from pyfr.mpiutil import get_comm_rank_root
 from pyfr.points import PointLocator, PointSampler
-from pyfr.polys import TriPolyBasis
 from pyfr.shapes import interp_pts, TriShape
 from pyfr.util import first
 from pyfr.writers.vtk.base import BaseVTKWriter
@@ -222,7 +222,7 @@ class VTKSTLWriter(BaseVTKWriter):
         return pts, svars, None, {}, pointf
 
     def _subdivide_pts(self, stl, order, subdiv):
-        basis = TriPolyBasis(1, TriShape.std_ele(1))
+        basis = TriBasis(1, TriShape.std_ele(1))
         op = basis.nodal_basis_at(TriShape.std_ele(order))
 
         # Flat linear subdivision
