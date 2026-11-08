@@ -1,10 +1,9 @@
 <%inherit file='base'/>
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
-<%include file='pyfr.solvers.baseadvec.kernels.smats'/>
-<%include file='pyfr.solvers.baseadvecdiff.kernels.artvisc'/>
-<%include file='pyfr.solvers.baseadvecdiff.kernels.transform_grad'/>
-<%include file='pyfr.solvers.euler.kernels.flux'/>
-<%include file='pyfr.solvers.navstokes.kernels.flux'/>
+<%include file='pyfr.solvers.baseadvec.kernels.macros.smats'/>
+<%include file='pyfr.solvers.baseadvecdiff.kernels.macros.artvisc'/>
+<%include file='pyfr.solvers.baseadvecdiff.kernels.macros.transform_grad'/>
+<%include file='pyfr.solvers.navstokes.kernels.macros.flux'/>
 
 <% gradu = 'gradu' if 'fused' in ktype else 'f' %>
 <% smats = 'smats_l' if 'linear' in ktype else 'smats' %>
@@ -33,9 +32,7 @@
 
     // Compute the flux (F = Fi + Fv)
     fpdtype_t ftemp[${ndims}][${nvars}];
-    fpdtype_t p, v[${ndims}];
-    ${pyfr.expand('inviscid_flux', 'u', 'ftemp', 'p', 'v')};
-    ${pyfr.expand('viscous_flux_add', 'u', gradu, 'ftemp')};
+    ${pyfr.expand('flux', 'u', gradu, 'ftemp')};
 % if shock_capturing == 'artificial-viscosity':
     fpdtype_t artvisc;
     ${pyfr.expand('interp_artvisc', 'artvisc_vtx', 'upts', 'artvisc')};

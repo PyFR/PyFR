@@ -6,7 +6,7 @@ from pyfr.solvers.baseadvec import BaseAdvectionElements
 
 
 class BaseFluidElements:
-    eos_kernel_module = 'pyfr.solvers.euler.kernels.eos'
+    eos_kernel_module = 'pyfr.solvers.euler.kernels.macros.eos'
 
     @staticmethod
     def privars(ndims, cfg):

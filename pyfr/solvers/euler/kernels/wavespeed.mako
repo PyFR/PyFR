@@ -1,7 +1,7 @@
 <%inherit file='base'/>
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
-<%include file='pyfr.solvers.baseadvec.kernels.smats'/>
-<%include file='pyfr.solvers.euler.kernels.eos'/>
+<%include file='pyfr.solvers.baseadvec.kernels.macros.smats'/>
+<%include file='pyfr.solvers.euler.kernels.macros.eos'/>
 
 <% smats = 'smats_l' if 'linear' in ktype else 'smats' %>
 <% rcpdjac_v = 'rcpdjac_l' if 'linear' in ktype else 'rcpdjac' %>

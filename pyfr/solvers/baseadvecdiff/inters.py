@@ -20,6 +20,10 @@ class BaseAdvectionDiffusionIntInters(BaseAdvectionIntInters):
         # Additional kernel constants
         self.c |= cfg.items_as('solver-interfaces', float)
 
+        # Own-side (lhs, rhs) weights of the LDG common solution
+        beta = self.c['ldg-beta']
+        self.c['ldg-cl'], self.c['ldg-cr'] = 0.5 - beta, 0.5 + beta
+
     def _gen_perm(self, lhs, rhs, scal):
         # In the special case of β = -0.5 it is better to sort by the
         # RHS interface; otherwise we simply opt for the LHS
@@ -56,6 +60,10 @@ class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
             self.c['ldg-beta'] *= 1.0 if rank > rhsrank else -1.0
         else:
             self.c['ldg-beta'] *= 1.0 if rhsrank > rank else -1.0
+
+        # Own-side (lhs, rhs) weights of the LDG common solution
+        beta = self.c['ldg-beta']
+        self.c['ldg-cl'], self.c['ldg-cr'] = 0.5 - beta, 0.5 + beta
 
         # Artificial viscosity (populated by ArtificialViscosity if active)
         self.artvisc = None

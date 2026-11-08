@@ -1,8 +1,8 @@
 <%inherit file='base'/>
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
-<%include file='pyfr.solvers.baseadvec.kernels.transform'/>
-<%include file='pyfr.solvers.euler.kernels.rsolvers.${rsolver}'/>
+<%include file='pyfr.solvers.baseadvec.kernels.macros.transform'/>
+<%include file='pyfr.solvers.euler.kernels.macros.cflux'/>
 
 <%pyfr:kernel name='intcflux' ndim='1'
               ul='inout view fpdtype_t[${str(nvars)}]'
@@ -18,9 +18,9 @@
     ${pyfr.expand('rotate', 'rmat', 'url', off=1, transpose=True)};
 % endif
 
-    // Perform the Riemann solve
+    // Compute the common normal flux
     fpdtype_t fn[${nvars}];
-    ${pyfr.expand('rsolve', 'ul', 'url' if rperiodic else 'ur', 'norm_nl', 'fn')};
+    ${pyfr.expand('cflux', 'ul', 'url' if rperiodic else 'ur', 'norm_nl', 'fn')};
 
     // Scale and write out the common normal fluxes
 % for i in range(nvars):

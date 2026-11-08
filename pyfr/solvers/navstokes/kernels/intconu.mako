@@ -1,6 +1,6 @@
 <%inherit file='base'/>
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
-<%include file='pyfr.solvers.baseadvec.kernels.transform'/>
+<%include file='pyfr.solvers.baseadvec.kernels.macros.transform'/>
 
 <% beta = c['ldg-beta'] %>
 

@@ -1,7 +1,7 @@
 <%inherit file='base'/>
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
-<%include file='pyfr.solvers.navstokes.kernels.bcs.${bctype}'/>
+<%include file='pyfr.solvers.navstokes.kernels.macros.bcs.${bctype}'/>
 
 <%pyfr:kernel name='bcconu' ndim='1'
               ulin='in view fpdtype_t[${str(nvars)}]'
