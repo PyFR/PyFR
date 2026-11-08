@@ -49,7 +49,6 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
             'nverts': len(self.basis.linspts),
             'c': self.cfg.items_as('constants', float),
             'jac_exprs': self.basis.jac_exprs,
-            'interp_expr': self.basis.interp_expr,
             'visc_corr': visc_corr
         }
 
@@ -87,7 +86,7 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
             else:
                 kw['verts'] = self.ploc_at('linspts', 'linear')
 
-            # Reference point coordinates (for linear smats and AV interp)
+            # Reference point coordinates for the linear smats
             kw['upts'] = getattr(self, pts)
 
             if has_uin:

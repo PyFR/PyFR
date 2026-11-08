@@ -88,7 +88,7 @@ class ArtificialViscosity(BaseShockCapturing):
         self.artvisc_fpts[etype] = artvisc_fpts
 
         # Linear interpolation basis for vertex → point interpolation
-        linbasis = get_polybasis(basis.name, 1, basis.linspts)
+        linbasis = basis.lbasis
 
         # Build vertex views (full view + per-region views)
         vtx_view = self._setup_vtx_views(etype, eles, mesh, nverts, vnodes)
@@ -260,7 +260,9 @@ class ArtificialViscosity(BaseShockCapturing):
 
     # Shock capturing interface
     def flux_args(self, eles, rgn, pts):
-        return {'artvisc_vtx': self._vtx_views[eles.name][rgn]}
+        # Vertex values and their interpolation operator to these points
+        return {'artvisc_vtx': self._vtx_views[eles.name][rgn],
+                'avop': eles.vtx_interp_at(pts)}
 
     def comm_flux_args(self, inters):
         return {'artvisc': self._inters_views[inters]}

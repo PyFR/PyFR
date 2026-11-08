@@ -380,6 +380,11 @@ class BaseElements:
     def ploc_at(self, name):
         return self._be.const_matrix(self.ploc_at_np(name), tags={'align'})
 
+    @memoize
+    def vtx_interp_at(self, name):
+        op = self.basis.lbasis.nodal_basis_at(getattr(self.basis, name))
+        return self._be.const_matrix(op, tags={'align'})
+
     @cached_property
     def upts(self):
         return self._be.const_matrix(self.basis.upts)

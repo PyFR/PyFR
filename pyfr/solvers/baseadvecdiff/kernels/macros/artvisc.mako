@@ -1,8 +1,8 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
-<%pyfr:macro name='interp_artvisc' params='V, x, av'>
+<%pyfr:macro name='interp_artvisc' params='V, avop, av'>
 % if shock_capturing == 'artificial-viscosity':
-    av = ${interp_expr};
+    av = ${' + '.join(f'avop[{i}]*V[{i}]' for i in range(nverts))};
 % else:
     av = 0;
 % endif

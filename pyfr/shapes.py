@@ -300,6 +300,10 @@ class BaseShape:
         return self.std_ele(1)
 
     @cached_property
+    def lbasis(self):
+        return get_polybasis(self.name, 1, self.linspts)
+
+    @cached_property
     def facebases(self):
         fb = {}
 
@@ -401,12 +405,6 @@ class QuadShape(TensorProdShape, BaseShape):
          ' (x[0] - 1)*V[0][1] + (x[0] + 1)*V[3][1])/4']
     ]
 
-    # Interpolation expression for a linear element
-    interp_expr = ('((1 - x[0])*(1 - x[1])*V[0] +'
-                   ' (1 + x[0])*(1 - x[1])*V[1] +'
-                   ' (1 - x[0])*(1 + x[1])*V[2] +'
-                   ' (1 + x[0])*(1 + x[1])*V[3])/4')
-
 
 class HexShape(TensorProdShape, BaseShape):
     name = 'hex'
@@ -457,16 +455,6 @@ class HexShape(TensorProdShape, BaseShape):
          for i in range(3)]
     ]
 
-    # Interpolation expression for a linear element
-    interp_expr = ('((1 - x[0])*(1 - x[1])*(1 - x[2])*V[0] +'
-                   ' (1 + x[0])*(1 - x[1])*(1 - x[2])*V[1] +'
-                   ' (1 - x[0])*(1 + x[1])*(1 - x[2])*V[2] +'
-                   ' (1 + x[0])*(1 + x[1])*(1 - x[2])*V[3] +'
-                   ' (1 - x[0])*(1 - x[1])*(1 + x[2])*V[4] +'
-                   ' (1 + x[0])*(1 - x[1])*(1 + x[2])*V[5] +'
-                   ' (1 - x[0])*(1 + x[1])*(1 + x[2])*V[6] +'
-                   ' (1 + x[0])*(1 + x[1])*(1 + x[2])*V[7])/8')
-
 
 class TriShape(BaseShape):
     name = 'tri'
@@ -488,10 +476,6 @@ class TriShape(BaseShape):
         [f'(V[{i + 1}][{j}] - V[0][{j}])/2' for j in range(2)]
         for i in range(2)
     ]
-
-    # Interpolation expression for a linear element
-    interp_expr = ('(-(x[0] + x[1])*V[0] + (1 + x[0])*V[1] +'
-                   ' (1 + x[1])*V[2])/2')
 
     @classmethod
     def std_ele(cls, sptord):
@@ -530,11 +514,6 @@ class TetShape(BaseShape):
         [f'(V[{i + 1}][{j}] - V[0][{j}])/2' for j in range(3)]
         for i in range(3)
     ]
-
-    # Interpolation expression for a linear element
-    interp_expr = ('(-(1 + x[0] + x[1] + x[2])*V[0] +'
-                   ' (1 + x[0])*V[1] + (1 + x[1])*V[2] +'
-                   ' (1 + x[2])*V[3])/2')
 
     @classmethod
     def std_ele(cls, sptord):
@@ -583,14 +562,6 @@ class PriShape(BaseShape):
                      f' (x[1] + 1)*V[2][{j}] + (x[1] +    1)*V[5][{j}])/4'
                      for j in range(3)]]
     jac_exprs = _jac_exprs_xy + _jac_exprs_z
-
-    # Interpolation expression for a linear element
-    interp_expr = ('(-(x[0] + x[1])*(1 - x[2])*V[0] +'
-                   ' (1 + x[0])*(1 - x[2])*V[1] +'
-                   ' (1 + x[1])*(1 - x[2])*V[2] -'
-                   ' (x[0] + x[1])*(1 + x[2])*V[3] +'
-                   ' (1 + x[0])*(1 + x[2])*V[4] +'
-                   ' (1 + x[1])*(1 + x[2])*V[5])/4')
 
     @classmethod
     def std_ele(cls, sptord):
@@ -642,15 +613,6 @@ class PyrShape(BaseShape):
          '(-V[0][1] - V[1][1] - V[2][1] - V[3][1] + 4*V[4][1])/8',
          '(-V[0][2] - V[1][2] - V[2][2] - V[3][2] + 4*V[4][2])/8']
     ]
-
-    # Interpolation expression for a linear element
-    interp_expr = (
-        '(( 2*x[0]*x[1] - 2*x[0] - 2*x[1] - x[2] + 1)*V[0] +'
-        ' (-2*x[0]*x[1] + 2*x[0] - 2*x[1] - x[2] + 1)*V[1] +'
-        ' (-2*x[0]*x[1] - 2*x[0] + 2*x[1] - x[2] + 1)*V[2] +'
-        ' ( 2*x[0]*x[1] + 2*x[0] + 2*x[1] - x[2] + 1)*V[3] +'
-        ' 4*(1 + x[2])*V[4])/8'
-    )
 
     @classmethod
     def std_ele(cls, sptord):

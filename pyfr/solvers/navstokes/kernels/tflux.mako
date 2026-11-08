@@ -17,7 +17,8 @@
               smats='in fpdtype_t[${str(ndims)}][${str(ndims)}]'
               rcpdjac='in fpdtype_t'
               verts='in broadcast-col fpdtype_t[${str(nverts)}][${str(ndims)}]'
-              upts='in broadcast-row fpdtype_t[${str(ndims)}]'>
+              upts='in broadcast-row fpdtype_t[${str(ndims)}]'
+              avop='in broadcast-row fpdtype_t[${str(nverts)}]'>
 % if 'linear' in ktype:
     // Compute the S matrices
     fpdtype_t ${smats}[${ndims}][${ndims}], djac;
@@ -35,7 +36,7 @@
     ${pyfr.expand('flux', 'u', gradu, 'ftemp')};
 % if shock_capturing == 'artificial-viscosity':
     fpdtype_t artvisc;
-    ${pyfr.expand('interp_artvisc', 'artvisc_vtx', 'upts', 'artvisc')};
+    ${pyfr.expand('interp_artvisc', 'artvisc_vtx', 'avop', 'artvisc')};
     ${pyfr.expand('artificial_viscosity_add', gradu, 'ftemp', 'artvisc')};
 % endif
 
