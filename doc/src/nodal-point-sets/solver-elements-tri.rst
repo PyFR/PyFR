@@ -9,6 +9,11 @@ Parameterises the triangular elements, with
 
     ``alpha-opt`` | ``williams-shunn``
 
+#. ``anti-alias`` --- whether to anti-alias the flux in a triangular
+   element with the quadrature rule below:
+
+    ``true`` | ``false``
+
 #. ``quad-deg`` --- degree of quadrature rule for anti-aliasing in a
    triangular element:
 

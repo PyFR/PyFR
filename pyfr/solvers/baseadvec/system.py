@@ -1,5 +1,3 @@
-from itertools import zip_longest
-
 from pyfr.cache import memoize
 from pyfr.solvers.base import BaseSystem
 from pyfr.solvers.baseadvec.shockcapturing import get_shock_capturing
@@ -126,13 +124,14 @@ class BaseAdvectionSystem(BaseSystem):
         for l in k['eles/negdivconf']:
             g_flux_div.add(l, deps=deps(l, 'eles/divconf'))
 
-        kgroup = [k['eles/qptsu'], k['eles/disf'], k['eles/divpcorf'],
-                  k['eles/divconf'], k['eles/negdivconf']]
-        for ks in zip_longest(*kgroup):
-            self._group(g_flux_div, ks, subs=[
-                [(ks[0], 'out'), (ks[1], 'u')],
-                [(ks[1], 'f'), (ks[2], 'b')],
-            ])
+        kgroup = ['eles/qptsu', 'eles/disf', 'eles/divpcorf',
+                  'eles/divconf', 'eles/negdivconf']
+        subs = [
+            [('eles/qptsu', 'out'), ('eles/disf', 'u')],
+            [('eles/disf', 'f'), ('eles/divpcorf', 'b')]
+        ]
+        for ks in self._kzip(k, *kgroup):
+            self._group(g_flux_div, ks, subs)
 
         g_flux_div.commit()
 

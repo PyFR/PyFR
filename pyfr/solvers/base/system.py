@@ -64,9 +64,11 @@ class BaseSystem:
         # Get all the solution point locations for the elements
         self.ele_ploc_upts = [e.ploc_at_np('upts') for e in eles]
 
-        self.eles_vect_upts = None
-        if hasattr(eles[0], '_grad_upts'):
+        # Expose the gradient banks if the system has solution gradients
+        if self.elementscls.has_grad_soln:
             self.eles_vect_upts = [e._grad_upts for e in eles]
+        else:
+            self.eles_vect_upts = None
 
         # Allocate register banks (RHS first, then non-RHS)
         self._alloc_register_banks(registers, eles, ics)
@@ -379,6 +381,14 @@ class BaseSystem:
 
         return deps
 
+    def _kzip(self, kdict, *names):
+        # Map the kernels of each list by element type
+        kmaps = [{self._ktags[k]: k for k in kdict[n]} for n in names]
+
+        # Collect the kernels of each element type by name
+        for tag in sorted(set().union(*kmaps)):
+            yield {n: km[tag] for n, km in zip(names, kmaps) if tag in km}
+
     def bc_advance(self, intg):
         # Advance any boundary condition controller state
         for fn in self._bc_advfns.values():
@@ -463,11 +473,8 @@ class BaseSystem:
         return [eb[idx].get() for eb in self.ele_banks]
 
     def _group(self, g, kerns, subs=[]):
-        # Eliminate non-existent kernels
-        kerns = [k for k in kerns if k is not None]
-
         # Eliminate substitutions associated with non-existent kernels
-        subs = [[(k, n) for k, n in sub if k] for sub in subs]
+        subs = [[(kerns[n], a) for n, a in sub if n in kerns] for sub in subs]
         subs = [sub for sub in subs if len(sub) > 1]
 
-        g.group(kerns, subs)
+        g.group(kerns.values(), subs)

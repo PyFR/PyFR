@@ -9,6 +9,12 @@ Parameterises the triangular interfaces, with
 
     ``alpha-opt`` | ``williams-shunn``
 
+#. ``anti-alias`` --- whether to anti-alias the common flux on a
+   triangular interface, in which case the quadrature points below
+   take the place of the flux points:
+
+    ``true`` | ``false``
+
 #. ``quad-deg`` --- degree of quadrature rule for anti-aliasing on a
    triangular interface:
 

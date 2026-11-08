@@ -30,10 +30,6 @@ Parameterises the solver with
 
     *int*
 
-3. ``anti-alias`` --- type of anti-aliasing:
-
-    ``flux`` | ``surf-flux`` | ``flux, surf-flux``
-
 Example:
 
 .. code-block:: ini
@@ -41,6 +37,5 @@ Example:
     [solver]
     system = navier-stokes
     order = 3
-    anti-alias = flux
     viscosity-correction = none
     shock-capturing = none

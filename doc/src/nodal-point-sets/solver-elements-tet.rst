@@ -9,6 +9,11 @@ Parameterises the tetrahedral elements, with
 
     ``alpha-opt`` | ``shunn-ham``
 
+#. ``anti-alias`` --- whether to anti-alias the flux in a tetrahedral
+   element with the quadrature rule below:
+
+    ``true`` | ``false``
+
 #. ``quad-deg`` --- degree of quadrature rule for anti-aliasing in a
    tetrahedral element:
 

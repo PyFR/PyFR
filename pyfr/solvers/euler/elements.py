@@ -214,7 +214,7 @@ class EulerElements(BaseFluidElements, BaseAdvectionElements):
         r, s = self.mesh_regions, self._slice_mat
 
         # Mode-dependent setup
-        pts = 'qpts' if 'flux' in self.antialias else 'upts'
+        pts = 'qpts' if self.fluxaa else 'upts'
         npts = self.nqpts if pts == 'qpts' else self.nupts
         has_uin = pts == 'upts'
 

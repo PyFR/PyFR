@@ -1,5 +1,3 @@
-from itertools import zip_longest
-
 from pyfr.cache import memoize
 from pyfr.solvers.baseadvec import BaseAdvectionSystem
 
@@ -110,9 +108,9 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
 
         # Compute the transformed flux
         for l in k['eles/disf']:
-            if k['eles/qptsu']:
+            if deps(l, 'eles/qptsu'):
                 ldeps = deps(l, 'eles/gradcoru_qpts', 'eles/qptsu')
-            elif k['eles/gradcoru_fpts']:
+            elif deps(l, 'eles/gradcoru_fpts'):
                 ldeps = deps(l, 'eles/gradcoru_fpts')
             else:
                 ldeps = deps(l, 'eles/gradcoru_phys_upts')
@@ -124,35 +122,42 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
             g_grad_flux.add(l, deps=d)
 
         kgroup = [
-            k['eles/gradpcoru_upts'], k['eles/gradcoru_upts'],
-            k['eles/gradcoru_phys_upts'], k['eles/disf_fused'],
-            k['eles/gradcoru_fpts'], k['eles/gradcoru_qpts'],
-            k['eles/qptsu'], k['eles/disf'], k['eles/divpcorf']
+            'eles/gradpcoru_upts', 'eles/gradcoru_upts',
+            'eles/gradcoru_phys_upts', 'eles/disf_fused',
+            'eles/gradcoru_fpts', 'eles/gradcoru_qpts',
+            'eles/qptsu', 'eles/disf', 'eles/divpcorf'
         ]
-        for ks in zip_longest(*kgroup):
-            # Flux-AA on; inputs to disf and divpcorf are from quad pts
-            if k['eles/qptsu']:
-                subs = [
-                    [(ks[0], 'out'), (ks[1], 'out'), (ks[2], 'gradu'),
-                     (ks[4], 'b'), (ks[5], 'b')],
-                    [(ks[6], 'out'), (ks[7], 'u')],
-                    [(ks[5], 'out'), (ks[7], 'f'), (ks[8], 'b')],
-                ]
-            # Fusion on; disf_fused replaces disf and gradcoru_phys_upts
-            elif k['eles/disf_fused']:
-                subs = [
-                    [(ks[0], 'out'), (ks[1], 'out'),
-                     (ks[3], 'gradu'), (ks[4], 'b')],
-                    [(ks[3], 'f'), (ks[8], 'b')],
-                ]
-            # No flux-AA and no gradient fusion
-            else:
-                subs = [
-                    [(ks[0], 'out'), (ks[1], 'out'), (ks[2], 'gradu'),
-                     (ks[4], 'b'), (ks[7], 'f'), (ks[8], 'b')],
-                ]
+        gradu = [
+            ('eles/gradpcoru_upts', 'out'), ('eles/gradcoru_upts', 'out'),
+            ('eles/gradcoru_phys_upts', 'gradu'), ('eles/gradcoru_fpts', 'b')
+        ]
 
-            self._group(g_grad_flux, ks, subs=subs)
+        # Flux-AA on; inputs to disf and divpcorf are from quad pts
+        aasubs = [
+            gradu + [('eles/gradcoru_qpts', 'b')],
+            [('eles/qptsu', 'out'), ('eles/disf', 'u')],
+            [('eles/gradcoru_qpts', 'out'), ('eles/disf', 'f'),
+             ('eles/divpcorf', 'b')]
+        ]
+
+        # Fusion on; disf_fused replaces disf and gradcoru_phys_upts
+        fusedsubs = [
+            gradu + [('eles/disf_fused', 'gradu')],
+            [('eles/disf_fused', 'f'), ('eles/divpcorf', 'b')]
+        ]
+
+        # No flux-AA and no gradient fusion
+        plainsubs = [gradu + [('eles/disf', 'f'), ('eles/divpcorf', 'b')]]
+
+        for ks in self._kzip(k, *kgroup):
+            if 'eles/qptsu' in ks:
+                subs = aasubs
+            elif 'eles/disf_fused' in ks:
+                subs = fusedsubs
+            else:
+                subs = plainsubs
+
+            self._group(g_grad_flux, ks, subs)
 
         g_grad_flux.commit()
 
@@ -174,9 +179,8 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
             g_mpi_flux.add(l, deps=deps(l, 'eles/divconf'))
 
         # Group divconf and negdivconf kernels
-        for k1, k2 in zip_longest(k['eles/divconf'],
-                                   k['eles/negdivconf']):
-            self._group(g_mpi_flux, [k1, k2])
+        for ks in self._kzip(k, 'eles/divconf', 'eles/negdivconf'):
+            self._group(g_mpi_flux, ks)
 
         g_mpi_flux.commit()
 

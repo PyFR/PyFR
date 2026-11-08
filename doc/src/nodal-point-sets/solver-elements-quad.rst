@@ -9,6 +9,11 @@ Parameterises the quadrilateral elements, with
 
     ``gauss-legendre`` | ``gauss-legendre-lobatto``
 
+#. ``anti-alias`` --- whether to anti-alias the flux in a quadrilateral
+   element with the quadrature rule below:
+
+    ``true`` | ``false``
+
 #. ``quad-deg`` --- degree of quadrature rule for anti-aliasing in a
    quadrilateral element:
 

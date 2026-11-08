@@ -11,6 +11,11 @@ Parameterises the prismatic elements, with
     ``williams-shunn~gauss-legendre`` |
     ``williams-shunn~gauss-legendre-lobatto``
 
+#. ``anti-alias`` --- whether to anti-alias the flux in a prismatic
+   element with the quadrature rule below:
+
+    ``true`` | ``false``
+
 #. ``quad-deg`` --- degree of quadrature rule for anti-aliasing in a
    prismatic element:
 

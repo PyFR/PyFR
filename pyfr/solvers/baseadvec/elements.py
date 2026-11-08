@@ -26,7 +26,7 @@ class BaseAdvectionElements(ShockCapturingMixin, BaseElements):
 
     @property
     def _scratch_bufs(self):
-        if 'flux' in self.antialias:
+        if self.fluxaa:
             return {'scal_fpts', 'scal_qpts', 'vect_qpts'}
         else:
             return {'scal_fpts', 'vect_upts'}
@@ -66,23 +66,20 @@ class BaseAdvectionElements(ShockCapturingMixin, BaseElements):
             'pyfr.solvers.baseadvec.kernels.evalsrcmacros'
         )
 
-        # What anti-aliasing options we're running with
-        fluxaa = 'flux' in self.antialias
-
         # Interpolation from elemental points
         kernels['disu'] = lambda uin: self._be.kernel(
             'mul', self.opmat('M0'), self.scal_upts[uin],
             out=self._scal_fpts
         )
 
-        if fluxaa and self.basis.order > 0:
+        if self.fluxaa and self.basis.order > 0:
             kernels['qptsu'] = lambda uin: self._be.kernel(
                 'mul', self.opmat('M7'), self.scal_upts[uin],
                 out=self._scal_qpts
             )
 
         # First flux correction kernel
-        if fluxaa and self.basis.order > 0:
+        if self.fluxaa and self.basis.order > 0:
             kernels['divpcorf'] = lambda uin, fout: self._be.kernel(
                 'mul', self.opmat('(M1 - M3*M2)*M9'), self._vect_qpts,
                 out=self._div_upts(uin, fout)

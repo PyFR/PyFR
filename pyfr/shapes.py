@@ -45,11 +45,12 @@ class BaseShape:
         self.cfg = cfg
         self.order = cfg.getint('solver', 'order')
 
-        self.antialias = cfg.get('solver', 'anti-alias', 'none')
-        self.antialias = {s.strip() for s in self.antialias.split(',')}
-        self.antialias.discard('none')
-        if self.antialias - {'flux', 'surf-flux'}:
-            raise ValueError('Invalid anti-alias options')
+        # Anti-aliasing of the flux in the element and on each face kind
+        self.fluxaa = cfg.getbool(f'solver-elements-{self.name}',
+                                  'anti-alias', False)
+        self.surfaa = {kind for kind, *_ in self.faces
+                       if cfg.getbool(f'solver-interfaces-{kind}',
+                                      'anti-alias', False)}
 
         self.ubasis = get_basis(self.name, self.order, self.upts)
 
@@ -128,9 +129,16 @@ class BaseShape:
     def m3(self):
         m = self.gbasis_at(self.upts)
 
-        if 'surf-flux' in self.antialias:
-            fp = [proj_l2(self._iqrules[kind], self.facebases[kind])
-                  for kind, proj, norm in self.faces]
+        if self.surfaa:
+            fp = []
+            for kind, *_ in self.faces:
+                # Project the anti-aliased faces onto the face basis
+                if kind in self.surfaa:
+                    p = proj_l2(self._iqrules[kind], self.facebases[kind])
+                else:
+                    p = np.eye(self.npts_for_face[kind](self.order))
+
+                fp.append(p)
 
             m = m @ block_diag(fp)
 
@@ -207,6 +215,22 @@ class BaseShape:
         return {kind: self._get_qrule('interfaces', kind, flags='s')
                 for kind, proj, norm in self.faces}
 
+    @cached_property
+    def _frules(self):
+        frules = {}
+
+        for kind, *_ in self.faces:
+            # Obtain the flux points in reference space for the face type
+            if kind in self.surfaa:
+                frules[kind] = self._iqrules[kind]
+            else:
+                rule = self.cfg.get(f'solver-interfaces-{kind}', 'flux-pts')
+                npts = self.npts_for_face[kind](self.order)
+
+                frules[kind] = get_quadrule(kind, rule, npts)
+
+        return frules
+
     @property
     def qpts(self):
         return self._eqrule.pts
@@ -220,37 +244,16 @@ class BaseShape:
         ppts = []
 
         for kind, proj, norm in self.faces:
-            # Obtain the flux points in reference space for the face type
-            if 'surf-flux' in self.antialias:
-                r = self._iqrules[kind]
-            else:
-                rule = self.cfg.get(f'solver-interfaces-{kind}', 'flux-pts')
-                npts = self.npts_for_face[kind](self.order)
-
-                r = get_quadrule(kind, rule, npts)
-
             # Project
-            ppts.append(proj_pts(proj, r.pts))
+            ppts.append(proj_pts(proj, self._frules[kind].pts))
 
         return np.vstack(ppts)
 
     @cached_property
     def fpts_wts(self):
-        pwts = []
-
-        for kind, proj, norm in self.faces:
-            # Obtain the weights in reference space for the face type
-            if 'surf-flux' in self.antialias:
-                r = self._iqrules[kind]
-            else:
-                rule = self.cfg.get(f'solver-interfaces-{kind}', 'flux-pts')
-                npts = self.npts_for_face[kind](self.order)
-
-                r = get_quadrule(kind, rule, npts)
-
-            pwts.append(r.wts)
-
-        return np.hstack(pwts)
+        # Obtain the weights in reference space for the face type
+        return np.hstack([self._frules[kind].wts
+                          for kind, *_ in self.faces])
 
     @cached_property
     def gbasis_coeffs(self):
@@ -324,12 +327,8 @@ class BaseShape:
 
     @cached_property
     def nfacefpts(self):
-        if 'surf-flux' in self.antialias:
-            def cnt(k): return len(self._iqrules[k].pts)
-        else:
-            def cnt(k): return self.npts_for_face[k](self.order)
-
-        return [cnt(kind) for kind, proj, norm in self.faces]
+        return [len(self._frules[kind].pts)
+                for kind, *_ in self.faces]
 
     @property
     def nfpts(self):

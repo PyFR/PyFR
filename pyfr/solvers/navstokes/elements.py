@@ -59,7 +59,7 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
         if self.grad_fusion:
             pts, fused = 'upts', True
             kname = 'disf_fused'
-        elif 'flux' in self.antialias:
+        elif self.fluxaa:
             pts, fused = 'qpts', False
             kname = 'disf'
         else:

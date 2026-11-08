@@ -9,7 +9,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
     def _scratch_bufs(self):
         bufs = {'scal_fpts', 'vect_fpts', 'vect_upts', 'comm_fpts'}
 
-        if 'flux' in self.antialias:
+        if self.fluxaa:
             bufs |= {'scal_qpts', 'vect_qpts'}
         elif self.grad_fusion:
             bufs |= {'grad_upts'}
@@ -98,7 +98,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         if not (self.basis.fpts_in_upts and self.grad_fusion):
             kernels['gradcoru_fpts'] = gradcoru_fpts
 
-        if 'flux' in self.antialias and self.basis.order > 0:
+        if self.fluxaa and self.basis.order > 0:
             def gradcoru_qpts():
                 nupts, nqpts = self.nupts, self.nqpts
                 vupts, vqpts = self._vect_upts, self._vect_qpts

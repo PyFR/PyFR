@@ -85,11 +85,11 @@ class BaseElements:
         self.name = basis.name
 
         # See what kind of projection the basis is using
-        self.antialias = basis.antialias
+        self.fluxaa = basis.fluxaa
 
         # Sizes
         self.nupts = basis.nupts
-        self.nqpts = basis.nqpts if 'flux' in self.antialias else None
+        self.nqpts = basis.nqpts if self.fluxaa else None
         self.nfpts = basis.nfpts
         self.nfacefpts = basis.nfacefpts
         self.nmpts = basis.nmpts
@@ -228,7 +228,7 @@ class BaseElements:
         self._be = backend
 
         # If we are doing gradient fusion
-        self.grad_fusion = not (self._be.blocks or 'flux' in self.antialias)
+        self.grad_fusion = not (self._be.blocks or self.fluxaa)
 
         if self.basis.order >= 2:
             self.linoff = self.ncurved - self.ncurved % -backend.csubsz

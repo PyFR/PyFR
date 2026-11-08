@@ -8,6 +8,12 @@ Parameterises the line interfaces, with
 
     ``gauss-legendre`` | ``gauss-legendre-lobatto``
 
+#. ``anti-alias`` --- whether to anti-alias the common flux on a
+   line interface, in which case the quadrature points below
+   take the place of the flux points:
+
+    ``true`` | ``false``
+
 #. ``quad-deg`` --- degree of quadrature rule for anti-aliasing on a
    line interface:
 
