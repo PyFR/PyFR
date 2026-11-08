@@ -17,34 +17,10 @@ class OpenCLKernelGenerator(BaseGPUKernelGenerator):
     _gid = 'get_global_id(0)'
     _shared_prfx = '__local'
     _shared_sync = 'work_group_barrier(CLK_LOCAL_MEM_FENCE)'
+    _ptr_arg = '__global {c}{t}* restrict {n}'
 
     def _render_spec(self):
-        g, c, r = '__global', 'const', 'restrict'
-
-        # We first need the argument list; starting with the dimensions
-        kargs = [f'ixdtype_t {d}' for d in self._dims]
-
-        # Now add any scalar arguments
-        kargs.extend(f'{sa.dtype} {sa.name}' for sa in self.scalargs)
-
-        # Finally, add the vector arguments
-        for va in self.vectargs:
-            if va.intent == 'in':
-                kargs.append(f'{g} {c} {va.dtype}* {r} {va.name}_v')
-            else:
-                kargs.append(f'{g} {va.dtype}* {r} {va.name}_v')
-
-            # Views
-            if va.isview:
-                kargs.append(f'{g} {c} ixdtype_t* {r} {va.name}_vix')
-
-                if self.ndim == 2 and not va.isbroadcastc:
-                    kargs.append(f'ixdtype_t {va.name}_vrstri')
-                elif va.ncdim == 2 and va.cdims[0] > 1:
-                    kargs.append(f'{g} {c} ixdtype_t* {r} {va.name}_vrstri')
-            # Arrays
-            elif self.needs_ldim(va):
-                kargs.append(f'ixdtype_t ld{va.name}')
+        kargs = [self._karg(*a) for a in self._kargs()]
 
         # Determine the work group size for the kernel
         wgs = (*self.block1d, 1, 1) if self.ndim == 1 else (*self.block2d, 1)

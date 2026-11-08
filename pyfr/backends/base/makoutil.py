@@ -324,13 +324,9 @@ def kernel(context, name, ndim, kargs={}, **kwargs):
     if tangent := context.get('_tangent', {}).get(name):
         kwargs, body = _dualise(name, kwargs, body, tangent)
 
-    # Get the generator class and data types
+    # Instantiate the generator of the backend
     kerngen = context['_kernel_generator']
-    fpdtype, ixdtype = context['fpdtype'], context['ixdtype']
-
-    # Instantiate
-    kern = kerngen(name, int(ndim), kwargs, body, fpdtype, ixdtype,
-                   context['soasz'])
+    kern = kerngen(name, int(ndim), kwargs, body)
 
     # Save the argument/type list and region kinds for later use
     context['_kernel_meta'][name] = (kern.argspec(), kern.regions)

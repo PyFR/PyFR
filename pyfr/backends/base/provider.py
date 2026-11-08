@@ -1,5 +1,5 @@
 from contextlib import contextmanager
-from functools import cached_property
+import functools as ft
 import re
 import types
 
@@ -28,7 +28,7 @@ class Kernel:
     def leaves(self):
         return [self]
 
-    @cached_property
+    @ft.cached_property
     def argnames(self):
         return frozenset(self.args)
 
@@ -152,7 +152,8 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
         tplargs = dict(tplargs)
 
         # Backend-specfic generator classes
-        tplargs['_kernel_generator'] = self.kernel_generator_cls
+        tplargs['_kernel_generator'] = ft.partial(self.kernel_generator_cls,
+                                                  self.backend)
 
         # Arguments the body of the named kernel is differentiated along
         tplargs['_tangent'] = {name: tangent}

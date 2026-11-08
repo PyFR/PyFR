@@ -1,14 +1,14 @@
 from math import prod
-import re
 
 import numpy as np
 
+from pyfr.backends.base.generator.args import Arg
 from pyfr.backends.base.mathfns import lower_math_fns
 from pyfr.dsl.ad import lower_ad_regions
 from pyfr.dsl.codegen import CodeGenerator
 from pyfr.dsl.nodes import (Assign, Binary, Call, DslCall, DslVar, ExprStmt,
-                            Float, Index, Int, Program, Unary, Var, VarDecl,
-                            map_ast, region_kinds, walk_ast)
+                            Index, Int, Program, Unary, Var, VarDecl, map_ast,
+                            region_kinds, walk_ast)
 from pyfr.dsl.rewriter import (FloatSuffixer, Rewriter, parse_expr,
                                parse_program, rename_vars)
 from pyfr.dsl.types import Environment
@@ -24,76 +24,6 @@ def _rule(tpl, **preconds):
     preconds['ismulti'] = 'VS' in dvars
 
     return proto, nidx, nvars, preconds
-
-
-class Arg:
-    def __init__(self, name, spec):
-        self.name = name
-
-        specptn = r'''
-            (?:(in|inout|out)\s+)?                            # Intent
-            (?:((?:broadcast-col\s+)?view(?:\(\d+\))?|        # Attrs
-                broadcast(?:-row|-col)?|mpi|scalar)\s+)?
-            (?:reduce\((min|max|sum)\)\s+)?                   # Reduction
-            ([A-Za-z_]\w*)                                    # Data type
-            ((?:\[\d+\]){0,2})$                               # Dimensions
-        '''
-        dimsptn = r'(?<=\[)\d+(?=\])'
-
-        # Parse our specification
-        m = re.match(specptn, spec, re.X)
-        if not m:
-            raise ValueError('Invalid argument specification')
-
-        g = m.groups()
-
-        # Properties
-        self.intent = g[0] or 'in'
-        self.attrs = g[1] or ''
-        self.reduceop = g[2]
-        self.dtype = g[3]
-        self.cdimstr = g[4]
-
-        # Dimension
-        self.cdims = [int(d) for d in re.findall(dimsptn, g[4])]
-        self.ncdim = len(self.cdims)
-
-        # View stride (for multi-indexed views: view(N))
-        m = re.search(r'view\((\d+)\)', self.attrs)
-        self.viewstride = int(m[1]) if m else 1
-
-        # Multi-indexed views take an extra leading index in the body
-        self.ismulti = self.viewstride > 1
-        self.nidx = self.ncdim + self.ismulti
-
-        # Attributes
-        self.isbroadcast = self.attrs == 'broadcast'
-        self.isbroadcastr = self.attrs == 'broadcast-row'
-        self.isbroadcastc = 'broadcast-col' in self.attrs
-        self.ismpi = self.attrs == 'mpi'
-        self.isview = 'view' in self.attrs
-        self.isscalar = self.attrs == 'scalar'
-        self.isvector = not self.isscalar
-        self.isreduce = bool(self.reduceop)
-
-        # Validation
-        if (self.attrs.startswith('broadcast') and
-            self.intent != 'in' and not self.isreduce):
-            raise ValueError('Broadcast arguments must be of intent in')
-        if self.isbroadcast and self.ncdim != 2:
-            raise ValueError('Broadcasts must have two dimensions')
-        if self.isbroadcastr and self.ncdim != 1:
-            raise ValueError('Row broadcasts must have one dimension')
-        if self.isreduce and self.intent != 'out':
-            raise ValueError('Reduction arguments must be of intent out')
-        if self.isreduce and self.dtype != 'fpdtype_t':
-            raise ValueError('Reduction arguments must be of type fpdtype_t')
-        if self.isreduce and self.isscalar:
-            raise ValueError('Scalar arguments can not be reduced')
-        if self.isreduce and self.ncdim and not self.isbroadcastc:
-            raise ValueError('Non-broadcast-col reduction args must be scalar')
-        if self.isscalar and self.dtype not in ('fpdtype_t', 'ixdtype_t'):
-            raise ValueError('Scalar arguments must be fpdtype_t or ixdtype_t')
 
 
 class BaseKernelGenerator:
@@ -167,13 +97,14 @@ class BaseKernelGenerator:
               isview=False, isbroadcast=False, isbroadcastc=False),
     ]
 
-    def __init__(self, name, ndim, args, body, fpdtype, ixdtype, soasz):
+    def __init__(self, backend, name, ndim, args, body):
+        self.backend = backend
         self.name = name
         self.ndim = ndim
-        self.fpdtype = fpdtype
-        self.ixdtype = ixdtype
-        self.soasz = soasz
-        self.fpdtype_max = float(np.finfo(fpdtype).max)
+        self.fpdtype = backend.fpdtype
+        self.ixdtype = backend.ixdtype
+        self.soasz = backend.soasz
+        self.fpdtype_max = float(np.finfo(self.fpdtype).max)
 
         # Parse and sort our argument list
         sargs = [Arg(k, v) for k, v in sorted(args.items())]
@@ -430,196 +361,3 @@ class BaseKernelGenerator:
         ast = Rewriter(self._deref_rules).transform(self._ast, args)
 
         return self._render_body(ast, self.codegen_cls()), '', ''
-
-
-class BaseGPUKernelGenerator(BaseKernelGenerator):
-    # Block sizes for 1D and 2D kernels, respectively
-    block1d = None
-    block2d = None
-
-    # Expressions for local x/y id's and global x id
-    _lid = None
-    _gid = None
-
-    # Prefix for variables in shared memory
-    _shared_prfx = None
-
-    # Expression for synchronising shared memory
-    _shared_sync = None
-
-    # Prototype expressions for preloading 1D and 2D array arguments
-    _preload_protos = {1: parse_expr('@S[@I0][@LX]'),
-                       2: parse_expr('@S[@I0][@I1][@LX]')}
-
-    # Lowerings for the @-intrinsics produced by the dereference rules
-    _xidx = '_x'
-    _aosoa = '(_x / @soasz*@nv + @v)*@soasz + _x % @soasz'
-    _bcast = '@c'
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        # Specialise
-        if self.ndim == 1:
-            self.preamble += 'if (_x < _nx)'
-        else:
-            blk_y, lid_y = self.block2d[1], self._lid[1]
-            self.preamble += f'''
-                ixdtype_t _ysize = (_ny + {blk_y - 1}) / {blk_y};
-                ixdtype_t _ystart = {lid_y}*_ysize;
-                ixdtype_t _yend = min(_ny, _ystart + _ysize);
-                for (ixdtype_t _y = _ystart; _x < _nx && _y < _yend; _y++)'''
-
-    def ldim_size(self, name, factor=1):
-        return Var(f'ld{name}')
-
-    def needs_ldim(self, arg):
-        return self.ndim == 2 or (arg.ncdim > 0 and not arg.ismpi)
-
-    def _preload_rule(self, arg, sname):
-        pname, pncdim = arg.name, arg.ncdim
-        proto = self._preload_protos[pncdim]
-
-        def preload_sub(n, ix, a):
-            if n == pname and a.ncdim == pncdim and len(ix) == pncdim:
-                subs = {f'I{i}': idx for i, idx in enumerate(ix)}
-                subs['S'] = Var(sname)
-                subs['LX'] = Var(str(self._lid[0]))
-                return rename_vars(proto, subs)
-            else:
-                return None
-
-        return preload_sub
-
-    def _preload_arg(self, arg, codegen):
-        bx, by = self.block2d[:2]
-        lx, ly = self._lid
-        sprfx = self._shared_prfx
-
-        sname = f'{arg.name}_s'
-
-        # Determine the total number of elements in the array
-        n = prod(arg.cdims)
-
-        if arg.dtype == 'fpdtype_t':
-            itemsize = np.dtype(self.fpdtype).itemsize
-        else:
-            itemsize = 4
-
-        # Tally up the number of bytes required for the shared array
-        nbytes = n*bx*itemsize
-
-        # Dereference the argument
-        if arg.ncdim == 1:
-            lhs = f'{sname}[_i][{lx}]'
-            rhs = self._generate(codegen, self._deref_arg(arg, '_i'))
-        else:
-            dim1 = f'(_i / {arg.cdims[1]})'
-            dim2 = f'(_i % {arg.cdims[1]})'
-
-            lhs = f'{sname}[{dim1}][{dim2}][{lx}]'
-            rhs = self._generate(codegen, self._deref_arg(arg, dim1, dim2))
-
-        # Declare the shared array
-        lcode = f'{sprfx} {arg.dtype} {sname}{arg.cdimstr}[{bx}];'
-
-        # Emit the for loop to populate the array
-        lcode += f'''
-            for (int _i = {ly}; _x < _nx && _i < {n}; _i += {by})
-                {lhs} = {rhs};'''
-
-        return sname, lcode, nbytes
-
-    def _render_body_preamble_epilogue(self):
-        # Track 2D broadcast-col reductions for deferred writeback
-        self._reduce_args = []
-
-        codegen = self.codegen_cls()
-        preamble = ''
-        preload_rules = []
-
-        # For 2D kernels, preload data from column broadcast arrays
-        # into shared memory to guarantee reuse
-        if self.ndim == 2:
-            preload, usedb = [], 0
-
-            for va in self.vectargs:
-                if va.isbroadcastc and va.ncdim >= 1 and not va.isreduce:
-                    # Preload the argument into shared memory
-                    sname, lcode, nbytes = self._preload_arg(va, codegen)
-
-                    # Limit ourselves to 32KiB of shared state
-                    if usedb + nbytes > 32*1024:
-                        continue
-
-                    preload.append(lcode)
-                    usedb += nbytes
-
-                    # Redirect uses of the argument to the shared array
-                    preload_rules.append(self._preload_rule(va, sname))
-
-            if preload:
-                preload.append(f'{self._shared_sync};')
-                preamble = '\n'.join(preload)
-
-        # Substitute the rules through the body; preloads take priority
-        args = {va.name: va for va in self.vectargs if not va.isreduce}
-        rules = preload_rules + self._deref_rules
-        ast = Rewriter(rules).transform(self._ast, args)
-
-        # Render the body
-        body = self._render_body(ast, codegen)
-
-        # 2D reduction: accumulator decls + shared-memory epilogue
-        rpre, epilogue = self._render_reduce_2d(codegen)
-        preamble += '\n' + rpre
-
-        return body, preamble, epilogue
-
-    def _render_reduce_2d(self, codegen):
-        if not self._reduce_args:
-            return '', ''
-
-        bx = self.block2d[0]
-        lx, ly = self._lid
-
-        # Preamble: register accumulators initialised to identity
-        stmts = []
-        for rdecl, pairs, ident, _ in self._reduce_args:
-            iexpr = Float(float(ident))
-            stmts.append(rdecl)
-            stmts += [ExprStmt(Assign(acc, iexpr)) for acc, _ in pairs]
-        preamble = self._generate(codegen, Program(stmts))
-
-        # Epilogue: shared-memory reduce across y-threads, then
-        # write result to global (single shared array, reused)
-        rs = Index(Var('_rs'), Var(str(lx)))
-        epilogue = f'{self._shared_prfx} fpdtype_t _rs[{bx}];'
-        for _, pairs, ident, reduceop in self._reduce_args:
-            for src, dst in pairs:
-                atom = self._generate(codegen,
-                                      self._atomic_stmt(reduceop, rs, src))
-                wb = self._generate(codegen, ExprStmt(Assign(dst, rs)))
-                epilogue += f'''
-                    if ({ly} == 0) _rs[{lx}] = {ident};
-                    {self._shared_sync};
-                    if (_x < _nx) {atom}
-                    {self._shared_sync};
-                    if ({ly} == 0 && _x < _nx) {wb}
-                '''
-
-        return preamble, epilogue
-
-    def render(self):
-        spec = self._render_spec()
-
-        return f'''{self.helpers}
-            {spec}
-            {{
-                ixdtype_t _x = {self._gid};
-                {self.preamble}
-                {{
-                    {self.body}
-                }}
-                {self.epilogue}
-            }}'''
