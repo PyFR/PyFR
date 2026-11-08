@@ -13,15 +13,16 @@ class BaseExplicitIntegrator(BaseIntegrator):
         if self.controller_needs_errest and not self.stepper_has_errest:
             raise TypeError('Incompatible stepper/controller combination')
 
-        if cfg.get('solver', 'shock-capturing', 'none') == 'entropy-filter':
-            if self.controller_needs_errest:
-                raise TypeError('Entropy filtering not compatible with '
-                                'error-estimation-based controllers')
-
         # Construct the relevant system
         self.system = systemcls(backend, mesh, initsoln, self._registers, cfg,
                                 self.serialiser,
                                 needs_cfl=self.controller_needs_cfl)
+
+        # Ensure the shock capturing scheme works with the controller
+        sc = self.system.shock_capturing
+        if self.controller_needs_errest and not sc.supports_errest:
+            raise TypeError(f'{sc.scheme} not compatible with '
+                            'error-estimation-based controllers')
 
         # Assign register numbers to our member variables
         self._assign_registers()

@@ -1,4 +1,4 @@
-from pyfr.solvers.base.elements import ExportableField, inters_map
+from pyfr.solvers.base.elements import inters_map
 from pyfr.solvers.baseadvec import BaseAdvectionElements
 
 
@@ -112,21 +112,6 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
                 return self._be.unordered_meta_kernel(muls)
 
             kernels['gradcoru_qpts'] = gradcoru_qpts
-
-        # Artificial viscosity defaults; populated by ArtificialViscosity
-        self.artvisc_fpts = None
-        self.vtx_view = None
-        self.vtx_views = {}
-
-        # Register exportable AV field with lazy getter (must be here
-        # so plugins can discover it before commit)
-        shock_capturing = self.cfg.get('solver', 'shock-capturing', 'none')
-        if shock_capturing == 'artificial-viscosity':
-            nverts = len(self.basis.linspts)
-            self.export_fields.append(ExportableField(
-                name='artvisc', shape=(nverts,),
-                getter=lambda: self.artvisc_vtx_fn()
-            ))
 
     @inters_map
     def _get_grad_upts_for_inters(self, eidxs, fidx):

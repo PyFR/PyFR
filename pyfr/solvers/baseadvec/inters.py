@@ -8,9 +8,10 @@ from pyfr.dsl.nodes import Var, walk_expr
 from pyfr.exprs import npeval
 from pyfr.nputil import fuzzysort
 from pyfr.solvers.base import BaseInters
+from pyfr.solvers.baseadvec.shockcapturing import ShockCapturingMixin
 
 
-class BaseAdvectionIntInters(BaseInters):
+class BaseAdvectionIntInters(ShockCapturingMixin, BaseInters):
     # Number of elements per block when ordering the interface points
     blksz = 256
 
@@ -87,7 +88,7 @@ class BaseAdvectionIntInters(BaseInters):
             return perm
 
 
-class BaseAdvectionMPIInters(BaseInters):
+class BaseAdvectionMPIInters(ShockCapturingMixin, BaseInters):
     def __init__(self, be, lhs, rhsrank, elemap, cfg):
         super().__init__(be, lhs, elemap, cfg)
         self.rhsrank = rhsrank
@@ -108,7 +109,7 @@ class BaseAdvectionMPIInters(BaseInters):
         return next(self._mpi_tag_counter)
 
 
-class BaseAdvectionBCInters(BaseInters):
+class BaseAdvectionBCInters(ShockCapturingMixin, BaseInters):
     type = None
 
     @classmethod

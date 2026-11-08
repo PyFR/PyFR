@@ -2,12 +2,10 @@ from itertools import zip_longest
 
 from pyfr.cache import memoize
 from pyfr.solvers.base import BaseSystem
-from pyfr.solvers.baseadvec.entfilter import EntropyFilter
+from pyfr.solvers.baseadvec.shockcapturing import get_shock_capturing
 
 
 class BaseAdvectionSystem(BaseSystem):
-    _shock_capturing_modes = {'none', 'entropy-filter'}
-
     def __init__(self, backend, mesh, initsoln, registers, cfg, serialiser,
                  *, needs_cfl=False):
         super().__init__(backend, mesh, initsoln, registers, cfg, serialiser)
@@ -22,26 +20,23 @@ class BaseAdvectionSystem(BaseSystem):
         scal_fpts = {et: e._scal_fpts for et, e in self.ele_map.items()}
         iint_v, mpi_v, bc_v = self.make_field_views(scal_fpts,
                                                     vshape=(self.nvars,))
-        for i, (lhs, rhs) in zip(self._int_inters, iint_v):
+        for i, lhs, rhs in iint_v:
             i.scal_lhs = lhs
             i.scal_rhs = rhs
-        for m, (lhs, rhs) in zip(self._mpi_inters, mpi_v):
+        for m, lhs, rhs in mpi_v:
             m.scal_lhs = lhs
             m.scal_rhs = rhs
-        for b, lhs in zip(self._bc_inters, bc_v):
+        for b, lhs in bc_v:
             b.scal_lhs = lhs
         self.register_mpi_exchange('scal_fpts', mpi_v)
 
-        shock_capturing = self.cfg.get('solver', 'shock-capturing', 'none')
+        # Instantiate the shock capturing scheme
+        sc = get_shock_capturing(self.backend, self.cfg, self)
+        self.shock_capturing = sc
 
-        # Handle entropy filtering
-        if (shock_capturing == 'entropy-filter' and
-            self.cfg.getint('solver', 'order') > 0):
-            self._ef = EntropyFilter(self.backend, self.cfg, self,
-                                     self._int_inters, self._mpi_inters,
-                                     self._bc_inters)
-        else:
-            self._ef = None
+        # Take on its kernel/MPI providers
+        self._extra_kern_parts = sc.kern_parts
+        self._extra_mpi_parts = sc.mpi_parts
 
     def rewrite_bc_exprs(self, fn=None, externs={}):
         for b in self._bc_inters:
@@ -81,9 +76,8 @@ class BaseAdvectionSystem(BaseSystem):
         # Interpolate the solution to the flux points
         g_intf.add_all(k['eles/disu'], deps=k['eles/entropy_filter'])
 
-        # EF adds its kernels (topo sort handles ordering)
-        if self._ef:
-            self._ef.add_to_graph_pre_recv(g_intf, k, m)
+        # Shock capturing kernels which run before the solution exchange
+        self.shock_capturing.add_to_graph_pre_recv(g_intf, k, m)
 
         # Pack and send these interpolated solutions to our neighbours
         g_intf.add_all(k['mpiint/scal_fpts_pack'], deps=k['eles/disu'])
@@ -120,9 +114,8 @@ class BaseAdvectionSystem(BaseSystem):
         for l in k['mpiint/comm_flux']:
             g_flux_div.add(l, deps=deps(l, 'mpiint/scal_fpts_unpack'))
 
-        # EF: unpack and compute comm_entropy at MPI interfaces
-        if self._ef:
-            self._ef.add_to_graph_post_recv(g_flux_div, k, deps)
+        # Shock capturing kernels which run after the solution exchange
+        self.shock_capturing.add_to_graph_post_recv(g_flux_div, k, deps)
 
         # Compute the transformed divergence of the corrected flux
         for l in k['eles/tdivtconf']:
@@ -145,25 +138,19 @@ class BaseAdvectionSystem(BaseSystem):
 
         return g_intf, g_flux_div
 
-    def _preproc_graphs(self, uinbank):
-        if self._ef:
-            return self._preproc_graphs_ef(uinbank)
-        else:
-            return ()
-
     @memoize
-    def _preproc_graphs_ef(self, uinbank):
+    def _preproc_graphs(self, uinbank):
         m = self._mpireqs
         k, *_ = self._get_kernels(uinbank, None)
         def deps(dk, *names): return self._kdeps(k, dk, *names)
-        return self._ef.preproc_graphs(self.backend, k, m, deps)
+        return self.shock_capturing.preproc_graphs(self.backend, k, m, deps)
 
     def postproc(self, uinbank):
-        if self._ef:
-            if uinbank >= self.nrhs:
-                raise ValueError('Invalid register number')
-            k, *_ = self._get_kernels(uinbank, None)
-            self._ef.postproc(self.backend, k)
+        if uinbank >= self.nrhs:
+            raise ValueError('Invalid register number')
+
+        k, *_ = self._get_kernels(uinbank, None)
+        self.shock_capturing.postproc(self.backend, k)
 
     def compute_max_wavespeed(self, uinbank):
         k, *_ = self._get_kernels(uinbank, None)

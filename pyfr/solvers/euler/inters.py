@@ -13,12 +13,8 @@ class TplargsMixin:
         super().__init__(*args, **kwargs)
 
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
-        if self.cfg.get('solver', 'shock-capturing', 'none') == 'entropy-filter':
-            self.p_min = self.cfg.getfloat('solver-entropy-filter', 'p-min',
-                                           1e-6)
-        else:
-            self.p_min = self.cfg.getfloat('solver-interfaces', 'p-min',
-                                           5*self._be.fpdtype_eps)
+        self.p_min = self.cfg.getfloat('solver-interfaces', 'p-min',
+                                       5*self._be.fpdtype_eps)
 
         self._tplargs = dict(ndims=self.ndims, nvars=self.nvars,
                              rsolver=rsolver, c=self.c, p_min=self.p_min)
@@ -32,11 +28,16 @@ class EulerIntInters(TplargsMixin, BaseAdvectionIntInters):
 
         self._be.pointwise.register('pyfr.solvers.euler.kernels.intcflux')
 
-        self.kernels['comm_flux'] = lambda: self._be.kernel(
-            'intcflux', tplargs=self._tplargs, dims=[self.ninterfpts],
-            ul=self.scal_lhs, ur=self.scal_rhs, nl=self._pnorm_lhs,
-            rmat=self._rotmat
-        )
+        def comm_flux():
+            sc = self.shock_capturing
+            return self._be.kernel(
+                'intcflux', tplargs=self._tplargs | sc.tplargs,
+                dims=[self.ninterfpts], ul=self.scal_lhs, ur=self.scal_rhs,
+                nl=self._pnorm_lhs, rmat=self._rotmat,
+                **sc.comm_flux_args(self)
+            )
+
+        self.kernels['comm_flux'] = comm_flux
 
 
 class EulerMPIInters(TplargsMixin, BaseAdvectionMPIInters):
@@ -45,10 +46,15 @@ class EulerMPIInters(TplargsMixin, BaseAdvectionMPIInters):
 
         self._be.pointwise.register('pyfr.solvers.euler.kernels.mpicflux')
 
-        self.kernels['comm_flux'] = lambda: self._be.kernel(
-            'mpicflux', self._tplargs, dims=[self.ninterfpts],
-            ul=self.scal_lhs, ur=self.scal_rhs, nl=self._pnorm_lhs
-        )
+        def comm_flux():
+            sc = self.shock_capturing
+            return self._be.kernel(
+                'mpicflux', tplargs=self._tplargs | sc.tplargs,
+                dims=[self.ninterfpts], ul=self.scal_lhs, ur=self.scal_rhs,
+                nl=self._pnorm_lhs, **sc.comm_flux_args(self)
+            )
+
+        self.kernels['comm_flux'] = comm_flux
 
 
 class EulerBaseBCInters(TplargsMixin, BaseAdvectionBCInters):
@@ -59,11 +65,16 @@ class EulerBaseBCInters(TplargsMixin, BaseAdvectionBCInters):
 
         self._tplargs |= dict(bctype=self.type, ninters=self.ninters)
 
-        self.kernels['comm_flux'] = lambda: self._be.kernel(
-            'bccflux', tplargs=self._tplargs, dims=[self.ninterfpts],
-            extrns=self._external_args, ul=self.scal_lhs, nl=self._pnorm_lhs,
-            **self._external_vals
-        )
+        def comm_flux():
+            sc = self.shock_capturing
+            return self._be.kernel(
+                'bccflux', tplargs=self._tplargs | sc.tplargs,
+                dims=[self.ninterfpts], extrns=self._external_args,
+                ul=self.scal_lhs, nl=self._pnorm_lhs,
+                **self._external_vals, **sc.comm_flux_args(self)
+            )
+
+        self.kernels['comm_flux'] = comm_flux
 
     def comm_entropy_kernel(self, entmin_lhs):
         # Physics-specific callback for entropy filtering

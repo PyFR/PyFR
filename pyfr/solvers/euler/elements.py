@@ -211,40 +211,55 @@ class EulerElements(BaseFluidElements, BaseAdvectionElements):
         }
 
         # Helpers
-        tdisf = []
-        c, l = 'curved', 'linear'
         r, s = self.mesh_regions, self._slice_mat
-        slicedk = self._make_sliced_kernel
 
-        if c in r and 'flux' not in self.antialias:
-            tdisf.append(lambda uin: self._be.kernel(
-                'tflux', tplargs=tplargs | {'ktype': 'curved'},
-                dims=[self.nupts, r[c]], u=s(self.scal_upts[uin], c),
-                f=s(self._vect_upts, c), smats=self.curved_smat_at('upts')
-            ))
-        elif c in r:
-            tdisf.append(lambda: self._be.kernel(
-                'tflux', tplargs=tplargs | {'ktype': 'curved'},
-                dims=[self.nqpts, r[c]], u=s(self._scal_qpts, c),
-                f=s(self._vect_qpts, c), smats=self.curved_smat_at('qpts')
-            ))
+        # Mode-dependent setup
+        pts = 'qpts' if 'flux' in self.antialias else 'upts'
+        npts = self.nqpts if pts == 'qpts' else self.nupts
+        has_uin = pts == 'upts'
 
-        if l in r and 'flux' not in self.antialias:
-            tdisf.append(lambda uin: self._be.kernel(
-                'tflux', tplargs=tplargs | {'ktype': 'linear'},
-                dims=[self.nupts, r[l]], u=s(self.scal_upts[uin], l),
-                f=s(self._vect_upts, l), verts=self.ploc_at('linspts', l),
-                upts=self.upts
-            ))
-        elif l in r:
-            tdisf.append(lambda: self._be.kernel(
-                'tflux', tplargs=tplargs | {'ktype': 'linear'},
-                dims=[self.nqpts, r[l]], u=s(self._scal_qpts, l),
-                f=s(self._vect_qpts, l), verts=self.ploc_at('linspts', l),
-                upts=self.qpts
-            ))
+        # Build per-region kernel args
+        tdisf = []
+        for rgn in ('curved', 'linear'):
+            if rgn not in r:
+                continue
 
-        if 'flux' not in self.antialias:
-            self.kernels['tdisf'] = lambda uin: slicedk(k(uin) for k in tdisf)
+            # Region-specific geometry kwargs
+            kw = {}
+            if rgn == 'curved':
+                kw['smats'] = self.curved_smat_at(pts)
+            else:
+                kw['verts'] = self.ploc_at('linspts', 'linear')
+                kw['upts'] = getattr(self, pts)
+
+            if has_uin:
+                kw['f'] = s(self._vect_upts, rgn)
+            else:
+                kw['u'] = s(self._scal_qpts, rgn)
+                kw['f'] = s(self._vect_qpts, rgn)
+
+            tdisf.append((r[rgn], rgn, kw))
+
+        if has_uin:
+            def tdisf_k(uin):
+                sc = self.shock_capturing
+                return self._make_sliced_kernel(
+                    self._be.kernel(
+                        'tflux', tplargs=tplargs | sc.tplargs | {'ktype': rgn},
+                        dims=[npts, n], u=s(self.scal_upts[uin], rgn),
+                        **kw, **sc.flux_args(self, rgn, pts)
+                    )
+                    for n, rgn, kw in tdisf
+                )
         else:
-            self.kernels['tdisf'] = lambda: slicedk(k() for k in tdisf)
+            def tdisf_k():
+                sc = self.shock_capturing
+                return self._make_sliced_kernel(
+                    self._be.kernel(
+                        'tflux', tplargs=tplargs | sc.tplargs | {'ktype': rgn},
+                        dims=[npts, n], **kw, **sc.flux_args(self, rgn, pts)
+                    )
+                    for n, rgn, kw in tdisf
+                )
+
+        self.kernels['tdisf'] = tdisf_k

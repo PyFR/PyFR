@@ -2,49 +2,14 @@ from itertools import zip_longest
 
 from pyfr.cache import memoize
 from pyfr.solvers.baseadvec import BaseAdvectionSystem
-from pyfr.solvers.baseadvecdiff.artvisc import ArtificialViscosity
 
 
 class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
-    _shock_capturing_modes = {'none', 'entropy-filter', 'artificial-viscosity'}
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        shock_capturing = self.cfg.get('solver', 'shock-capturing', 'none')
-
-        # Handle artificial viscosity
-        if shock_capturing == 'artificial-viscosity':
-            # Create the AV object (allocates buffers, registers kernels)
-            self._av = ArtificialViscosity(
-                self.backend, self.cfg, self.mesh, self.ele_map
-            )
-
-            # Commit to allocate AV matrices before creating views
-            self.backend.commit_extent(self._av._fpts_ext)
-
-            # Create artvisc_fpts views on interfaces for comm_flux
-            artvisc_fpts = {et: e.artvisc_fpts
-                            for et, e in self.ele_map.items()}
-            iint_v, mpi_v, bc_v = self.make_field_views(artvisc_fpts)
-
-            # C0 AV is continuous; both sides see the same value
-            for i, (lhs, rhs) in zip(self._int_inters, iint_v):
-                i.artvisc = lhs
-            for m, (lhs, rhs) in zip(self._mpi_inters, mpi_v):
-                m.artvisc = lhs
-            for b, lhs in zip(self._bc_inters, bc_v):
-                b.artvisc = lhs
-
-            # Register vertex exchange kernels and MPI requests
-            self._av.prepare_mpi()
-            self._extra_kern_parts = {'vtx': self._av.kern_parts}
-            self._extra_mpi_parts = self._av.mpi_parts
-        else:
-            self._av = None
-
         # Register vect_fpts conditional MPI exchange
-        vect_v = [(m._vect_lhs, m._vect_rhs) for m in self._mpi_inters]
+        vect_v = [(m, m._vect_lhs, m._vect_rhs) for m in self._mpi_inters]
         self.register_mpi_exchange(
             'vect_fpts', vect_v,
             send=lambda m: m.c['ldg-beta'] != -0.5,
@@ -65,12 +30,8 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         # Interpolate the solution to the flux points
         g_soln.add_all(k['eles/disu'], deps=k['eles/entropy_filter'])
 
-        # Entropy filtering
-        if self._ef:
-            self._ef.add_to_graph_pre_recv(g_soln, k, m)
-        # Artificial viscosity
-        elif self._av:
-            self._av.add_to_graph_pre_recv(g_soln, k, m)
+        # Shock capturing kernels which run before the solution exchange
+        self.shock_capturing.add_to_graph_pre_recv(g_soln, k, m)
 
         # Pack and send these interpolated solutions to our neighbours
         g_soln.add_all(k['mpiint/scal_fpts_pack'], deps=k['eles/disu'])
@@ -96,12 +57,8 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         for l in k['mpiint/con_u']:
             g_grad_flux.add(l, deps=deps(l, 'mpiint/scal_fpts_unpack'))
 
-        # AV: unpack vertex data, merge, and fill artvisc_fpts
-        if self._av:
-            self._av.add_to_graph_post_recv(g_grad_flux, k, deps)
-        # EF: unpack and compute comm_entropy at MPI interfaces
-        elif self._ef:
-            self._ef.add_to_graph_post_recv(g_grad_flux, k, deps)
+        # Shock capturing kernels which run after the solution exchange
+        self.shock_capturing.add_to_graph_post_recv(g_grad_flux, k, deps)
 
         # Compute the transformed gradient of the partially corrected solution
         g_grad_flux.add_all(k['eles/tgradpcoru_upts'])

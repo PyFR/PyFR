@@ -14,9 +14,6 @@ class BaseAdvectionDiffusionIntInters(BaseAdvectionIntInters):
         self._comm_lhs = self._scal_view(lhs, 'get_comm_fpts_for_inters')
         self._comm_rhs = self._scal_view(rhs, 'get_comm_fpts_for_inters')
 
-        # Artificial viscosity (populated by ArtificialViscosity if active)
-        self.artvisc = None
-
         # Additional kernel constants
         self.c |= cfg.items_as('solver-interfaces', float)
 
@@ -65,9 +62,6 @@ class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
         beta = self.c['ldg-beta']
         self.c['ldg-cl'], self.c['ldg-cr'] = 0.5 - beta, 0.5 + beta
 
-        # Artificial viscosity (populated by ArtificialViscosity if active)
-        self.artvisc = None
-
 
 class BaseAdvectionDiffusionBCInters(BaseAdvectionBCInters):
     def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
@@ -79,6 +73,3 @@ class BaseAdvectionDiffusionBCInters(BaseAdvectionBCInters):
 
         # Additional kernel constants
         self.c |= cfg.items_as('solver-interfaces', float)
-
-        # Artificial viscosity (populated by ArtificialViscosity if active)
-        self.artvisc = None

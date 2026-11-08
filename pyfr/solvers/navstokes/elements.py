@@ -37,8 +37,7 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
         kprefix = 'pyfr.solvers.navstokes.kernels'
         self._be.pointwise.register(f'{kprefix}.tflux')
 
-        # Handle shock capturing and Sutherland's law
-        shock_capturing = self.cfg.get('solver', 'shock-capturing')
+        # Handle Sutherland's law
         visc_corr = self.cfg.get('solver', 'viscosity-correction', 'none')
         if visc_corr not in {'sutherland', 'none'}:
             raise ValueError('Invalid viscosity-correction option')
@@ -51,7 +50,6 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
             'c': self.cfg.items_as('constants', float),
             'jac_exprs': self.basis.jac_exprs,
             'interp_expr': self.basis.interp_expr,
-            'shock_capturing': shock_capturing,
             'visc_corr': visc_corr
         }
 
@@ -104,21 +102,22 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
 
         if has_uin:
             def tdisf_k(uin):
+                sc = self.shock_capturing
                 return self._make_sliced_kernel(
                     self._be.kernel(
-                        'tflux', tplargs=tplargs | {'ktype': kt},
+                        'tflux', tplargs=tplargs | sc.tplargs | {'ktype': kt},
                         dims=[npts, n], u=s(self.scal_upts[uin], rgn),
-                        artvisc_vtx=self.vtx_views.get(rgn), **kw
+                        **kw, **sc.flux_args(self, rgn, pts)
                     )
                     for kt, n, rgn, kw in tdisf
                 )
         else:
             def tdisf_k():
+                sc = self.shock_capturing
                 return self._make_sliced_kernel(
                     self._be.kernel(
-                        'tflux', tplargs=tplargs | {'ktype': kt},
-                        dims=[npts, n],
-                        artvisc_vtx=self.vtx_views.get(rgn), **kw
+                        'tflux', tplargs=tplargs | sc.tplargs | {'ktype': kt},
+                        dims=[npts, n], **kw, **sc.flux_args(self, rgn, pts)
                     )
                     for kt, n, rgn, kw in tdisf
                 )

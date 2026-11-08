@@ -13,18 +13,12 @@ class TplargsMixin:
 
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
         visc_corr = self.cfg.get('solver', 'viscosity-correction', 'none')
-        shock_capturing = self.cfg.get('solver', 'shock-capturing', 'none')
-        if shock_capturing == 'entropy-filter':
-            self.p_min = self.cfg.getfloat('solver-entropy-filter', 'p-min',
-                                           1e-6)
-        else:
-            self.p_min = self.cfg.getfloat('solver-interfaces', 'p-min',
-                                           5*self._be.fpdtype_eps)
+        self.p_min = self.cfg.getfloat('solver-interfaces', 'p-min',
+                                       5*self._be.fpdtype_eps)
 
         self._tplargs = dict(ndims=self.ndims, nvars=self.nvars,
                              rsolver=rsolver, visc_corr=visc_corr,
-                             shock_capturing=shock_capturing, c=self.c,
-                             p_min=self.p_min)
+                             c=self.c, p_min=self.p_min)
 
 
 class NavierStokesIntInters(TplargsMixin,
@@ -42,12 +36,17 @@ class NavierStokesIntInters(TplargsMixin,
             ulin=self.scal_lhs, urin=self.scal_rhs,
             ulout=self._comm_lhs, urout=self._comm_rhs, rmat=self._rotmat
         )
-        self.kernels['comm_flux'] = lambda: self._be.kernel(
-            'intcflux', tplargs=self._tplargs, dims=[self.ninterfpts],
-            ul=self.scal_lhs, ur=self.scal_rhs,
-            gradul=self._vect_lhs, gradur=self._vect_rhs,
-            artvisc=self.artvisc, nl=self._pnorm_lhs, rmat=self._rotmat
-        )
+        def comm_flux():
+            sc = self.shock_capturing
+            return self._be.kernel(
+                'intcflux', tplargs=self._tplargs | sc.tplargs,
+                dims=[self.ninterfpts], ul=self.scal_lhs, ur=self.scal_rhs,
+                gradul=self._vect_lhs, gradur=self._vect_rhs,
+                nl=self._pnorm_lhs, rmat=self._rotmat,
+                **sc.comm_flux_args(self)
+            )
+
+        self.kernels['comm_flux'] = comm_flux
 
 
 class NavierStokesMPIInters(TplargsMixin,
@@ -64,12 +63,16 @@ class NavierStokesMPIInters(TplargsMixin,
                 'mpiconu', tplargs=self._tplargs, dims=[self.ninterfpts],
                 ulin=self.scal_lhs, urin=self.scal_rhs, ulout=self._comm_lhs
             )
-        self.kernels['comm_flux'] = lambda: self._be.kernel(
-            'mpicflux', tplargs=self._tplargs, dims=[self.ninterfpts],
-            ul=self.scal_lhs, ur=self.scal_rhs,
-            gradul=self._vect_lhs, gradur=self._vect_rhs,
-            artvisc=self.artvisc, nl=self._pnorm_lhs
-        )
+        def comm_flux():
+            sc = self.shock_capturing
+            return self._be.kernel(
+                'mpicflux', tplargs=self._tplargs | sc.tplargs,
+                dims=[self.ninterfpts], ul=self.scal_lhs, ur=self.scal_rhs,
+                gradul=self._vect_lhs, gradur=self._vect_rhs,
+                nl=self._pnorm_lhs, **sc.comm_flux_args(self)
+            )
+
+        self.kernels['comm_flux'] = comm_flux
 
 
 class NavierStokesBaseBCInters(TplargsMixin, BaseAdvectionDiffusionBCInters):
@@ -91,12 +94,16 @@ class NavierStokesBaseBCInters(TplargsMixin, BaseAdvectionDiffusionBCInters):
             ulout=self._comm_lhs, nlin=self._pnorm_lhs,
             **self._external_vals
         )
-        self.kernels['comm_flux'] = lambda: self._be.kernel(
-            'bccflux', tplargs=self._tplargs, dims=[self.ninterfpts],
-            extrns=self._external_args, ul=self.scal_lhs,
-            gradul=self._vect_lhs, nl=self._pnorm_lhs,
-            artvisc=self.artvisc, **self._external_vals
-        )
+        def comm_flux():
+            sc = self.shock_capturing
+            return self._be.kernel(
+                'bccflux', tplargs=self._tplargs | sc.tplargs,
+                dims=[self.ninterfpts], extrns=self._external_args,
+                ul=self.scal_lhs, gradul=self._vect_lhs, nl=self._pnorm_lhs,
+                **self._external_vals, **sc.comm_flux_args(self)
+            )
+
+        self.kernels['comm_flux'] = comm_flux
 
     def comm_entropy_kernel(self, entmin_lhs):
         # Physics-specific callback for entropy filtering

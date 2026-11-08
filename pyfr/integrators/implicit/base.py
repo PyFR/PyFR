@@ -62,10 +62,6 @@ class BaseImplicitIntegrator(BaseIntegrator):
         if self.controller_needs_errest and not self.stepper_has_errest:
             raise TypeError('Incompatible stepper/controller combination')
 
-        if cfg.get('solver', 'shock-capturing', 'none') == 'entropy-filter':
-            raise TypeError('Entropy filtering not compatible with '
-                            'implicit time stepping')
-
         # Finite-difference perturbation for JFNK and preconditioner
         if (fdeps := cfg.get(sect, 'fd-eps', 'auto')) == 'auto':
             self._fd_eps = backend.fpdtype_eps**0.5
@@ -120,6 +116,12 @@ class BaseImplicitIntegrator(BaseIntegrator):
         self.system = systemcls(backend, mesh, initsoln, self._registers, cfg,
                                 self.serialiser,
                                 needs_cfl=self.controller_needs_cfl)
+
+        # Ensure the shock capturing scheme works with implicit stepping
+        sc = self.system.shock_capturing
+        if not sc.supports_implicit:
+            raise TypeError(f'{sc.scheme} not compatible with implicit time '
+                            'stepping')
 
         # Assign register numbers to our member variables
         self._assign_registers()

@@ -1,12 +1,28 @@
 import numpy as np
 
 from pyfr.solvers.base.elements import ExportableField
+from pyfr.solvers.baseadvec.shockcapturing import (BaseShockCapturing,
+                                                   NullShockCapturing)
 
 
-class EntropyFilter:
-    def __init__(self, backend, cfg, system, int_inters, mpi_inters,
-                 bc_inters):
+class EntropyFilter(BaseShockCapturing):
+    scheme = 'entropy-filter'
+    supports_errest = False
+    supports_implicit = False
+
+    @classmethod
+    def resolve(cls, cfg, system):
+        # With a single solution point per element there is nothing to filter
+        if cfg.getint('solver', 'order') == 0:
+            return NullShockCapturing
+        else:
+            return cls
+
+    def __init__(self, backend, cfg, system):
         self._be = backend
+
+        # Pressure floor for the interface Riemann solvers
+        self._p_min = cfg.getfloat('solver-entropy-filter', 'p-min', 1e-6)
 
         # Register pointwise kernel templates
         kprefix = f'pyfr.solvers.{system.ef_solver}.kernels'
@@ -20,15 +36,14 @@ class EntropyFilter:
         # Per-element-type setup
         self._entmin = {}
         for etype, eles in system.ele_map.items():
-            if eles.basis.order > 0:
-                self._setup_etype(etype, eles, cfg)
+            self._setup_etype(etype, eles, cfg)
 
         # Commit the entropy buffers so interface views can be built
         backend.commit_extent(self._entmin_ext)
         backend.commit_extent(self._ef_ext)
 
         # Create interface views and register comm_entropy kernels
-        self._setup_interfaces(system, int_inters, mpi_inters, bc_inters)
+        self._setup_interfaces(system)
 
     def _setup_etype(self, etype, eles, cfg):
         be = self._be
@@ -45,6 +60,9 @@ class EntropyFilter:
 
         # Allocate space for filter strength (1 = no filter, 0 = max)
         ef_filter = be.matrix((1, neles), extent=self._ef_ext, tags={'align'})
+
+        # Set us as the shock capturing scheme
+        eles.set_shock_capturing(self)
 
         # Register exportable field for filter strength
         eles.export_fields.append(ExportableField(
@@ -112,7 +130,7 @@ class EntropyFilter:
             'order': eles.basis.order,
             'fpts_in_upts': fpts_in_upts,
             'd_min': cfg.getfloat('solver-entropy-filter', 'd-min', 1e-6),
-            'p_min': cfg.getfloat('solver-entropy-filter', 'p-min', 1e-6),
+            'p_min': self._p_min,
             'e_tol': cfg.getfloat('solver-entropy-filter', 'e-tol', 1e-6),
             'f_tol': cfg.getfloat('solver-entropy-filter', 'f-tol', 1e-4),
             'niters': cfg.getfloat('solver-entropy-filter', 'niters', 2),
@@ -120,7 +138,7 @@ class EntropyFilter:
             'ubdegs': [int(max(dd)) for dd in ub.degrees],
         }
 
-    def _setup_interfaces(self, system, int_inters, mpi_inters, bc_inters):
+    def _setup_interfaces(self, system):
         be = self._be
 
         # Create interface views for entmin using system API
@@ -138,16 +156,24 @@ class EntropyFilter:
 
         kprefix = 'pyfr.solvers.baseadvec.kernels'
         be.pointwise.register(f'{kprefix}.intcent')
-        for i, (lhs, rhs) in zip(int_inters, iint_v):
+        for i, lhs, rhs in iint_v:
             i.kernels['comm_entropy'] = cent_kern('intcent', i, lhs, rhs)
 
         be.pointwise.register(f'{kprefix}.mpicent')
-        for m, (lhs, rhs) in zip(mpi_inters, mpi_v):
+        for m, lhs, rhs in mpi_v:
             m.kernels['comm_entropy'] = cent_kern('mpicent', m, lhs, rhs)
 
         # Register comm_entropy kernels on BC interfaces
-        for b, lhs in zip(bc_inters, bc_v):
+        for b, lhs in bc_v:
             b.kernels['comm_entropy'] = b.comm_entropy_kernel(lhs)
+
+        # Set us as the shock capturing scheme
+        for inters, *_ in [*iint_v, *mpi_v, *bc_v]:
+            inters.set_shock_capturing(self)
+
+    @property
+    def tplargs(self):
+        return super().tplargs | {'p_min': self._p_min}
 
     def add_to_graph_pre_recv(self, g, k, m):
         # Post entropy MPI receives

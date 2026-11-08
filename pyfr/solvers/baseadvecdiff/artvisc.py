@@ -1,7 +1,11 @@
+from weakref import WeakKeyDictionary
+
 import numpy as np
 
 from pyfr.mpiutil import autofree, get_comm_rank_root
 from pyfr.polys import get_polybasis
+from pyfr.solvers.base.elements import ExportableField
+from pyfr.solvers.baseadvec.shockcapturing import BaseShockCapturing
 
 
 class _VtxPeer:
@@ -21,12 +25,14 @@ class _VtxPeer:
         }
 
 
-class ArtificialViscosity:
+class ArtificialViscosity(BaseShockCapturing):
     name = 'av'
+    scheme = 'artificial-viscosity'
+    needs_grad_soln = True
 
-    def __init__(self, backend, cfg, mesh, ele_map):
+    def __init__(self, backend, cfg, system):
         self._be = backend
-        self._mesh = mesh
+        self._mesh = mesh = system.mesh
 
         # Owned extents for the AV buffers (self-committed, not global)
         self._vtx_ext = backend.extent()
@@ -48,8 +54,17 @@ class ArtificialViscosity:
         c_av = cfg.items_as('solver-artificial-viscosity', float)
 
         # Per-element-type setup
-        for etype, eles in ele_map.items():
+        self.artvisc_fpts = {}
+        self._vtx_views = {}
+        for etype, eles in system.ele_map.items():
             self._setup_etype(etype, eles, mesh, c_av)
+
+        # Commit the flux point buffers so interface views can be built
+        backend.commit_extent(self._fpts_ext)
+
+        # Create interface views and register the vertex exchange
+        self._setup_interfaces(system)
+        self._setup_mpi()
 
     def _setup_etype(self, etype, eles, mesh, c_av):
         be = self._be
@@ -70,18 +85,22 @@ class ArtificialViscosity:
             (eles.nfpts, eles.neles), tags={'align'},
             extent=self._fpts_ext
         )
-        eles.artvisc_fpts = artvisc_fpts
+        self.artvisc_fpts[etype] = artvisc_fpts
 
         # Linear interpolation basis for vertex → point interpolation
         linbasis = get_polybasis(basis.name, 1, basis.linspts)
 
         # Build vertex views (full view + per-region views)
-        self._setup_vtx_views(eles, mesh, nverts, vnodes)
+        vtx_view = self._setup_vtx_views(etype, eles, mesh, nverts, vnodes)
 
         # Register kernel factories
-        self._setup_kernels(eles, c_av, nverts, vnodes, linbasis, artvisc_fpts)
+        self._setup_kernels(eles, vtx_view, c_av, nverts, vnodes, linbasis,
+                            artvisc_fpts)
 
-    def _setup_vtx_views(self, eles, mesh, nverts, vnodes):
+        # Set us as the shock capturing scheme
+        eles.set_shock_capturing(self)
+
+    def _setup_vtx_views(self, etype, eles, mesh, nverts, vnodes):
         be = self._be
 
         # Build mapping arrays for vertex views
@@ -92,16 +111,19 @@ class ArtificialViscosity:
 
         # Full view for 1D kernels (shocksensor, avfill)
         vmap = be.view_mapping(matmap, rmap, cmap)
-        eles.vtx_view = be.view(vmap)
+        vtx_view = be.view(vmap)
 
         # Per-region views for 2D tflux kernel
+        self._vtx_views[etype] = vtx_views = {}
         for rgn in ('curved', 'linear'):
             if rgn in eles.mesh_regions:
                 off = 0 if rgn == 'curved' else eles.linoff
                 slc = slice(off*nverts, (off + eles.mesh_regions[rgn])*nverts)
-                eles.vtx_views[rgn] = be.view(vmap[slc])
+                vtx_views[rgn] = be.view(vmap[slc])
 
-    def _setup_kernels(self, eles, c_av, nverts, vnodes, linbasis,
+        return vtx_view
+
+    def _setup_kernels(self, eles, vtx_view, c_av, nverts, vnodes, linbasis,
                        artvisc_fpts):
         be = self._be
 
@@ -119,20 +141,23 @@ class ArtificialViscosity:
         def shocksensor_kern(uin):
             return be.kernel(
                 'shocksensor', tplargs=tplargs_sensor, dims=[eles.neles],
-                u=eles.scal_upts[uin], vtx=eles.vtx_view
+                u=eles.scal_upts[uin], vtx=vtx_view
             )
 
         def avfill_kern():
             return be.kernel(
                 'avfill', tplargs=tplargs_avfill, dims=[eles.neles],
-                vtx=eles.vtx_view, artvisc_fpts=artvisc_fpts
+                vtx=vtx_view, artvisc_fpts=artvisc_fpts
             )
 
         eles.kernels['shocksensor'] = shocksensor_kern
         eles.kernels['avfill'] = avfill_kern
 
-        # Set the getter for the exportable AV field (P1 vertex values)
-        eles.artvisc_vtx_fn = lambda: self._av_at_vtx(vnodes)
+        # Register the exportable AV field (P1 vertex values)
+        eles.export_fields.append(ExportableField(
+            name='artvisc', shape=(nverts,),
+            getter=lambda: self._av_at_vtx(vnodes)
+        ))
 
     def _av_at_vtx(self, vnodes):
         vtx = self._vtx_buf.get().ravel()
@@ -175,7 +200,24 @@ class ArtificialViscosity:
             baseline_decay=baseline_decay
         )
 
-    def prepare_mpi(self):
+    def _setup_interfaces(self, system):
+        # Create artvisc_fpts views on interfaces for comm_flux
+        iint_v, mpi_v, bc_v = system.make_field_views(self.artvisc_fpts)
+
+        # C0 AV is continuous; both sides see the same value
+        self._inters_views = WeakKeyDictionary()
+        for i, lhs, _ in iint_v:
+            self._inters_views[i] = lhs
+        for m, lhs, _ in mpi_v:
+            self._inters_views[m] = lhs
+        for b, lhs in bc_v:
+            self._inters_views[b] = lhs
+
+        # Set us as the shock capturing scheme
+        for inters in self._inters_views:
+            inters.set_shock_capturing(self)
+
+    def _setup_mpi(self):
         be = self._be
         mesh = self._mesh
 
@@ -213,32 +255,15 @@ class ArtificialViscosity:
         self.mpireqs = {}
 
         # Provider lists for the system
-        self.kern_parts = [self] + self._peers
+        self.kern_parts = {'vtx': [self] + self._peers}
         self.mpi_parts = list(self._peers)
 
     # Shock capturing interface
-    @property
-    def extra_kern_parts(self):
-        return {'vtx': self.kern_parts}
+    def flux_args(self, eles, rgn, pts):
+        return {'artvisc_vtx': self._vtx_views[eles.name][rgn]}
 
-    @property
-    def extra_mpi_parts(self):
-        return self.mpi_parts
-
-    def soln_deps(self, k):
-        return []
-
-    def flux_deps(self, k):
-        return k['eles/avfill']
-
-    def bc_flux_deps(self, k):
-        return []
-
-    def preproc_graphs(self, be, k, m, deps):
-        return ()
-
-    def postproc(self, be, k):
-        pass
+    def comm_flux_args(self, inters):
+        return {'artvisc': self._inters_views[inters]}
 
     def add_to_graph_pre_recv(self, g, k, m):
         # Vertex exchange: post receives, zero buffer, run sensor, pack, send

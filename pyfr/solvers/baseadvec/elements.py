@@ -1,7 +1,8 @@
 from pyfr.solvers.base import BaseElements
+from pyfr.solvers.baseadvec.shockcapturing import ShockCapturingMixin
 
 
-class BaseAdvectionElements(BaseElements):
+class BaseAdvectionElements(ShockCapturingMixin, BaseElements):
     def __init__(self, *kargs, **kwargs):
         super().__init__(*kargs, **kwargs)
 

@@ -128,19 +128,19 @@ class BaseSystem:
             rperm = side_perm(i, i.rhs, layout)
             lhs = be.view(fmap(i.lhs, layout, lperm))
             rhs = be.view(fmap(i.rhs, layout, rperm))
-            iint_views.append((lhs, rhs))
+            iint_views.append((i, lhs, rhs))
 
         mpi_views = []
         for m in self._mpi_inters:
             lhs = be.xchg_view(fmap(m.lhs, layout))
             rhs = be.xchg_matrix_for_view(lhs)
-            mpi_views.append((lhs, rhs))
+            mpi_views.append((m, lhs, rhs))
 
         bc_views = []
         for b in self._bc_inters:
             perm = side_perm(b, b.lhs, bc_layout)
             lhs = be.view(fmap(b.lhs, bc_layout, perm))
-            bc_views.append(lhs)
+            bc_views.append((b, lhs))
 
         return iint_views, mpi_views, bc_views
 
@@ -160,7 +160,7 @@ class BaseSystem:
                     comm, m.rhsrank, tag
                 )
 
-        for m, (lhs, rhs) in zip(self._mpi_inters, mpi_views):
+        for m, lhs, rhs in mpi_views:
             register(m, lhs, rhs, m.next_mpi_tag())
 
     def commit(self):
