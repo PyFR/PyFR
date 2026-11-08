@@ -1,7 +1,5 @@
 from functools import cached_property
 
-import numpy as np
-
 import pyfr.backends.base as base
 
 

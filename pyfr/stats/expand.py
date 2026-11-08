@@ -1,8 +1,6 @@
 from collections import namedtuple
 import re
 
-import numpy as np
-
 from pyfr.exprs import subst_expr_vars
 from pyfr.inifile import process_expr
 from pyfr.stats.finalise import eval_algebraic

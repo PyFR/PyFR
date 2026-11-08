@@ -7,7 +7,7 @@ from pyfr.cache import clear_memoize, memoize
 from pyfr.fields import CleanToGrid, recover_grads
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.readers.native import group_names
-from pyfr.shapes import BaseShape, interp_pts
+from pyfr.shapes import BaseShape
 from pyfr.subdiv import get_subdiv
 from pyfr.util import first, subclass_where
 from pyfr.writers import BaseWriter
