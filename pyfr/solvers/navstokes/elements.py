@@ -58,19 +58,19 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
         # Mode-dependent setup
         if self.grad_fusion:
             pts, fused = 'upts', True
-            kname = 'tdisf_fused'
+            kname = 'disf_fused'
         elif 'flux' in self.antialias:
             pts, fused = 'qpts', False
-            kname = 'tdisf'
+            kname = 'disf'
         else:
             pts, fused = 'upts', False
-            kname = 'tdisf'
+            kname = 'disf'
 
         npts = self.nqpts if pts == 'qpts' else self.nupts
         has_uin = pts == 'upts'
 
         # Build per-region kernel args
-        tdisf = []
+        disf = []
         for rgn in ('curved', 'linear'):
             if rgn not in r:
                 continue
@@ -97,10 +97,10 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
                 kw['u'] = s(self._scal_qpts, rgn)
                 kw['f'] = s(self._vect_qpts, rgn)
 
-            tdisf.append((ktype, r[rgn], rgn, kw))
+            disf.append((ktype, r[rgn], rgn, kw))
 
         if has_uin:
-            def tdisf_k(uin):
+            def disf_k(uin):
                 sc = self.shock_capturing
                 return self._make_sliced_kernel(
                     self._be.kernel(
@@ -108,17 +108,17 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
                         dims=[npts, n], u=s(self.scal_upts[uin], rgn),
                         **kw, **sc.flux_args(self, rgn, pts)
                     )
-                    for kt, n, rgn, kw in tdisf
+                    for kt, n, rgn, kw in disf
                 )
         else:
-            def tdisf_k():
+            def disf_k():
                 sc = self.shock_capturing
                 return self._make_sliced_kernel(
                     self._be.kernel(
                         'tflux', tplargs=tplargs | sc.tplargs | {'ktype': kt},
                         dims=[npts, n], **kw, **sc.flux_args(self, rgn, pts)
                     )
-                    for kt, n, rgn, kw in tdisf
+                    for kt, n, rgn, kw in disf
                 )
 
-        self.kernels[kname] = tdisf_k
+        self.kernels[kname] = disf_k

@@ -100,12 +100,12 @@ class BaseAdvectionSystem(BaseSystem):
         g_flux_div.add_all(k['eles/qptsu'])
 
         # Compute the transformed flux
-        for l in k['eles/tdisf']:
+        for l in k['eles/disf']:
             g_flux_div.add(l, deps=deps(l, 'eles/qptsu'))
 
         # Compute the transformed divergence of the partially corrected flux
-        for l in k['eles/tdivtpcorf']:
-            g_flux_div.add(l, deps=deps(l, 'eles/tdisf'))
+        for l in k['eles/divpcorf']:
+            g_flux_div.add(l, deps=deps(l, 'eles/disf'))
 
         # Unpack MPI face data (may be empty when unpack is a no-op)
         g_flux_div.add_all(k['mpiint/scal_fpts_unpack'])
@@ -118,16 +118,16 @@ class BaseAdvectionSystem(BaseSystem):
         self.shock_capturing.add_to_graph_post_recv(g_flux_div, k, deps)
 
         # Compute the transformed divergence of the corrected flux
-        for l in k['eles/tdivtconf']:
-            ldeps = deps(l, 'eles/tdivtpcorf') + k['mpiint/comm_flux']
+        for l in k['eles/divconf']:
+            ldeps = deps(l, 'eles/divpcorf') + k['mpiint/comm_flux']
             g_flux_div.add(l, deps=ldeps)
 
         # Obtain the physical divergence of the corrected flux
         for l in k['eles/negdivconf']:
-            g_flux_div.add(l, deps=deps(l, 'eles/tdivtconf'))
+            g_flux_div.add(l, deps=deps(l, 'eles/divconf'))
 
-        kgroup = [k['eles/qptsu'], k['eles/tdisf'], k['eles/tdivtpcorf'],
-                  k['eles/tdivtconf'], k['eles/negdivconf']]
+        kgroup = [k['eles/qptsu'], k['eles/disf'], k['eles/divpcorf'],
+                  k['eles/divconf'], k['eles/negdivconf']]
         for ks in zip_longest(*kgroup):
             self._group(g_flux_div, ks, subs=[
                 [(ks[0], 'out'), (ks[1], 'u')],

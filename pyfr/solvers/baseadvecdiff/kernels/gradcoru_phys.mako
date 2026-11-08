@@ -7,7 +7,7 @@
 <% smats = 'smats_l' if 'linear' in ktype else 'smats' %>
 <% rcpdjac = 'rcpdjac_l' if 'linear' in ktype else 'rcpdjac' %>
 
-<%pyfr:kernel name='gradcoru' ndim='2'
+<%pyfr:kernel name='gradcoru_phys' ndim='2'
               gradu='inout fpdtype_t[${str(ndims)}][${str(nvars)}]'
               smats='in fpdtype_t[${str(ndims)}][${str(ndims)}]'
               rcpdjac='in fpdtype_t'

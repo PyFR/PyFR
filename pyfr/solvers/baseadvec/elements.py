@@ -83,20 +83,20 @@ class BaseAdvectionElements(ShockCapturingMixin, BaseElements):
 
         # First flux correction kernel
         if fluxaa and self.basis.order > 0:
-            kernels['tdivtpcorf'] = lambda uin, fout: self._be.kernel(
+            kernels['divpcorf'] = lambda uin, fout: self._be.kernel(
                 'mul', self.opmat('(M1 - M3*M2)*M9'), self._vect_qpts,
-                out=self._tdivt_upts(uin, fout)
+                out=self._div_upts(uin, fout)
             )
         elif self.basis.order > 0:
-            kernels['tdivtpcorf'] = lambda uin, fout: self._be.kernel(
+            kernels['divpcorf'] = lambda uin, fout: self._be.kernel(
                 'mul', self.opmat('M1 - M3*M2'), self._vect_upts,
-                out=self._tdivt_upts(uin, fout)
+                out=self._div_upts(uin, fout)
             )
 
         # Second flux correction kernel
-        kernels['tdivtconf'] = lambda uin, fout: self._be.kernel(
+        kernels['divconf'] = lambda uin, fout: self._be.kernel(
             'mul', self.opmat('M3'), self._scal_fpts,
-            out=self._tdivt_upts(uin, fout), beta=float(self.basis.order > 0)
+            out=self._div_upts(uin, fout), beta=float(self.basis.order > 0)
         )
 
         # Transformed to physical divergence kernel + source term
@@ -114,7 +114,7 @@ class BaseAdvectionElements(ShockCapturingMixin, BaseElements):
         # Source terms need the solution after the divergence is formed
         return uin == fout and self._soln_in_src_macros
 
-    def _tdivt_upts(self, uin, fout):
+    def _div_upts(self, uin, fout):
         # Keep the solution intact if the divergence would overwrite it
         if self._preserve_soln(uin, fout):
             return self._scal_upts_tmp
@@ -128,7 +128,7 @@ class BaseAdvectionElements(ShockCapturingMixin, BaseElements):
             'negdivconf',
             tplargs=self._srctplargs | {'preserve_soln': preserve},
             dims=[self.nupts, self.neles], extrns=self._external_args,
-            tdivtconf=self._tdivt_upts(uin, fout),
+            divconf=self._div_upts(uin, fout),
             rcpdjac=self.rcpdjac_at('upts'),
             ploc=self.ploc_at('upts') if self._ploc_in_src_macros else None,
             u=self.scal_upts[uin] if self._soln_in_src_macros else None,

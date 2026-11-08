@@ -7,13 +7,13 @@
 <%
     # Write over the solution when the divergence was formed in the scratch
     if preserve_soln:
-        kargs = {'tdivtconf': f'in fpdtype_t[{nvars}]',
+        kargs = {'divconf': f'in fpdtype_t[{nvars}]',
                  'u': f'inout fpdtype_t[{nvars}]'}
         out = 'u'
     else:
-        kargs = {'tdivtconf': f'inout fpdtype_t[{nvars}]',
+        kargs = {'divconf': f'inout fpdtype_t[{nvars}]',
                  'u': f'in fpdtype_t[{nvars}]'}
-        out = 'tdivtconf'
+        out = 'divconf'
 %>
 
 <%pyfr:kernel name='negdivconf' ndim='2' kargs='${kargs}'
@@ -27,6 +27,6 @@ fpdtype_t src[${nvars}] = {};
 % endfor
 
 % for i in range(nvars):
-    ${out}[${i}] = -rcpdjac*tdivtconf[${i}] + src[${i}];
+    ${out}[${i}] = -rcpdjac*divconf[${i}] + src[${i}];
 % endfor
 </%pyfr:kernel>

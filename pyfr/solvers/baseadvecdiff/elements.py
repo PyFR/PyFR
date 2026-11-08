@@ -34,20 +34,20 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         slicem, slicedk = self._slice_mat, self._make_sliced_kernel
 
         # Register our pointwise kernels
-        self._be.pointwise.register(f'{kprefix}.gradcoru')
+        self._be.pointwise.register(f'{kprefix}.gradcoru_phys')
 
         # Mesh regions
         regions = self.mesh_regions
 
         # Uncorrected gradient at the solution points
         if self.basis.order > 0:
-            kernels['tgradpcoru_upts'] = lambda uin: kernel(
+            kernels['gradpcoru_upts'] = lambda uin: kernel(
                 'mul', self.opmat('M4'), self.scal_upts[uin],
                 out=self._grad_upts
             )
 
         # Correct using the common solution jumps at the flux points
-        kernels['tgradcoru_upts'] = lambda: kernel(
+        kernels['gradcoru_upts'] = lambda: kernel(
             'mul', self.opmat('M6'), self._comm_fpts,
             out=self._grad_upts, beta=float(self.basis.order > 0)
         )
@@ -60,27 +60,27 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
             'jac_exprs': self.basis.jac_exprs
         }
 
-        gradcoru_u = []
+        gradcoru_phys = []
         if 'curved' in regions:
-            gradcoru_u.append(lambda: kernel(
-                'gradcoru', tplargs=tplargs | {'ktype': 'curved'},
+            gradcoru_phys.append(lambda: kernel(
+                'gradcoru_phys', tplargs=tplargs | {'ktype': 'curved'},
                 dims=[self.nupts, regions['curved']],
                 gradu=slicem(self._grad_upts, 'curved'),
                 smats=self.curved_smat_at('upts'),
                 rcpdjac=self.rcpdjac_at('upts', 'curved')
             ))
         if 'linear' in regions:
-            gradcoru_u.append(lambda: kernel(
-                'gradcoru', tplargs=tplargs | {'ktype': 'linear'},
+            gradcoru_phys.append(lambda: kernel(
+                'gradcoru_phys', tplargs=tplargs | {'ktype': 'linear'},
                 dims=[self.nupts, regions['linear']],
                 gradu=slicem(self._grad_upts, 'linear'),
                 upts=self.upts, verts=self.ploc_at('linspts', 'linear')
             ))
 
-        kernels['gradcoru_u'] = lambda: slicedk(k() for k in gradcoru_u)
+        kernels['gradcoru_phys'] = lambda: slicedk(k() for k in gradcoru_phys)
 
         if not self.grad_fusion or self.basis.order == 0:
-            kernels['gradcoru_upts'] = kernels['gradcoru_u']
+            kernels['gradcoru_phys_upts'] = kernels['gradcoru_phys']
 
         def gradcoru_fpts():
             nupts, nfpts = self.nupts, self.nfpts

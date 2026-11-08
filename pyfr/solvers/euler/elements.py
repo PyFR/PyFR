@@ -219,7 +219,7 @@ class EulerElements(BaseFluidElements, BaseAdvectionElements):
         has_uin = pts == 'upts'
 
         # Build per-region kernel args
-        tdisf = []
+        disf = []
         for rgn in ('curved', 'linear'):
             if rgn not in r:
                 continue
@@ -238,10 +238,10 @@ class EulerElements(BaseFluidElements, BaseAdvectionElements):
                 kw['u'] = s(self._scal_qpts, rgn)
                 kw['f'] = s(self._vect_qpts, rgn)
 
-            tdisf.append((r[rgn], rgn, kw))
+            disf.append((r[rgn], rgn, kw))
 
         if has_uin:
-            def tdisf_k(uin):
+            def disf_k(uin):
                 sc = self.shock_capturing
                 return self._make_sliced_kernel(
                     self._be.kernel(
@@ -249,17 +249,17 @@ class EulerElements(BaseFluidElements, BaseAdvectionElements):
                         dims=[npts, n], u=s(self.scal_upts[uin], rgn),
                         **kw, **sc.flux_args(self, rgn, pts)
                     )
-                    for n, rgn, kw in tdisf
+                    for n, rgn, kw in disf
                 )
         else:
-            def tdisf_k():
+            def disf_k():
                 sc = self.shock_capturing
                 return self._make_sliced_kernel(
                     self._be.kernel(
                         'tflux', tplargs=tplargs | sc.tplargs | {'ktype': rgn},
                         dims=[npts, n], **kw, **sc.flux_args(self, rgn, pts)
                     )
-                    for n, rgn, kw in tdisf
+                    for n, rgn, kw in disf
                 )
 
-        self.kernels['tdisf'] = tdisf_k
+        self.kernels['disf'] = disf_k
