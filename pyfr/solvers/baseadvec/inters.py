@@ -3,6 +3,8 @@ import math
 
 import numpy as np
 
+from pyfr.dsl import parse_expr
+from pyfr.dsl.nodes import Var, walk_expr
 from pyfr.exprs import npeval
 from pyfr.nputil import fuzzysort
 from pyfr.solvers.base import BaseInters
@@ -135,6 +137,11 @@ class BaseAdvectionBCInters(BaseInters):
         # Make the simulation time available inside kernels
         self.set_external('t', 'scalar fpdtype_t')
 
+        # Track the config expressions and how plugins have rewritten them
+        self._cfg_exprs = {}
+        self._rewritten = set()
+        self._plugin_externs = {}
+
     @classmethod
     def hookfns(cls, bciface, mesh, elemap):
         return None, None
@@ -153,7 +160,7 @@ class BaseAdvectionBCInters(BaseInters):
         else:
             return [npeval(cfg.getexpr(sect, k), cc) for k in opts]
 
-    def _exp_opts(self, opts, lhs, default={}):
+    def _exp_opts(self, opts, default={}):
         cfg, sect = self.cfg, self.cfgsect
 
         subs = cfg.items('constants')
@@ -167,11 +174,57 @@ class BaseAdvectionBCInters(BaseInters):
             else:
                 exprs[k] = cfg.getexpr(sect, k, subs=subs)
 
-        if (any('ploc' in ex for ex in exprs.values()) and
-            'ploc' not in self._external_args):
+        self._cfg_exprs |= exprs
+        self._set_expr_externs(exprs)
+
+        return exprs
+
+    @staticmethod
+    def _expr_vars(ex):
+        nodes = walk_expr(parse_expr(ex))
+        return {n.name for n in nodes if isinstance(n, Var)}
+
+    @property
+    def _curr_exprs(self):
+        return {k: self.c[k] for k in self._cfg_exprs}
+
+    def _set_expr_externs(self, exprs, externs={}):
+        names = set().union(*map(self._expr_vars, exprs.values()))
+
+        if 'ploc' in names and 'ploc' not in self._external_args:
             spec = f'in fpdtype_t[{self.ndims}]'
-            value = self._const_mat(lhs, 'get_ploc_for_inters')
+            value = self._const_mat(self.lhs, 'get_ploc_for_inters')
 
             self.set_external('ploc', spec, value=value)
 
-        return exprs
+        # Declare those plugin externs which the expressions reference
+        for name, (spec, value) in externs.items():
+            if name in names:
+                self.set_external(name, spec, value=value)
+
+    def rewrite_exprs(self, fn=None, externs={}):
+        # Let the plugin rewrite the expressions of this boundary
+        if fn is not None:
+            rexprs = fn(self.cfgsect, dict(self._cfg_exprs))
+
+            # Ensure each expression is rewritten by at most one plugin
+            free = self._cfg_exprs.keys() - self._rewritten
+            if bad := rexprs.keys() - free:
+                raise ValueError(f'Plugin cannot rewrite option {min(bad)!r} '
+                                 f'of [{self.cfgsect}]')
+
+            self._rewritten |= rexprs.keys()
+            self.c |= rexprs
+
+        # Declare the referenced externs offered by any plugin thus far
+        self._plugin_externs |= externs
+        self._set_expr_externs(self._curr_exprs, self._plugin_externs)
+
+    def check_exprs(self):
+        known = set(self._external_args)
+
+        # Ensure the expressions only reference kernel arguments
+        for k, ex in self._curr_exprs.items():
+            if unknown := self._expr_vars(ex) - known:
+                raise ValueError(f'Unknown variable {min(unknown)!r} in '
+                                 f'option {k!r} of [{self.cfgsect}]')

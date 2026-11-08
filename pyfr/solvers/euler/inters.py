@@ -82,9 +82,7 @@ class EulerSupInflowBCInters(EulerBaseBCInters):
     def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
         super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
 
-        self.c |= self._exp_opts(
-            ['rho', 'p', 'u', 'v', 'w'][:self.ndims + 2], lhs
-        )
+        self.c |= self._exp_opts(['rho', 'p', 'u', 'v', 'w'][:self.ndims + 2])
 
 
 class EulerSupOutflowBCInters(EulerBaseBCInters):
@@ -97,9 +95,7 @@ class EulerCharRiemInvBCInters(EulerBaseBCInters):
     def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
         super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
 
-        self.c |= self._exp_opts(
-            ['rho', 'p', 'u', 'v', 'w'][:self.ndims + 2], lhs
-        )
+        self.c |= self._exp_opts(['rho', 'p', 'u', 'v', 'w'][:self.ndims + 2])
 
 
 class EulerSlpAdiaWallBCInters(EulerBaseBCInters):
@@ -118,9 +114,7 @@ class ControlledBCMixin:
     def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
         super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
 
-        self.c |= self._exp_opts(
-            ['rho', 'u', 'v', 'w'][:self.ndims + 1], lhs
-        )
+        self.c |= self._exp_opts(['rho', 'u', 'v', 'w'][:self.ndims + 1])
 
         self.con_to_pri = first(elemap.values()).con_to_pri
 

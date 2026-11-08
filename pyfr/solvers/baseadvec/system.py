@@ -43,7 +43,15 @@ class BaseAdvectionSystem(BaseSystem):
         else:
             self._ef = None
 
+    def rewrite_bc_exprs(self, fn=None, externs={}):
+        for b in self._bc_inters:
+            b.rewrite_exprs(fn, externs)
+
     def commit(self):
+        # Ensure the boundary expressions only reference known variables
+        for b in self._bc_inters:
+            b.check_exprs()
+
         self.backend.commit()
 
         # Reduction kernels to find max wavespeed across each element type

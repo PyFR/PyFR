@@ -119,7 +119,7 @@ class NavierStokesNoSlpIsotWallBCInters(NavierStokesBaseBCInters):
         super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
 
         self.c['cpTw'], = self._eval_opts(['cpTw'])
-        self.c |= self._exp_opts('uvw'[:self.ndims], lhs,
+        self.c |= self._exp_opts('uvw'[:self.ndims],
                                  default={'u': 0, 'v': 0, 'w': 0})
 
     @classmethod
@@ -173,9 +173,7 @@ class NavierStokesCharRiemInvBCInters(NavierStokesBaseBCInters):
     def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
         super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
 
-        self.c |= self._exp_opts(
-            ['rho', 'p', 'u', 'v', 'w'][:self.ndims + 2], lhs
-        )
+        self.c |= self._exp_opts(['rho', 'p', 'u', 'v', 'w'][:self.ndims + 2])
 
 
 class NavierStokesSupInflowBCInters(NavierStokesBaseBCInters):
@@ -185,9 +183,7 @@ class NavierStokesSupInflowBCInters(NavierStokesBaseBCInters):
     def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
         super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
 
-        self.c |= self._exp_opts(
-            ['rho', 'p', 'u', 'v', 'w'][:self.ndims + 2], lhs
-        )
+        self.c |= self._exp_opts(['rho', 'p', 'u', 'v', 'w'][:self.ndims + 2])
 
 
 class NavierStokesSupOutflowBCInters(NavierStokesBaseBCInters):
@@ -203,7 +199,7 @@ class NavierStokesSubInflowFrvBCInters(NavierStokesBaseBCInters):
         super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
 
         self.c |= self._exp_opts(
-            ['rho', 'u', 'v', 'w'][:self.ndims + 1], lhs,
+            ['rho', 'u', 'v', 'w'][:self.ndims + 1],
             default={'u': 0, 'v': 0, 'w': 0}
         )
 
@@ -219,7 +215,7 @@ class NavierStokesSubInflowFtpttangBCInters(NavierStokesBaseBCInters):
 
         # Pass boundary constants to the backend
         self.c['cpTt'], = self._eval_opts(['cpTt'])
-        self.c |= self._exp_opts(['pt'], lhs)
+        self.c |= self._exp_opts(['pt'])
         self.c['Rdcp'] = (gamma - 1.0)/gamma
 
         # Calculate u, v velocity components from the inflow angle
@@ -242,7 +238,7 @@ class NavierStokesSubOutflowBCInters(NavierStokesBaseBCInters):
     def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
         super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
 
-        self.c |= self._exp_opts(['p'], lhs)
+        self.c |= self._exp_opts(['p'])
 
 
 class NavierStokesCharRiemInvMassFlowBCInters(MassFlowBCMixin,

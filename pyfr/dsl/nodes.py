@@ -304,3 +304,10 @@ def expr_children(expr):
         return tuple(expr.args)
     else:
         return tuple(_ast_children(expr))
+
+
+def walk_expr(expr):
+    yield expr
+
+    for c in expr_children(expr):
+        yield from walk_expr(c)

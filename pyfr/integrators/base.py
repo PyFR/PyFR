@@ -54,6 +54,9 @@ class BaseIntegrator(metaclass=RegisterMeta):
         prevcfgs = initsoln.prevcfgs if initsoln else {}
         self.prevcfgs = {k: v.tostr() for k, v in prevcfgs.items()}
 
+        # Serialised state of the solution we are restarting from
+        self.initstate = initsoln.state if initsoln else {}
+
         # Register our pointwise kernel
         backend.pointwise.register('pyfr.backends.base.kernels.axnpby')
 
