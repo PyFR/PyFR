@@ -259,8 +259,7 @@ def mpi_progress(comm, pbar, n):
 class AlltoallMixin:
     @staticmethod
     def _count_to_disp(count):
-        disp = np.empty(len(count), dtype=count.dtype)
-        disp[0] = 0
+        disp = np.zeros(len(count), dtype=count.dtype)
         np.cumsum(count[:-1], out=disp[1:])
         return disp
 
