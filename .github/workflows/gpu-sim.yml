@@ -1,0 +1,89 @@
+name: GPU tests (simulated H100)
+
+# Optional, non-required check. The hosted runners have no GPU, so nothing in
+# CI runs the CUDA backend. This runs it on a simulated NVIDIA H100
+# (https://github.com/pantheongpu/pantheonsim): PyFR compiles its kernels
+# with NVRTC at run time, loads them through the driver API and multiplies
+# with cuBLASLt and GiMMiK. It solves a small Euler and Navier-Stokes case
+# and compares the result with values measured on a real GeForce RTX 3060.
+# A simulator cannot reproduce hardware-specific behavior or timing, so it
+# complements real-GPU testing and does not replace it.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "pyfr/backends/cuda/**"
+      - "pyfr/backends/base/**"
+      - "pyfr/solvers/**"
+      - "pyfr/integrators/**"
+      - ".github/gpu-sim/**"
+      - ".github/workflows/gpu-sim.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gpu-sim:
+    name: CUDA backend, simulated H100
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # The toolkit gives NVRTC its real compiler; without it the
+      # simulator's built-in NVRTC rejects PyFR's --ftz=true flag.
+      - name: Set up the simulated GPU and CUDA toolkit
+        uses: pantheongpu/setup-pantheonsim@ca87fe3143b29166822b923d6050945c5179408c # v0.1.5
+        with:
+          gpu: nvidia/h100
+          cuda-toolkit: "13.0"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # mpi4py picks up the MPICH wheel, so no system MPI is needed.
+      - name: Install PyFR
+        run: |
+          python -m venv "$RUNNER_TEMP/venv"
+          source "$RUNNER_TEMP/venv/bin/activate"
+          pip install -e . pytest mpich
+          echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
+          echo "LD_LIBRARY_PATH=$RUNNER_TEMP/venv/lib" >> "$GITHUB_ENV"
+
+      - name: Unit tests
+        run: python -m pytest -ra pyfr/tests
+
+      # GiMMiK generates PTX that uses ld.weak/st.weak, which the simulator
+      # does not accept yet, so PyFR is told to use GiMMiK's CUDA C
+      # generator only (compiled by NVRTC); everything else is unchanged.
+      # NVRTC is given --gpu-architecture=compute_90 (in the config), because
+      # the default sm_90a produces SASS and the simulator runs PTX. Drop
+      # both once ld.weak is supported.
+      - name: Patch PyFR for the simulator
+        run: |
+          f=pyfr/backends/cuda/gimmik.py
+          grep -q 'matmuls = \[gimmik.PTXMatMul, gimmik.CUDAMatMul\]' "$f"
+          sed -i 's/matmuls = \[gimmik.PTXMatMul, gimmik.CUDAMatMul\]/matmuls = [gimmik.CUDAMatMul]/' "$f"
+
+      - name: Run the cases on the simulated H100
+        working-directory: ${{ runner.temp }}
+        run: |
+          case=$GITHUB_WORKSPACE/.github/gpu-sim/case.py
+          python "$case" mesh box.msh
+          pyfr import box.msh box.pyfrm
+          for c in "euler 3" "euler 6" "navier-stokes 3"; do
+            set -- $c
+            python "$case" config "$1" "$2" "$1-p$2.ini"
+            vgpu run --gpu nvidia/h100 pyfr run -b cuda box.pyfrm "$1-p$2.ini"
+            python "$case" check "$1-p$2-001.pyfrs" "$1-p$2"
+          done
