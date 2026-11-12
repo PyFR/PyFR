@@ -131,9 +131,12 @@ class ExpMathFn(BaseMathFn):
         # Taylor series for exp(r) on [-ln(2)/2, ln(2)/2]
         ecoef = [1/math.factorial(k) for k in range(ncoef)]
 
+        # Arguments at which the scaling becomes zero and infinity
+        xlo, xhi = (1 - fi.maxexp)*math.log(2), fi.maxexp*math.log(2)
+
         return {
             'log2e': math.log2(math.e), 'ln2hi': ln2hi, 'ln2lo': ln2lo,
-            'poly': self._horner(ecoef, 'r', fpdtype)
+            'poly': self._horner(ecoef, 'r', fpdtype), 'xlo': xlo, 'xhi': xhi
         }
 
 

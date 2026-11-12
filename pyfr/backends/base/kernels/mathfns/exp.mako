@@ -1,5 +1,9 @@
 ${qual}static inline fpdtype_t ${cname}(fpdtype_t x)
 {
+    // Clamp the argument to the range over which 2^n is representable
+    x = (x < ${xlo}${fsuffix}) ? ${xlo}${fsuffix} : x;
+    x = (x > ${xhi}${fsuffix}) ? ${xhi}${fsuffix} : x;
+
     // Reduce the argument to r = x - n*ln(2) with |r| <= ln(2)/2
     fpdtype_t n = rint(x*${log2e}${fsuffix});
     fpdtype_t r = fma(-n, ${ln2hi}${fsuffix}, x);
