@@ -4,7 +4,7 @@ import numpy as np
 
 from pyfr.dsl import CodeGenerator, Simplifier, parse_expr
 from pyfr.dsl.derivs import Differentiator
-from pyfr.dsl.nodes import Float, Index, Int, Var, map_ast
+from pyfr.dsl.nodes import Float, Index, Int, Var, map_ast, walk_expr
 from pyfr.dsl.rewriter import rename_vars
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.exprs import npeval
@@ -289,6 +289,10 @@ class PrescribedMotion(BaseMotion):
                         for p in nirf_src_params(self.ndims)}
         self.tplargs |= nirf_origin_tplargs(self.cfg, cfgsect, self.ndims)
 
+        # The momentum source takes the linear acceleration in body axes
+        self.tplargs |= {_to_tplkey(f'frame-accel-{c}'): kin[f'body-accel-{c}']
+                         for c in comps}
+
         self.advance_to(plugin._intg.tcurr)
 
     # Kinematics derived from the position and orientation expressions
@@ -299,14 +303,17 @@ class PrescribedMotion(BaseMotion):
         consts['pi'] = Float(math.pi)
 
         simp = Simplifier().simplify_fully
-        diff = Differentiator('t').diff
+
+        # Differentiate along t with a unit tangent
+        ad = Differentiator({'t'}, set(), set(), lambda n: f'_d_{n}')
+        seed = {'_d_t': Int(1)}
 
         def expr(name):
             return simp(rename_vars(parse_expr(cfg.get(cfgsect, name, '0.0')),
                                     consts))
 
         def d(e):
-            return simp(diff(e))
+            return simp(rename_vars(ad.diff(e), seed))
 
         def rewrite(tpl, subs):
             return simp(rename_vars(parse_expr(tpl), subs))
@@ -334,8 +341,28 @@ class PrescribedMotion(BaseMotion):
             kin[f'frame-omega-{c}'] = w
             kin[f'frame-alpha-{c}'] = d(w)
 
+        # Linear acceleration resolved in body axes, R^T*a
+        asubs = {f'a{c}': kin[f'frame-accel-{c}'] for c in 'xyz'[:ndims]}
+        if ndims == 2:
+            asubs |= {'rz': rot}
+            baccel = ['ax*cos(rz) + ay*sin(rz)', 'ay*cos(rz) - ax*sin(rz)']
+        else:
+            asubs |= rot
+            baccel = ['ax*cos(rz)*cos(ry) + ay*sin(rz)*cos(ry) - az*sin(ry)',
+                      'ax*(cos(rz)*sin(ry)*sin(rx) - sin(rz)*cos(rx))'
+                      ' + ay*(sin(rz)*sin(ry)*sin(rx) + cos(rz)*cos(rx))'
+                      ' + az*cos(ry)*sin(rx)',
+                      'ax*(cos(rz)*sin(ry)*cos(rx) + sin(rz)*sin(rx))'
+                      ' + ay*(sin(rz)*sin(ry)*cos(rx) - cos(rz)*sin(rx))'
+                      ' + az*cos(ry)*cos(rx)']
+
+        for c, a in zip('xyz', baccel):
+            kin[f'body-accel-{c}'] = rewrite(a, asubs)
+
         gen = CodeGenerator().generate
-        return {k: gen(v) for k, v in kin.items()}
+
+        # Parenthesise, as the kernels substitute these textually
+        return {k: f'({gen(v)})' for k, v in kin.items()}
 
     def advance_to(self, t):
         vals = {k: np.array([_eval_expr(e, t) for e in exprs])
@@ -518,6 +545,11 @@ class NIRFPlugin(BaseSolverPlugin):
         modecls = subclass_where(BaseMotion, name=mode)
         self.motion = modecls(self, cfgsect)
 
+        if (sdata := intg.initstate.get(self.sprefix)) is not None:
+            self._restore_state(sdata)
+
+        intg.serialiser.register(self.sprefix, self._serialise_data)
+
         if self.motion.needs_force and not self.cfg.hasopt(cfgsect, 'boundary'):
             raise ValueError(
                 f"Motion mode '{self.motion.name}' requires 'boundary'"
@@ -558,9 +590,10 @@ class NIRFPlugin(BaseSolverPlugin):
             ploc_body = eles.ploc_at_np('upts')
             nupts, neles = ploc_body.shape[0], ploc_body.shape[-1]
 
-            # Inertial position: x_lab = R @ x_body + floc
-            ploc_lab = (np.einsum('ij,njk->nik', R, ploc_body)
-                        + floc[None, :, None])
+            # Inertial position: x_lab = R @ (x_body - x0) + x0 + floc
+            ploc_lab = (np.einsum('ij,njk->nik', R,
+                                  ploc_body - cor[None, :, None])
+                        + (cor + floc)[None, :, None])
 
             # Re-evaluate IC primitives with x,y,z bound to inertial coords
             vars = dict(consts)
@@ -688,7 +721,7 @@ class NIRFPlugin(BaseSolverPlugin):
         self._nirf_R = self._intg.backend.matrix((3, 3), initval=R0)
 
     # Rewrite the lab-frame BC expressions into the body frame:
-    #   x_lab  = R·ploc + loc
+    #   x_lab  = R·(ploc − x0) + x0 + loc
     #   u_body = Rᵀ·(u_lab − V) − Ω×(ploc − x0)
     def _transform_bcs(self, intg):
         ndims = self.ndims
@@ -706,8 +739,9 @@ class NIRFPlugin(BaseSolverPlugin):
         subs |= {f'X{i}': Float(v) for i, v in enumerate(self.cfg.getliteral(
             self.cfgsect, 'center-of-rot', (0.,) * ndims))}
 
-        xlab = [tpl(' + '.join(f'nirf_R[{j}][{i}]*ploc[{j}]'
-                               for j in range(ndims)) + f' + L{i}', subs)
+        xlab = [tpl(' + '.join(f'nirf_R[{j}][{i}]*(ploc[{j}] - X{j})'
+                               for j in range(ndims)) + f' + X{i} + L{i}',
+                    subs)
                 for i in range(ndims)]
 
         def lab_position(node):
@@ -730,25 +764,34 @@ class NIRFPlugin(BaseSolverPlugin):
 
         vkeys = 'uvw'[:ndims]
 
-        def body_frame(exprs):
+        def uses_ploc(expr):
+            return any(isinstance(n, Var) and n.name == 'ploc'
+                       for n in walk_expr(expr))
+
+        def body_frame(cfgsect, exprs):
+            exprs = {k: parse_expr(v) for k, v in exprs.items()}
             hasvelo = all(k in exprs for k in vkeys)
-            if not (hasvelo or any('ploc' in v for v in exprs.values())):
-                return {}
 
-            exprs = {k: lab_position(parse_expr(v)) for k, v in exprs.items()}
+            # Position-dependent expressions are given at lab-frame points
+            rexprs = {k: lab_position(e) for k, e in exprs.items()
+                      if uses_ploc(e)}
+
+            # Velocities are lab-frame velocities
             if hasvelo:
-                usubs = subs | {f'U{i}': exprs[k] for i, k in enumerate(vkeys)}
-                exprs |= {k: tpl(u, usubs) for k, u in zip(vkeys, ubody)}
+                lab = exprs | rexprs
+                usubs = subs | {f'U{i}': lab[k] for i, k in enumerate(vkeys)}
+                rexprs |= {k: tpl(u, usubs) for k, u in zip(vkeys, ubody)}
 
-            return {k: gen(simp(e)) for k, e in exprs.items()}
+            # Parenthesise, as the kernels substitute these textually
+            return {k: f'({gen(simp(e))})' for k, e in rexprs.items()}
 
-        for bc in intg.system.bc_inters:
-            if bc.rewrite_exprs(body_frame):
-                bc.set_external('nirf_R', 'in broadcast fpdtype_t[3][3]',
-                                value=self._nirf_R)
-                if self.motion.has_externs:
-                    for p in nirf_bc_params(ndims):
-                        bc.set_external(_to_extern(p), 'scalar fpdtype_t')
+        # Externs the rewritten expressions may reference
+        externs = {'nirf_R': ('in broadcast fpdtype_t[3][3]', self._nirf_R)}
+        if self.motion.has_externs:
+            externs |= {_to_extern(p): ('scalar fpdtype_t', None)
+                        for p in nirf_bc_params(ndims)}
+
+        intg.system.rewrite_bc_exprs(body_frame, externs)
 
     def _update_nirf_R(self):
         R = _quat_to_rotmat(self.motion.fquat)
@@ -805,25 +848,16 @@ class NIRFPlugin(BaseSolverPlugin):
         ('tode_last', 'f8')
     ])
 
-    def setup(self, sdata, prevcfg, serialiser):
-        if sdata is not None:
-            ndims = self.ndims
-            m = self.motion
-            m.floc = np.array(sdata['loc'])[:ndims].copy()
-            m.fvelo = np.array(sdata['velo'])[:ndims].copy()
-            m.faccel = np.array(sdata['accel'])[:ndims].copy()
-            m.fquat = np.array(sdata['quat'])
-            m.fomega = np.array(sdata['omega'])
-            m.falpha = np.array(sdata['alpha'])
-            m.tode_last = float(sdata['tode_last'])
-            if m.has_externs:
-                self._update_extern_values()
+    def _restore_state(self, sdata):
+        ndims, m = self.ndims, self.motion
 
-            # Reflect the restored orientation in the backend R matrix
-            self._update_nirf_R()
-
-        serialiser.register(self.sprefix,
-                            self._serialise_data)
+        m.floc = np.array(sdata['loc'])[:ndims].copy()
+        m.fvelo = np.array(sdata['velo'])[:ndims].copy()
+        m.faccel = np.array(sdata['accel'])[:ndims].copy()
+        m.fquat = np.array(sdata['quat'])
+        m.fomega = np.array(sdata['omega'])
+        m.falpha = np.array(sdata['alpha'])
+        m.tode_last = float(sdata['tode_last'])
 
     def _serialise_data(self):
         # A writer listed before this plugin would otherwise record the
