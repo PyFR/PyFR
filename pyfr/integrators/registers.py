@@ -6,10 +6,11 @@ class ScalarRegister(BaseRegister):
     vector = False
     dynamic = False
 
-    def __init__(self, *, n=1, rhs=True, extent=None):
+    def __init__(self, *, n=1, rhs=True, extent=None, compensated=False):
         self.n = n
         self.rhs = rhs
         self.extent = extent
+        self.compensated = compensated
 
 
 class DynamicScalarRegister(BaseRegister):
@@ -26,10 +27,11 @@ class VectorRegister(BaseRegister):
     vector = True
     dynamic = False
 
-    def __init__(self, *, n, rhs=True, extent=None):
+    def __init__(self, *, n, rhs=True, extent=None, compensated=False):
         self.n = n
         self.rhs = rhs
         self.extent = extent
+        self.compensated = compensated
 
 
 class DynamicVectorRegister(BaseRegister):
