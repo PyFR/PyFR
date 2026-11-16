@@ -24,6 +24,10 @@ class MeshMetrics:
     def _pts(self, name):
         return getattr(self.basis, name) if isinstance(name, str) else name
 
+    @property
+    def centred_spts(self):
+        return self.spts - self.spts.mean(axis=0)
+
     @memoize
     def _jacop_at(self, name):
         pt = self._pts(name)
@@ -38,7 +42,7 @@ class MeshMetrics:
     @memoize
     def jac_at(self, name):
         # Physical locations of the pseudo grid points
-        x = self.ploc_at('mpts')
+        x = self.centred_ploc_at('mpts')
 
         # Cast as a matrix multiply and apply to eles
         jac = self._jacop_at(name) @ x.reshape(self.nmpts, -1)
@@ -82,6 +86,12 @@ class MeshMetrics:
         return interp_pts(op, self.spts).swapaxes(1, 2)
 
     @memoize
+    def centred_ploc_at(self, name):
+        op = self.basis.sbasis.nodal_basis_at(self._pts(name))
+
+        return interp_pts(op, self.centred_spts).swapaxes(1, 2)
+
+    @memoize
     def pnorm_at(self, name, fidx):
         # Reference normal of the face
         norm = self.basis.faces[fidx][2]
@@ -106,7 +116,7 @@ class MeshMetrics:
         ndims, neles, nmpts = self.ndims, self.neles, self.nmpts
 
         # Physical locations of the pseudo grid points
-        x = self.ploc_at('mpts')
+        x = self.centred_ploc_at('mpts')
 
         # Jacobian operator at these points
         jacop = self._jacop_at('mpts')

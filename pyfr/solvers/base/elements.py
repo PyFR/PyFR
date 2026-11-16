@@ -330,6 +330,16 @@ class BaseElements:
     def ploc_at(self, name):
         return self._be.const_matrix(self.ploc_at_np(name), tags={'align'})
 
+    def centred_ploc_at_np(self, name):
+        return self.metrics.centred_ploc_at(name)
+
+    @sliceat
+    @memoize
+    def centred_ploc_at(self, name):
+        ploc = self.centred_ploc_at_np(name)
+
+        return self._be.const_matrix(ploc, tags={'align'})
+
     @memoize
     def vtx_interp_at(self, name):
         op = self.basis.lbasis.nodal_basis_at(getattr(self.basis, name))

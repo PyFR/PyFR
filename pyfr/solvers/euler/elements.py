@@ -175,7 +175,7 @@ class BaseFluidElements:
                 kw = {'smats': self.curved_smat_at('upts'),
                       'rcpdjac': self.rcpdjac_at('upts', 'curved')}
             else:
-                kw = {'verts': self.ploc_at('linspts', 'linear'),
+                kw = {'verts': self.centred_ploc_at('linspts', 'linear'),
                       'upts': self.upts}
 
             wkerns.append(self._be.kernel(
@@ -229,7 +229,7 @@ class EulerElements(BaseFluidElements, BaseAdvectionElements):
             if rgn == 'curved':
                 kw['smats'] = self.curved_smat_at(pts)
             else:
-                kw['verts'] = self.ploc_at('linspts', 'linear')
+                kw['verts'] = self.centred_ploc_at('linspts', 'linear')
                 kw['upts'] = getattr(self, pts)
 
             if has_uin:

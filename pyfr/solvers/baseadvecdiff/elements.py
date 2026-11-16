@@ -74,7 +74,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
                 'gradcoru_phys', tplargs=tplargs | {'ktype': 'linear'},
                 dims=[self.nupts, regions['linear']],
                 gradu=slicem(self._grad_upts, 'linear'),
-                upts=self.upts, verts=self.ploc_at('linspts', 'linear')
+                upts=self.upts, verts=self.centred_ploc_at('linspts', 'linear')
             ))
 
         kernels['gradcoru_phys'] = lambda: slicedk(k() for k in gradcoru_phys)

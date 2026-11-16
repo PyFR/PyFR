@@ -84,7 +84,7 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
                 if fused:
                     kw['rcpdjac'] = self.rcpdjac_at('upts', 'curved')
             else:
-                kw['verts'] = self.ploc_at('linspts', 'linear')
+                kw['verts'] = self.centred_ploc_at('linspts', 'linear')
 
             # Reference point coordinates for the linear smats
             kw['upts'] = getattr(self, pts)
