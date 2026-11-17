@@ -22,9 +22,7 @@ class BaseSolverPlugin(InSituMixin, BasePlugin):
             for name in names:
                 eles.set_external(name, spec)
 
-        # Any kernel declaring one of the plugin's externs gets bound
-        intg.system.register_kernel_callback(list(self._extern_values),
-                                             self._extern_callback)
+        intg.system.register_kernel_callback(names, self._extern_callback)
 
     def _extern_callback(self, kern):
         # Bind only those externs the kernel declares

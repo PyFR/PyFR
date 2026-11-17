@@ -12,7 +12,8 @@ _npeval_syms = {
     'tan': np.tan, 'atan': np.arctan, 'atan2': np.arctan2,
     'abs': np.abs, 'pow': np.power, 'sqrt': np.sqrt, 'cbrt': np.cbrt,
     'tanh': np.tanh, 'pi': np.pi,
-    'max': np.maximum, 'min': np.minimum
+    'max': np.maximum, 'min': np.minimum,
+    'fabs': np.abs, 'fmax': np.maximum, 'fmin': np.minimum
 }
 
 

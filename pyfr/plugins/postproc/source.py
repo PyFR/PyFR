@@ -53,8 +53,7 @@ class BaseDataSource:
                 return TableDerivedPostProc(name, self, cfg, export_type,
                                             kind, want)
 
-        # Resolve the explicitly requested plugins and derived tables.
-        # Transforms mutate the data in place and declare no fields.
+        # Resolve the explicitly requested plugins and derived tables
         qs = []
         for name in dict.fromkeys(names):
             if (q := resolve(name)).transform or q.fields:
@@ -66,8 +65,7 @@ class BaseDataSource:
             if (q := resolve(name)).fields:
                 qs.append(q)
 
-        # Transforms run before any field derivation that consumes their
-        # output (stable sort preserves request order within each group)
+        # Transforms run ahead of the quantities derived from their output
         qs.sort(key=lambda q: not q.transform)
 
         return qs

@@ -121,7 +121,7 @@ class BaseElements:
         else:
             self.get_vect_fpts_for_inters = self._get_vect_fpts_for_inters
 
-    def set_ics_from_cfg(self):
+    def set_ics_from_cfg(self, rewrite=None):
         # Bring simulation constants into scope
         vars = self.cfg.items_as('constants', float)
 
@@ -150,9 +150,14 @@ class BaseElements:
 
         vars |= dict(zip('xyz', coords.swapaxes(0, 1)))
 
+        exprs = {dv: self.cfg.getexpr('soln-ics', dv) for dv in self.privars}
+
+        # Let a plugin rewrite the expressions
+        if rewrite is not None:
+            exprs |= rewrite('soln-ics', exprs)
+
         # Evaluate the ICs from the config file
-        ics = [npeval(self.cfg.getexpr('soln-ics', dv), vars)
-               for dv in self.privars]
+        ics = [npeval(exprs[dv], vars) for dv in self.privars]
 
         # Allocate
         scal_upts = np.empty((self.nupts, self.nvars, self.neles))
