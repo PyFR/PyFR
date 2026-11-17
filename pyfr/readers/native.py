@@ -480,12 +480,14 @@ class NativeReader:
         self.mesh.ndims = self.f['nodes'].dtype['location'].shape[0]
 
         # Read in these nodes
-        nodes = self._read_with_idxs(self.f['nodes'], idxs.ravel())[0]
+        nodes, nscatter = self._read_with_idxs(self.f['nodes'], idxs)
 
         # Store unique node indices and valency for vertices
-        unique_idxs, first_occ = np.unique(idxs, return_index=True)
-        self.mesh.node_idxs = unique_idxs
-        self.mesh.node_valency = nodes['valency'][first_occ]
+        rinv, valency = nscatter.rinv, nodes['valency']
+        self.mesh.node_idxs = np.empty(nscatter.cnt, dtype=idxs.dtype)
+        self.mesh.node_idxs[rinv] = idxs
+        self.mesh.node_valency = np.empty(nscatter.cnt, dtype=valency.dtype)
+        self.mesh.node_valency[rinv] = valency
 
         # Determine where each element type is in the nodes array
         eoffs = np.cumsum([en.size for en in enodes])
