@@ -75,10 +75,18 @@ Transforms the solution of a non-inertial reference frame run (see
 :doc:`solver-plugin-nirf`) from the body frame back into the inertial
 (lab) frame: the coordinates are rotated and, optionally, translated to
 the body's lab-frame position, and the velocity, its gradients and any
-derived quantities take their lab-frame values.  Reads ``center-of-rot``
-from ``[solver-plugin-nirf]`` and, from ``[postproc-plugin-nirf]``:
+derived quantities take their lab-frame values.  The frame state is
+that stored in the solution file by the solver plugin or, when run
+in-situ by :ref:`soln-plugin-ascent`, the current one.  Renders made
+with Ascent show the body in its lab-frame orientation.  Residuals are
+rates in the body frame and are exported unchanged, and a spanwise
+export is only meaningful for rotation about the span axis.  Reads
+``center-of-rot`` from ``[solver-plugin-nirf]`` and, from
+``[postproc-plugin-nirf]``:
 
 #. ``apply-translation`` --- also translate the body to its lab-frame
-   position (defaults to ``false``):
+   position.  Left off, the body is turned about its centre of
+   rotation and otherwise stays where the mesh has it, so that a fixed
+   camera keeps it in view (defaults to ``false``):
 
     *boolean*

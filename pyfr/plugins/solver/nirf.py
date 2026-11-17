@@ -4,67 +4,57 @@ import numpy as np
 
 from pyfr.dsl import CodeGenerator, Simplifier, parse_expr
 from pyfr.dsl.derivs import Differentiator
-from pyfr.dsl.nodes import Float, Index, Int, Var, map_ast, walk_expr
+from pyfr.dsl.nodes import Float, Int, Ternary, Var, walk_expr
 from pyfr.dsl.rewriter import rename_vars
 from pyfr.mpiutil import get_comm_rank_root, mpi
-from pyfr.exprs import npeval
-from pyfr.plugins.common import init_csv
+from pyfr.plugins.mixins import SeriesWriterMixin
+from pyfr.plugins.soln.fluidforce import FluidForceIntegrator
 from pyfr.plugins.solver.base import BaseSolverPlugin
-from pyfr.quadrules.surface import SurfaceIntegrator
-from pyfr.util import subclass_where
+from pyfr.util import ndrange, subclass_where
 
 
-def _eval_expr(expr, t):
-    return eval(expr, {**vars(math), 'fmin': min, 'fmax': max}, {'t': t})
+# Renders conditionals in Python syntax for evaluation on the host
+class _HostCodeGenerator(CodeGenerator):
+    def _generate_expr(self, expr):
+        match expr:
+            case Ternary(cond, true, false):
+                c, a, b = map(self._generate_expr, (cond, true, false))
+
+                return f'({a} if {c} else {b})'
+            case _:
+                return super()._generate_expr(expr)
 
 
-def nirf_src_params(ndims):
-    comps = 'xyz'[:ndims]
-    return ([f'frame-omega-{c}' for c in 'xyz'] +
-            [f'frame-alpha-{c}' for c in 'xyz'] +
-            [f'frame-accel-{c}' for c in comps])
+# Substitute expressions for the variables of a template
+def _subst(tpl, subs):
+    return rename_vars(parse_expr(tpl), subs)
 
 
-def nirf_bc_params(ndims):
-    comps = 'xyz'[:ndims]
-    return ([f'frame-omega-{c}' for c in 'xyz'] +
-            [f'frame-loc-{c}' for c in comps] +
-            [f'frame-velo-{c}' for c in comps])
+# Parenthesise, as the kernels substitute these textually
+def _to_text(expr):
+    return f'({CodeGenerator().generate(expr)})'
 
 
-def nirf_origin_tplargs(cfg, cfgsect, ndims):
-    origin = cfg.getliteral(cfgsect, 'center-of-rot', (0.,) * ndims)
-    return {f'frame_origin_{c}': v for c, v in zip('xyz'[:ndims], origin)}
+# Quaternion of the ZYX Euler angle sequence
+def _euler_to_quat(rx, ry, rz):
+    cx, sx = np.cos(rx / 2), np.sin(rx / 2)
+    cy, sy = np.cos(ry / 2), np.sin(ry / 2)
+    cz, sz = np.cos(rz / 2), np.sin(rz / 2)
 
-
-def _to_tplkey(p):
-    return p.replace('-', '_') + '_expr'
-
-
-def _to_extern(p):
-    return p.replace('-', '_')
-
-
-# ZYX intrinsic: phi=Z, theta=Y, psi=X
-def _euler_to_quat(phi, theta, psi):
-    cp, sp = np.cos(phi / 2), np.sin(phi / 2)
-    ct, st = np.cos(theta / 2), np.sin(theta / 2)
-    cs, ss = np.cos(psi / 2), np.sin(psi / 2)
-
-    return np.array([cp*ct*cs + sp*st*ss, cp*ct*ss - sp*st*cs,
-                     cp*st*cs + sp*ct*ss, sp*ct*cs - cp*st*ss])
+    return np.array([cz*cy*cx + sz*sy*sx, cz*cy*sx - sz*sy*cx,
+                     cz*sy*cx + sz*cy*sx, sz*cy*cx - cz*sy*sx])
 
 
 def _quat_to_euler(q):
     w, x, y, z = q
-    phi = np.arctan2(2*(w*z + x*y), 1 - 2*(y*y + z*z))
-    theta = np.arcsin(np.clip(2*(w*y - z*x), -1, 1))
-    psi = np.arctan2(2*(w*x + y*z), 1 - 2*(x*x + y*y))
+    rx = np.arctan2(2*(w*x + y*z), 1 - 2*(x*x + y*y))
+    ry = np.arcsin(np.clip(2*(w*y - z*x), -1, 1))
+    rz = np.arctan2(2*(w*z + x*y), 1 - 2*(y*y + z*z))
 
-    return phi, theta, psi
+    return rx, ry, rz
 
 
-def _quat_to_rotmat(q):
+def quat_to_rotmat(q):
     w, x, y, z = q
 
     return np.array([
@@ -84,763 +74,318 @@ def _quat_mult(q, r):
                      w1*z2 + x1*y2 - y1*x2 + z1*w2])
 
 
-def _levi_civita_moment(ndims):
-    # Permutation tensor eps with moment_m = eps_mdc r_d f_c
-    if ndims == 2:
-        return np.array([[[0.0, 1.0], [-1.0, 0.0]]])
-
-    eps = np.zeros((3, 3, 3))
-    eps[0, 1, 2] = eps[1, 2, 0] = eps[2, 0, 1] = 1.0
-    eps[0, 2, 1] = eps[2, 1, 0] = eps[1, 0, 2] = -1.0
-    return eps
-
-
-class NIRFForceIntegrator(SurfaceIntegrator):
-    def __init__(self, cfg, cfgsect, system, bcspec, morigin, viscous):
-        con = system.mesh.bcon_for(bcspec)
-
-        super().__init__(cfg, cfgsect, system.ele_map, con, flags='s')
-
-        self.ndims = system.ndims
-        self.viscous = viscous
-        self.ele_types = system.ele_types
-        self.elementscls = system.elementscls
-        self._eps = _levi_civita_moment(self.ndims)
-
-        self.rfpts = {k: loc - morigin[:, None, None]
-                      for k, loc in self.locs.items()}
-
-        # Viscous: stress-model constants plus the per-element gradient
-        # operators (m4) and J^-T (rcpjact) used by grad_at_fpts
-        if viscous:
-            self.constants = cfg.items_as('constants', float)
-            self.viscorr = cfg.get('solver', 'viscosity-correction', 'none')
-
-            self.m4 = {}
-            rcpjact = {}
-            for etype in system.ele_map:
-                eles = system.ele_map[etype]
-
-                self.m4[etype] = eles.basis.m4
-                smat = eles.smat_at_np('upts').transpose(2, 0, 1, 3)
-                rcpdjac = eles.rcpdjac_at_np('upts')
-                rcpjact[etype] = smat * rcpdjac
-
-            # Keep only the boundary elements
-            self.rcpjact = {k: rcpjact[k[0]][..., v]
-                           for k, v in self.eidxs.items()}
-
-    def grad_at_fpts(self, etype, fidx, uupts):
-        # Reconstruct the physical solution gradient at the face quadrature
-        # points.  uupts is (s, v, e); the result is (d, v, f, e).
-        m0 = self.m0[etype, fidx]
-        m4 = self.m4[etype]
-        rcpjact = self.rcpjact[etype, fidx]
-
-        nfpts, nupts = m0.shape
-        ndims, nvars = self.ndims, uupts.shape[1]
-
-        # Transformed gradient at solution points: (r, s, v, e)
-        tdu = (m4 @ uupts.reshape(nupts, -1)).reshape(ndims, nupts, nvars, -1)
-
-        # Map reference -> physical gradient via J^-T: (d, s, v, e)
-        du = np.einsum('drse,rsve->dsve', rcpjact, tdu)
-
-        # Interpolate each physical-gradient component to the face points
-        dufpts = np.array([m0 @ d for d in du.reshape(ndims, nupts, -1)])
-        return dufpts.reshape(ndims, nfpts, nvars, -1).swapaxes(1, 2)
-
-    def compute(self, soln):
-        comm, rank, root = get_comm_rank_root()
-
-        ndims = self.ndims
-        mcomp = self._eps.shape[0]
-
-        solns = dict(zip(self.ele_types, soln))
-        fm = np.zeros((2 if self.viscous else 1, ndims + mcomp))
-
-        # einsum axes: f face point, e element, d/c spatial dim, m moment comp
-        for (etype, fidx), m0 in self.m0.items():
-            nfpts, nupts = m0.shape
-
-            uupts = solns[etype][..., self.eidxs[etype, fidx]]
-            nvars = uupts.shape[1]
-
-            # Interpolate to face points: (v, f, e)
-            ufpts = m0 @ uupts.reshape(nupts, -1)
-            ufpts = ufpts.reshape(nfpts, nvars, -1).swapaxes(0, 1)
-
-            p = self.elementscls.con_to_pri(ufpts, self.cfg)[-1]
-
-            qwts = self.qwts[etype, fidx]
-
-            # Reorient normals and moment arms to (f, e, d)
-            norms = self.norms[etype, fidx].transpose(1, 2, 0)
-            rfpts = self.rfpts[etype, fidx].transpose(1, 2, 0)
-
-            # Pressure force (d) and moment (m): F = ∮ p n, M = ∮ r × (p n)
-            fm[0, :ndims] += np.einsum('f,fe,fed->d', qwts, p, norms)
-
-            rcn = np.einsum('mdc,fed,fec->fem', self._eps, rfpts, norms)
-            fm[0, ndims:] += np.einsum('f,fe,fem->m', qwts, p, rcn)
-
-            if self.viscous:
-                # Viscous stress τ at face points, reoriented to (f, e, d, c)
-                dufpts = self.grad_at_fpts(etype, fidx, uupts)
-                vis = self._stress_tensor(ufpts, dufpts).transpose(2, 3, 0, 1)
-
-                # Viscous force (d) and moment (m): traction t_d = τ_dc n_c
-                fm[1, :ndims] += np.einsum('f,fedc,fec->d', qwts, vis, norms)
-
-                viscf = np.einsum('fedc,fec->fed', vis, norms)
-                rcf = np.einsum('mdc,fed,fec->fem', self._eps, rfpts, viscf)
-                fm[1, ndims:] += np.einsum('f,fem->m', qwts, rcf)
-
-        if rank != root:
-            comm.Reduce(fm, None, op=mpi.SUM, root=root)
-        else:
-            comm.Reduce(mpi.IN_PLACE, fm, op=mpi.SUM, root=root)
-
-        totals = fm.sum(axis=0) if rank == root else np.zeros(ndims + mcomp)
-        comm.Bcast(totals, root=root)
-
-        return totals[:ndims], totals[ndims:]
-
-    def _stress_tensor(self, u, du):
-        c = self.constants
-        ndims = self.ndims
-
-        rho, E = u[0], u[-1]
-        gradrho, gradrhou = du[:, 0], du[:, 1:-1]
-
-        gradu = (gradrhou - gradrho[:, None]*u[None, 1:-1]/rho) / rho
-        bulk = np.eye(ndims)[:, :, None, None]*np.trace(gradu)
-
-        mu = c['mu']
-
-        if self.viscorr == 'sutherland':
-            cpT = c['gamma']*(E/rho - 0.5*np.sum(u[1:-1]**2, axis=0)/rho**2)
-            Trat = np.maximum(cpT/c['cpTref'], 1e-10)
-            mu *= (c['cpTref'] + c['cpTs'])*Trat**1.5 / (cpT + c['cpTs'])
-
-        return -mu*(gradu + gradu.swapaxes(0, 1) - 2/3*bulk)
-
-
 class BaseMotion:
     name = None
     needs_force = False
-    has_externs = False
-    extern_names = ()
 
-    def __init__(self, plugin, cfgsect):
-        self.plugin = plugin
-        self.cfg = plugin.cfg
-        self.ndims = plugin.ndims
+    def __init__(self, intg, cfgsect, tol):
+        self.cfg = intg.cfg
         self.cfgsect = cfgsect
+        self.ndims = intg.system.ndims
+        self.tol = tol
 
-        # State (subclass __init__ populates)
-        self.floc = np.zeros(self.ndims)
-        self.fvelo = np.zeros(self.ndims)
-        self.faccel = np.zeros(self.ndims)
-        self.fquat = np.array([1.0, 0.0, 0.0, 0.0])
-        self.fomega = np.zeros(3)
-        self.falpha = np.zeros(3)
-        self.tode_last = plugin._intg.tcurr
+    @property
+    def rmat(self):
+        return quat_to_rotmat(self.fquat)
 
-        # Kernel template args (subclass __init__ populates)
-        self.tplargs = {}
+    # Values of those frame parameters which are runtime kernel arguments
+    def externs(self):
+        return {}
 
-    def should_advance(self, intg):
-        return True
-
-    def advance(self, intg, force, moment):
-        raise NotImplementedError
-
-    # Bring the state to t where this is possible independently of advance
-    def sync(self, t):
+    def schedule(self, intg):
         pass
 
-    # Kernel-side expressions for the frame parameters seen by the BCs
-    def bc_exprs(self):
+    def should_advance(self, t):
+        return True
+
+    def advance(self, t, force=None, moment=None):
         raise NotImplementedError
 
 
 class PrescribedMotion(BaseMotion):
     name = 'prescribed'
 
-    def __init__(self, plugin, cfgsect):
-        super().__init__(plugin, cfgsect)
+    def __init__(self, intg, cfgsect, tol):
+        super().__init__(intg, cfgsect, tol)
 
-        self.kin = kin = self._kinematics()
-        comps = 'xyz'[:self.ndims]
+        self.kin = self._kinematics()
 
-        self.fexprs = {
-            kind: [kin[f'frame-{kind}-{c}'] for c in comps]
-            for kind in ('loc', 'velo', 'accel')
-        }
-        self.fexprs |= {
-            kind: [kin[f'frame-{kind}-{c}'] for c in 'xyz']
-            for kind in ('omega', 'alpha')
-        }
-        self.fexprs['rot'] = [kin[f'frame-rot-{c}']
-                              for c in ('z' if self.ndims == 2 else 'xyz')]
+        # The state is evaluated on the host from the expressions themselves
+        gen = _HostCodeGenerator().generate
+        self._hexprs = {k: compile(gen(v), k, 'eval')
+                        for k, v in self.kin.items()}
 
-        self.tplargs = {_to_tplkey(p): kin[p]
-                        for p in nirf_src_params(self.ndims)}
-        self.tplargs |= nirf_origin_tplargs(self.cfg, cfgsect, self.ndims)
+        # The generator spells min and max as fmin and fmax
+        self._hsyms = {**vars(math), 'fmin': min, 'fmax': max,
+                       '__builtins__': {}}
 
-        # The momentum source takes the linear acceleration in body axes
-        self.tplargs |= {_to_tplkey(f'frame-accel-{c}'): kin[f'body-accel-{c}']
-                         for c in comps}
-
-        self.advance_to(plugin._intg.tcurr)
+        self.advance(intg.tcurr)
 
     # Kinematics derived from the position and orientation expressions
     def _kinematics(self):
         cfg, cfgsect, ndims = self.cfg, self.cfgsect, self.ndims
 
-        consts = {k: parse_expr(v) for k, v in cfg.items('constants').items()}
-        consts['pi'] = Float(math.pi)
-
+        comps = 'xyz'[:ndims]
+        csubs = cfg.items('constants') | {'pi': str(math.pi)}
         simp = Simplifier().simplify_fully
 
         # Differentiate along t with a unit tangent
-        ad = Differentiator({'t'}, set(), set(), lambda n: f'_d_{n}')
+        diff = Differentiator({'t'}, set(), set(), lambda n: f'_d_{n}')
         seed = {'_d_t': Int(1)}
 
-        def expr(name):
-            return simp(rename_vars(parse_expr(cfg.get(cfgsect, name, '0.0')),
-                                    consts))
+        def cfgexpr(name):
+            expr = parse_expr(cfg.getexpr(cfgsect, name, '0.0', subs=csubs))
 
-        def d(e):
-            return simp(rename_vars(ad.diff(e), seed))
+            # Ensure the expression depends upon t alone
+            for n in walk_expr(expr):
+                if isinstance(n, Var) and n.name != 't':
+                    raise ValueError(f'Unknown variable {n.name!r} in option '
+                                     f'{name!r} of [{cfgsect}]')
 
-        def rewrite(tpl, subs):
-            return simp(rename_vars(parse_expr(tpl), subs))
+            return simp(expr)
+
+        def d(expr):
+            return simp(rename_vars(diff.diff(expr), seed))
 
         kin = {}
-        for c in 'xyz'[:ndims]:
-            kin[f'frame-loc-{c}'] = loc = expr(f'frame-loc-{c}')
-            kin[f'frame-velo-{c}'] = velo = d(loc)
-            kin[f'frame-accel-{c}'] = d(velo)
+        for c in comps:
+            kin[f'frame_loc_{c}'] = loc = cfgexpr(f'frame-loc-{c}')
+            kin[f'frame_velo_{c}'] = velo = d(loc)
+            kin[f'frame_accel_{c}'] = d(velo)
 
         if ndims == 2:
-            kin['frame-rot-z'] = rot = expr('frame-rot-z')
-            omega = [Float(0.0), Float(0.0), d(rot)]
+            rot = {'rx': Float(0.0), 'ry': Float(0.0),
+                   'rz': cfgexpr('frame-rot-z')}
+            omega = [Float(0.0), Float(0.0), d(rot['rz'])]
+            rmat = [['cos(rz)', '-sin(rz)'], ['sin(rz)', 'cos(rz)']]
         else:
-            rot = {f'r{c}': expr(f'frame-rot-{c}') for c in 'xyz'}
-            kin |= {f'frame-rot-{c}': rot[f'r{c}'] for c in 'xyz'}
+            rot = {f'r{c}': cfgexpr(f'frame-rot-{c}') for c in 'xyz'}
 
             # Body-frame angular velocity of the ZYX Euler angle sequence
             subs = rot | {f'd{k}': d(v) for k, v in rot.items()}
-            omega = [rewrite('drx - drz*sin(ry)', subs),
-                     rewrite('dry*cos(rx) + drz*sin(rx)*cos(ry)', subs),
-                     rewrite('drz*cos(rx)*cos(ry) - dry*sin(rx)', subs)]
+            omega = [simp(_subst(w, subs))
+                     for w in ['drx - drz*sin(ry)',
+                               'dry*cos(rx) + drz*sin(rx)*cos(ry)',
+                               'drz*cos(rx)*cos(ry) - dry*sin(rx)']]
+
+            rmat = [['cos(rz)*cos(ry)',
+                     'cos(rz)*sin(ry)*sin(rx) - sin(rz)*cos(rx)',
+                     'cos(rz)*sin(ry)*cos(rx) + sin(rz)*sin(rx)'],
+                    ['sin(rz)*cos(ry)',
+                     'sin(rz)*sin(ry)*sin(rx) + cos(rz)*cos(rx)',
+                     'sin(rz)*sin(ry)*cos(rx) - cos(rz)*sin(rx)'],
+                    ['-sin(ry)', 'cos(ry)*sin(rx)', 'cos(ry)*cos(rx)']]
 
         for c, w in zip('xyz', omega):
-            kin[f'frame-omega-{c}'] = w
-            kin[f'frame-alpha-{c}'] = d(w)
+            kin[f'frame_rot_{c}'] = rot[f'r{c}']
+            kin[f'frame_omega_{c}'] = w
+            kin[f'frame_alpha_{c}'] = d(w)
+
+        # Rotation matrix of the ZYX Euler angle sequence
+        for i, j in ndrange(ndims, ndims):
+            kin[f'frame_rmat_{i}{j}'] = simp(_subst(rmat[i][j], rot))
 
         # Linear acceleration resolved in body axes, R^T*a
-        asubs = {f'a{c}': kin[f'frame-accel-{c}'] for c in 'xyz'[:ndims]}
-        if ndims == 2:
-            asubs |= {'rz': rot}
-            baccel = ['ax*cos(rz) + ay*sin(rz)', 'ay*cos(rz) - ax*sin(rz)']
-        else:
-            asubs |= rot
-            baccel = ['ax*cos(rz)*cos(ry) + ay*sin(rz)*cos(ry) - az*sin(ry)',
-                      'ax*(cos(rz)*sin(ry)*sin(rx) - sin(rz)*cos(rx))'
-                      ' + ay*(sin(rz)*sin(ry)*sin(rx) + cos(rz)*cos(rx))'
-                      ' + az*cos(ry)*sin(rx)',
-                      'ax*(cos(rz)*sin(ry)*cos(rx) + sin(rz)*sin(rx))'
-                      ' + ay*(sin(rz)*sin(ry)*cos(rx) - cos(rz)*sin(rx))'
-                      ' + az*cos(ry)*cos(rx)']
+        asubs = {f'a{j}': kin[f'frame_accel_{c}'] for j, c in enumerate(comps)}
+        asubs |= {f'R{i}{j}': kin[f'frame_rmat_{i}{j}']
+                  for i, j in ndrange(ndims, ndims)}
+        for i, c in enumerate(comps):
+            ba = ' + '.join(f'R{j}{i}*a{j}' for j in range(ndims))
+            kin[f'frame_baccel_{c}'] = simp(_subst(ba, asubs))
 
-        for c, a in zip('xyz', baccel):
-            kin[f'body-accel-{c}'] = rewrite(a, asubs)
+        return kin
 
-        gen = CodeGenerator().generate
+    def advance(self, t, force=None, moment=None):
+        comps = 'xyz'[:self.ndims]
 
-        # Parenthesise, as the kernels substitute these textually
-        return {k: f'({gen(v)})' for k, v in kin.items()}
+        def state(kind, comps):
+            exprs = [self._hexprs[f'frame_{kind}_{c}'] for c in comps]
 
-    def advance_to(self, t):
-        vals = {k: np.array([_eval_expr(e, t) for e in exprs])
-                for k, exprs in self.fexprs.items()}
+            return np.array([eval(e, self._hsyms, {'t': t}) for e in exprs],
+                            dtype=float)
 
-        self.floc = vals['loc']
-        self.fvelo = vals['velo']
-        self.faccel = vals['accel']
-        self.fomega = vals['omega']
-        self.falpha = vals['alpha']
-
-        if self.ndims == 2:
-            self.fquat = _euler_to_quat(vals['rot'][0], 0, 0)
-        else:
-            self.fquat = _euler_to_quat(*vals['rot'][::-1])
+        self.floc, self.fvelo = state('loc', comps), state('velo', comps)
+        self.faccel = state('accel', comps)
+        self.fquat = _euler_to_quat(*state('rot', 'xyz'))
+        self.fomega, self.falpha = state('omega', 'xyz'), state('alpha', 'xyz')
 
         self.tode_last = t
-
-    def advance(self, intg, force, moment):
-        self.advance_to(intg.tcurr)
-
-    def sync(self, t):
-        self.advance_to(t)
-
-    def bc_exprs(self):
-        return {p: self.kin[p] for p in nirf_bc_params(self.ndims)}
 
 
 class FreeMotion(BaseMotion):
     name = 'free'
     needs_force = True
-    has_externs = True
 
-    def __init__(self, plugin, cfgsect):
-        super().__init__(plugin, cfgsect)
+    def __init__(self, intg, cfgsect, tol):
+        super().__init__(intg, cfgsect, tol)
+
+        cfg, ndims = self.cfg, self.ndims
 
         self._parse_dof()
 
-        self.mass = self.cfg.getfloat(cfgsect, 'mass')
-        if self.ndims == 2:
-            self.inertia = self.cfg.getfloat(cfgsect, 'inertia')
+        self.mass = cfg.getfloat(cfgsect, 'mass')
+        if ndims == 2:
+            self.inertia = cfg.getfloat(cfgsect, 'inertia')
         else:
-            self.inertia = np.array(
-                self.cfg.getliteral(cfgsect, 'inertia')).reshape(3, 3)
+            inertia = cfg.getliteral(cfgsect, 'inertia')
+            self.inertia = np.array(inertia).reshape(3, 3)
 
-        zeros_nd = (0.,) * self.ndims
+        def vec(name):
+            v = cfg.getliteral(cfgsect, name, (0.,)*ndims)
 
-        self.floc = np.array(self.cfg.getliteral(
-            cfgsect, 'frame-loc0', zeros_nd), dtype=float)
-        self.fvelo = np.array(self.cfg.getliteral(
-            cfgsect, 'frame-velo0', zeros_nd), dtype=float)
-        self.faccel = np.array(self.cfg.getliteral(
-            cfgsect, 'frame-accel0', zeros_nd), dtype=float)
+            return np.array(v, dtype=float)
+
+        self.floc, self.fvelo = vec('frame-loc0'), vec('frame-velo0')
         self.fquat = self._parse_rot0()
+        self.fomega = self._rvec('frame-omega0')
 
-        omega0 = self.cfg.getliteral(cfgsect, 'frame-omega0',
-                                     0. if self.ndims == 2 else (0., 0., 0.))
-        alpha0 = self.cfg.getliteral(cfgsect, 'frame-alpha0',
-                                     0. if self.ndims == 2 else (0., 0., 0.))
+        # The accelerations follow from the loads at the first update
+        self.faccel, self.falpha = np.zeros(ndims), np.zeros(3)
 
-        if self.ndims == 2:
-            if not np.isscalar(omega0) or not np.isscalar(alpha0):
-                raise ValueError('frame-omega0/alpha0 must be a scalar in 2D')
-            self.fomega = np.array([0., 0., omega0])
-            self.falpha = np.array([0., 0., alpha0])
-        else:
-            self.fomega = np.array(omega0, dtype=float)
-            self.falpha = np.array(alpha0, dtype=float)
-
-        if self.cfg.hasopt(cfgsect, 'dt-ode'):
-            self.dt_ode = self.cfg.getfloat(cfgsect, 'dt-ode')
+        if cfg.hasopt(cfgsect, 'dt-ode'):
+            self.dt_ode = cfg.getfloat(cfgsect, 'dt-ode')
         else:
             self.dt_ode = None
 
-        self.tode_last = plugin._intg.tcurr
+        self.tode_last = intg.tcurr
 
-        if self.dt_ode is not None:
-            plugin._intg.call_plugin_dt(plugin._intg.tcurr, self.dt_ode)
+        # The frame parameters are runtime kernel arguments
+        self.kin = {k: Var(k) for k in self.externs()}
+        self.kin |= {f'frame_rmat_{i}{j}': parse_expr(f'nirf_R[{i}][{j}]')
+                     for i, j in ndrange(ndims, ndims)}
 
-        params = nirf_src_params(self.ndims)
-        self.tplargs = {_to_tplkey(p): _to_extern(p) for p in params}
-        self.tplargs |= nirf_origin_tplargs(self.cfg, cfgsect, self.ndims)
-        self.extern_names = [_to_extern(p) for p in params]
+        # Only the rates about z are non-zero in 2D
+        if ndims == 2:
+            self.kin |= {f'frame_{k}_{c}': Float(0.0)
+                         for k in ('omega', 'alpha') for c in 'xy'}
 
-    def bc_exprs(self):
-        return {p: _to_extern(p) for p in nirf_bc_params(self.ndims)}
+    # Angular vectors only have a z component in 2D
+    def _rvec(self, name):
+        cfg, cfgsect = self.cfg, self.cfgsect
+
+        if self.ndims == 3:
+            v = cfg.getliteral(cfgsect, name, (0.,)*3)
+        elif np.isscalar(v := cfg.getliteral(cfgsect, name, 0.)):
+            v = [0., 0., v]
+        else:
+            raise ValueError(f'{name} must be a scalar in 2D')
+
+        return np.array(v, dtype=float)
 
     def _parse_dof(self):
-        if self.ndims == 2:
-            all_dof = {'x', 'y', 'rz'}
-        else:
-            all_dof = {'x', 'y', 'z', 'rx', 'ry', 'rz'}
-
-        dof_str = self.cfg.get(self.cfgsect, 'dof', None)
-        if dof_str is None:
-            self._free_dof = all_dof
-        elif dof_str.strip().lower() in ('', 'none'):
-            self._free_dof = set()
-        else:
-            self._free_dof = {s.strip() for s in dof_str.split(',')}
-            invalid = self._free_dof - all_dof
-            if invalid:
-                raise ValueError(f"Invalid DOF: {invalid}. Valid: {all_dof}")
-
         comps = 'xyz'[:self.ndims]
-        self._trans_mask = np.array([c in self._free_dof for c in comps])
-        self._rot_mask = np.array([f'r{c}' in self._free_dof for c in 'xyz'])
+        rcomps = 'z' if self.ndims == 2 else 'xyz'
+        all_dof = [*comps, *(f'r{c}' for c in rcomps)]
+
+        # All degrees of freedom are active unless stated otherwise
+        dof_str = self.cfg.get(self.cfgsect, 'dof', ','.join(all_dof))
+        if dof_str.strip().lower() in ('', 'none'):
+            free_dof = set()
+        else:
+            free_dof = {s.strip() for s in dof_str.split(',')}
+            if invalid := free_dof - set(all_dof):
+                raise ValueError(f'Invalid DOF: {invalid}. Valid: {all_dof}')
+
+        self._trans_mask = np.array([c in free_dof for c in comps])
+        self._rot_mask = np.array([f'r{c}' in free_dof for c in 'xyz'])
 
     def _parse_rot0(self):
-        cfgsect = self.cfgsect
-        has_euler = self.cfg.hasopt(cfgsect, 'frame-rot0-euler')
-        has_quat = self.cfg.hasopt(cfgsect, 'frame-rot0-quat')
+        cfg, cfgsect = self.cfg, self.cfgsect
+        has_euler = cfg.hasopt(cfgsect, 'frame-rot0-euler')
+        has_quat = cfg.hasopt(cfgsect, 'frame-rot0-quat')
 
         if has_euler and has_quat:
             raise ValueError('Specify frame-rot0-euler or frame-rot0-quat, '
                              'not both')
-
-        if has_euler:
-            rot = self.cfg.getliteral(cfgsect, 'frame-rot0-euler')
-            if self.ndims == 2:
-                return _euler_to_quat(float(rot), 0, 0)
-            return _euler_to_quat(*rot[::-1])
+        elif has_euler:
+            return _euler_to_quat(*self._rvec('frame-rot0-euler'))
         elif has_quat:
-            q = np.array(self.cfg.getliteral(cfgsect, 'frame-rot0-quat'),
+            q = np.array(cfg.getliteral(cfgsect, 'frame-rot0-quat'),
                          dtype=float)
-            q /= np.linalg.norm(q)
-            return q
-        return np.array([1.0, 0.0, 0.0, 0.0])
 
-    def should_advance(self, intg):
-        if self.dt_ode is None:
-            return True
-        return intg.tcurr - self.tode_last >= self.dt_ode - self.plugin.tol
+            # Only rotations about z exist in 2D
+            if self.ndims == 2 and q[1:3].any():
+                raise ValueError('frame-rot0-quat must be about z in 2D')
 
-    def advance(self, intg, force, moment):
-        dt = intg.tcurr - self.tode_last if self.dt_ode else intg.dt
+            return q / np.linalg.norm(q)
+        else:
+            return np.array([1., 0., 0., 0.])
 
-        faccel_new = force / self.mass
-        faccel_new *= self._trans_mask
+    def externs(self):
+        ndims = self.ndims
 
-        falpha_new = np.zeros(3)
-        if self.ndims == 2:
-            falpha_new[2] = moment[0] / self.inertia
+        # The momentum source takes the linear acceleration in body axes
+        baccel = self.rmat[:ndims, :ndims].T @ self.faccel
+
+        ev = {}
+        for i, c in enumerate('xyz'[:ndims]):
+            ev[f'frame_loc_{c}'] = self.floc[i]
+            ev[f'frame_velo_{c}'] = self.fvelo[i]
+            ev[f'frame_baccel_{c}'] = baccel[i]
+
+        # Rotation is about z alone in 2D
+        for i, c in enumerate('xyz'):
+            if ndims == 3 or c == 'z':
+                ev[f'frame_omega_{c}'] = self.fomega[i]
+                ev[f'frame_alpha_{c}'] = self.falpha[i]
+
+        return ev
+
+    def schedule(self, intg):
+        # The body is next due an update dt-ode after its last
+        if self.dt_ode is not None:
+            intg.call_plugin_dt(self.tode_last + self.dt_ode, self.dt_ode)
+
+    def should_advance(self, t):
+        dt = t - self.tode_last
+
+        # A zero interval takes the accelerations from the loads
+        return (self.dt_ode is None or dt == 0 or
+                dt >= self.dt_ode - self.tol)
+
+    def advance(self, t, force, moment):
+        ndims = self.ndims
+
+        # Advance over the time which has elapsed since the last update
+        dt = t - self.tode_last
+
+        if ndims == 2:
+            falpha = np.array([0., 0., moment[0] / self.inertia])
+            falpha *= self._rot_mask
         else:
             gyro = np.cross(self.fomega, self.inertia @ self.fomega)
-            falpha_new = np.linalg.solve(self.inertia, moment - gyro)
-        falpha_new *= self._rot_mask
+
+            # Locked rotations are held by reactions about their own axes
+            m = self._rot_mask
+            falpha = np.zeros(3)
+            falpha[m] = np.linalg.solve(self.inertia[np.ix_(m, m)],
+                                        (moment - gyro)[m])
 
         # Heun's method
-        fomega_new = self.fomega + 0.5*dt*(self.falpha + falpha_new)
-        fvelo_new = self.fvelo + 0.5*dt*(self.faccel + faccel_new)
+        fomega = self.fomega + 0.5*dt*(self.falpha + falpha)
 
-        omega_avg = 0.5*(self.fomega + fomega_new)
+        omega_avg = 0.5*(self.fomega + fomega)
         dqdt = 0.5*_quat_mult(self.fquat, np.array([0, *omega_avg]))
         self.fquat = self.fquat + dt*dqdt
         self.fquat /= np.linalg.norm(self.fquat)
 
-        self.floc = self.floc + 0.5*dt*(self.fvelo + fvelo_new)
+        # The force is integrated in body axes; the frame moves in lab axes
+        faccel = self.rmat[:ndims, :ndims] @ force / self.mass
+        faccel *= self._trans_mask
 
-        self.fomega = fomega_new
-        self.falpha = falpha_new
-        self.fvelo = fvelo_new
-        self.faccel = faccel_new
+        fvelo = self.fvelo + 0.5*dt*(self.faccel + faccel)
+        self.floc = self.floc + 0.5*dt*(self.fvelo + fvelo)
 
-        self.tode_last = intg.tcurr
+        self.fomega, self.falpha = fomega, falpha
+        self.fvelo, self.faccel = fvelo, faccel
+
+        self.tode_last = t
 
 
-class NIRFPlugin(BaseSolverPlugin):
+class NIRFPlugin(SeriesWriterMixin, BaseSolverPlugin):
     name = 'nirf'
     systems = 'euler|navier-stokes'
-    formulations = 'dual|std'
     dimensions = '2|3'
-
-    def __init__(self, intg, cfgsect):
-        super().__init__(intg, cfgsect)
-
-        self._intg = intg
-
-        mode = self.cfg.get(cfgsect, 'motion')
-        modecls = subclass_where(BaseMotion, name=mode)
-        self.motion = modecls(self, cfgsect)
-
-        if (sdata := intg.initstate.get(self.sprefix)) is not None:
-            self._restore_state(sdata)
-
-        intg.serialiser.register(self.sprefix, self._serialise_data)
-
-        if self.motion.needs_force and not self.cfg.hasopt(cfgsect, 'boundary'):
-            raise ValueError(
-                f"Motion mode '{self.motion.name}' requires 'boundary'"
-            )
-
-        self._init_nirf_R()
-        self._transform_bcs(intg)
-        if self.motion.extern_names:
-            self._register_externs(intg, self.motion.extern_names)
-
-        self._init_force_output(cfgsect)
-
-        if not intg.isrestart:
-            self._transform_ics(intg, cfgsect)
-
-        macro = f'nirf_source_{self.ndims}d'
-        for eles in intg.system.ele_map.values():
-            eles.add_src_macro('pyfr.plugins.solver.kernels.nirf', macro,
-                               self.motion.tplargs, ploc=True, soln=True)
-
-    def _transform_ics(self, intg, cfgsect):
-        ndims = self.ndims
-        cor = np.array(self.cfg.getliteral(
-            cfgsect, 'center-of-rot', (0.,) * ndims
-        ))
-
-        R3 = _quat_to_rotmat(self.motion.fquat)
-        R = R3[:ndims, :ndims]
-        Rt3 = R3.T
-        omega = self.motion.fomega
-        velo = self.motion.fvelo[:ndims]
-        floc = self.motion.floc[:ndims]
-
-        consts = self.cfg.items_as('constants', float)
-
-        for eles, eb in zip(intg.system.ele_map.values(),
-                            intg.system.ele_banks):
-            ploc_body = eles.ploc_at_np('upts')
-            nupts, neles = ploc_body.shape[0], ploc_body.shape[-1]
-
-            # Inertial position: x_lab = R @ (x_body - x0) + x0 + floc
-            ploc_lab = (np.einsum('ij,njk->nik', R,
-                                  ploc_body - cor[None, :, None])
-                        + (cor + floc)[None, :, None])
-
-            # Re-evaluate IC primitives with x,y,z bound to inertial coords
-            vars = dict(consts)
-            for i, c in enumerate('xyz'[:ndims]):
-                vars[c] = ploc_lab[:, i, :]
-
-            pris = [npeval(self.cfg.getexpr('soln-ics', dv), vars)
-                    for dv in eles.privars]
-            pris = [np.broadcast_to(v, (nupts, neles)).copy() for v in pris]
-
-            # Velocity transform: u_body = R^T*(u_lab - V_frame) - Ω×r_body
-            u_lab = np.stack(pris[1:1 + ndims], axis=1)
-
-            r3 = np.zeros((nupts, 3, neles))
-            r3[:, :ndims, :] = ploc_body - cor[None, :, None]
-            u3 = np.zeros_like(r3)
-            u3[:, :ndims, :] = u_lab - velo[None, :, None]
-
-            ub = np.einsum('ij,njk->nik', Rt3, u3)
-            ub -= np.cross(omega, r3.transpose(0, 2, 1)).transpose(0, 2, 1)
-
-            for i in range(ndims):
-                pris[1 + i] = ub[:, i, :]
-
-            # Convert primitives to conservatives and push to backend
-            s = np.empty((nupts, eles.nvars, neles))
-            for i, v in enumerate(eles.pri_to_con(pris, self.cfg)):
-                s[:, i, :] = v
-
-            eb[0].set(s)
-
-    def _csv_columns(self):
-        comps = 'xyz'[:self.ndims]
-        if self.ndims == 2:
-            ang = ['phi', 'omega', 'omega_dot']
-            moments = ['mz']
-        else:
-            ang = (['phi', 'theta', 'psi'] +
-                   [f'omega_{c}' for c in 'xyz'] +
-                   [f'omega_dot_{c}' for c in 'xyz'])
-            moments = [f'm{c}' for c in 'xyz']
-
-        return (['t'] + ang +
-                [f'loc_{c}' for c in comps] +
-                [f'velo_{c}' for c in comps] +
-                [f'accel_{c}' for c in comps] +
-                [f'f{c}' for c in comps] +
-                moments)
-
-    def _csv_header(self):
-        return ','.join(self._csv_columns())
-
-    def _init_force_integrator(self, cfgsect):
-        intg = self._intg
-
-        bcspec = self.cfg.get(cfgsect, 'boundary')
-        viscous = 'navier-stokes' in intg.system.name
-
-        self.cfg.set(cfgsect, 'quad-deg',
-                     self.cfg.getint(cfgsect, 'quad-deg',
-                                     self.cfg.getint('solver', 'order')))
-
-        fx0 = np.array(self.cfg.getliteral(cfgsect, 'center-of-rot',
-                                           (0.,) * self.ndims), dtype=float)
-
-        self._ff_int = NIRFForceIntegrator(
-            self.cfg, cfgsect, intg.system, bcspec, fx0, viscous)
-
-    def _init_force_output(self, cfgsect):
-        # Integrate forces only if something consumes them: the rigid-body ODE
-        # (free) or the CSV trace (both).  Prescribed motion with no file has
-        # no consumer, so skip the surface integral entirely.
-        consumed = self.motion.needs_force or self.cfg.hasopt(cfgsect, 'file')
-        if not (self.cfg.hasopt(cfgsect, 'boundary') and consumed):
-            self._ff_int = None
-            self._csv = None
-            return
-
-        self._init_force_integrator(cfgsect)
-
-        # Output cadence
-        intg = self._intg
-        if self.cfg.hasopt(cfgsect, 'dt-out'):
-            self._fout_dt = self.cfg.getfloat(cfgsect, 'dt-out')
-            self._fout_tlast = intg.tcurr
-            self._fout_nsteps = None
-            intg.call_plugin_dt(intg.tcurr, self._fout_dt)
-        else:
-            self._fout_nsteps = self.cfg.getint(cfgsect, 'nsteps-out', 1)
-            self._fout_dt = None
-
-        _, rank, root = get_comm_rank_root()
-        if rank == root and self.cfg.hasopt(cfgsect, 'file'):
-            self._csv = init_csv(self.cfg, cfgsect, self._csv_header())
-        else:
-            self._csv = None
-
-    def _output_due(self, intg):
-        if self._ff_int is None:
-            return False
-
-        if self._fout_dt is not None:
-            if intg.tcurr - self._fout_tlast >= self._fout_dt - self.tol:
-                self._fout_tlast = intg.tcurr
-                return True
-            return False
-
-        return intg.nacptsteps % self._fout_nsteps == 0
-
-    def _update_extern_values(self):
-        comps = 'xyz'[:self.ndims]
-        ev = self._extern_values
-
-        for i, c in enumerate('xyz'):
-            ev[f'frame_omega_{c}'] = self.motion.fomega[i]
-            ev[f'frame_alpha_{c}'] = self.motion.falpha[i]
-
-        for i, c in enumerate(comps):
-            ev[f'frame_loc_{c}'] = self.motion.floc[i]
-            ev[f'frame_velo_{c}'] = self.motion.fvelo[i]
-            ev[f'frame_accel_{c}'] = self.motion.faccel[i]
-
-    def _init_nirf_R(self):
-        R0 = _quat_to_rotmat(self.motion.fquat).T
-        self._nirf_R = self._intg.backend.matrix((3, 3), initval=R0)
-
-    # Rewrite the lab-frame BC expressions into the body frame:
-    #   x_lab  = R·(ploc − x0) + x0 + loc
-    #   u_body = Rᵀ·(u_lab − V) − Ω×(ploc − x0)
-    def _transform_bcs(self, intg):
-        ndims = self.ndims
-        comps = 'xyz'[:ndims]
-        gen = CodeGenerator().generate
-        simp = Simplifier().simplify_fully
-
-        def tpl(s, subs):
-            return rename_vars(parse_expr(s), subs)
-
-        fp = {k: parse_expr(v) for k, v in self.motion.bc_exprs().items()}
-        subs = {f'L{i}': fp[f'frame-loc-{c}'] for i, c in enumerate(comps)}
-        subs |= {f'V{i}': fp[f'frame-velo-{c}'] for i, c in enumerate(comps)}
-        subs |= {f'W{i}': fp[f'frame-omega-{c}'] for i, c in enumerate('xyz')}
-        subs |= {f'X{i}': Float(v) for i, v in enumerate(self.cfg.getliteral(
-            self.cfgsect, 'center-of-rot', (0.,) * ndims))}
-
-        xlab = [tpl(' + '.join(f'nirf_R[{j}][{i}]*(ploc[{j}] - X{j})'
-                               for j in range(ndims)) + f' + X{i} + L{i}',
-                    subs)
-                for i in range(ndims)]
-
-        def lab_position(node):
-            match node:
-                case Index(Var('ploc'), Int(i)):
-                    return xlab[i]
-                case _:
-                    return map_ast(node, lab_position)
-
-        if ndims == 2:
-            moxr = ['W2*(ploc[1] - X1)', '-W2*(ploc[0] - X0)']
-        else:
-            moxr = ['W2*(ploc[1] - X1) - W1*(ploc[2] - X2)',
-                    'W0*(ploc[2] - X2) - W2*(ploc[0] - X0)',
-                    'W1*(ploc[0] - X0) - W0*(ploc[1] - X1)']
-
-        ubody = [' + '.join(f'nirf_R[{i}][{j}]*(U{j} - V{j})'
-                            for j in range(ndims)) + f' + {m}'
-                 for i, m in enumerate(moxr)]
-
-        vkeys = 'uvw'[:ndims]
-
-        def uses_ploc(expr):
-            return any(isinstance(n, Var) and n.name == 'ploc'
-                       for n in walk_expr(expr))
-
-        def body_frame(cfgsect, exprs):
-            exprs = {k: parse_expr(v) for k, v in exprs.items()}
-            hasvelo = all(k in exprs for k in vkeys)
-
-            # Position-dependent expressions are given at lab-frame points
-            rexprs = {k: lab_position(e) for k, e in exprs.items()
-                      if uses_ploc(e)}
-
-            # Velocities are lab-frame velocities
-            if hasvelo:
-                lab = exprs | rexprs
-                usubs = subs | {f'U{i}': lab[k] for i, k in enumerate(vkeys)}
-                rexprs |= {k: tpl(u, usubs) for k, u in zip(vkeys, ubody)}
-
-            # Parenthesise, as the kernels substitute these textually
-            return {k: f'({gen(simp(e))})' for k, e in rexprs.items()}
-
-        # Externs the rewritten expressions may reference
-        externs = {'nirf_R': ('in broadcast fpdtype_t[3][3]', self._nirf_R)}
-        if self.motion.has_externs:
-            externs |= {_to_extern(p): ('scalar fpdtype_t', None)
-                        for p in nirf_bc_params(ndims)}
-
-        intg.system.rewrite_bc_exprs(body_frame, externs)
-
-    def _update_nirf_R(self):
-        R = _quat_to_rotmat(self.motion.fquat)
-        self._nirf_R.set(R.T)
-
-    def __call__(self, intg):
-        # State advance / ODE integration is throttled (free: dt-ode); CSV
-        # output is independent (every nsteps-out solver steps or dt-out s).
-        advancing = self.motion.should_advance(intg)
-        logging = self._output_due(intg)
-
-        if not (advancing or logging):
-            return
-
-        if (self.motion.needs_force and advancing) or logging:
-            force, moment = self._ff_int.compute(intg.soln)
-        else:
-            force, moment = None, None
-
-        if advancing:
-            self.motion.advance(intg, force, moment)
-
-            if self.motion.has_externs:
-                self._update_extern_values()
-                self.bind_externs()
-
-            self._update_nirf_R()
-
-        if logging:
-            self._write_csv(intg, force, moment)
-
-    def _write_csv(self, intg, force, moment):
-        if not self._csv:
-            return
-
-        _, rank, root = get_comm_rank_root()
-        if rank != root:
-            return
-
-        phi, theta, psi = _quat_to_euler(self.motion.fquat)
-
-        if self.ndims == 2:
-            ang = [phi, self.motion.fomega[2], self.motion.falpha[2]]
-        else:
-            ang = [phi, theta, psi, *self.motion.fomega, *self.motion.falpha]
-
-        self._csv(intg.tcurr, *ang,
-                  *self.motion.floc, *self.motion.fvelo, *self.motion.faccel,
-                  *force, *moment)
 
     _sdata_dtype = np.dtype([
         ('loc', 'f8', 3), ('velo', 'f8', 3), ('accel', 'f8', 3),
@@ -848,27 +393,271 @@ class NIRFPlugin(BaseSolverPlugin):
         ('tode_last', 'f8')
     ])
 
+    def __init__(self, intg, cfgsect):
+        super().__init__(intg, cfgsect)
+
+        cfg, ndims = self.cfg, self.ndims
+
+        # Time the frame was last advanced to
+        self._tadv = None
+
+        # Time of the last load integration and its result
+        self._loads = None, None
+
+        # Centre of rotation, about which the moments are also taken
+        origin = cfg.getliteral(cfgsect, 'center-of-rot', (0.,)*ndims)
+        self.origin = np.array(origin, dtype=float)
+
+        motioncls = subclass_where(BaseMotion, name=cfg.get(cfgsect, 'motion'))
+        self.motion = m = motioncls(intg, cfgsect, self.tol)
+
+        if (sdata := intg.initstate.get(self.sprefix)) is not None:
+            self._restore_state(sdata)
+
+        m.schedule(intg)
+
+        intg.serialiser.register(self.sprefix,
+                                 lambda: self._serialise_data(intg))
+
+        self._transform_bcs(intg)
+
+        # Bind any runtime frame parameters to the kernels
+        if (names := list(m.externs())):
+            self._register_externs(intg, names)
+
+        self._init_loads(intg)
+
+        if not intg.isrestart:
+            self._transform_ics(intg)
+
+        def texts(kind, comps):
+            return [_to_text(m.kin[f'frame_{kind}_{c}']) for c in comps]
+
+        # Frame parameters as they are to appear in the source term kernels
+        tplargs = {
+            'frame_omega': texts('omega', 'xyz'),
+            'frame_alpha': texts('alpha', 'xyz'),
+            'frame_baccel': texts('baccel', 'xyz'[:ndims]),
+            'frame_origin': self.origin.tolist()
+        }
+
+        for eles in intg.system.ele_map.values():
+            eles.add_src_macro('pyfr.plugins.solver.kernels.nirf',
+                               'nirf_source', tplargs, ploc=True, soln=True)
+
     def _restore_state(self, sdata):
         ndims, m = self.ndims, self.motion
 
-        m.floc = np.array(sdata['loc'])[:ndims].copy()
-        m.fvelo = np.array(sdata['velo'])[:ndims].copy()
-        m.faccel = np.array(sdata['accel'])[:ndims].copy()
+        m.floc = np.array(sdata['loc'][:ndims])
+        m.fvelo = np.array(sdata['velo'][:ndims])
+        m.faccel = np.array(sdata['accel'][:ndims])
         m.fquat = np.array(sdata['quat'])
         m.fomega = np.array(sdata['omega'])
         m.falpha = np.array(sdata['alpha'])
         m.tode_last = float(sdata['tode_last'])
 
-    def _serialise_data(self):
-        # A writer listed before this plugin would otherwise record the
-        # state of the previous step
-        self.motion.sync(self._intg.tcurr)
+    # Rewriter taking lab-frame expressions at pos into the body frame
+    def _body_frame(self, kin, pos):
+        ndims = self.ndims
+        comps, vkeys = 'xyz'[:ndims], 'uvw'[:ndims]
+        simp = Simplifier().simplify_fully
 
-        pad = 3 - self.ndims
+        subs = {f'X{i}': Float(v) for i, v in enumerate(self.origin.tolist())}
+        subs |= {f'P{i}': p for i, p in enumerate(pos)}
+        subs |= {f'L{i}': kin[f'frame_loc_{c}'] for i, c in enumerate(comps)}
+        subs |= {f'V{i}': kin[f'frame_velo_{c}'] for i, c in enumerate(comps)}
+        subs |= {f'W{i}': kin[f'frame_omega_{c}'] for i, c in enumerate('xyz')}
+        subs |= {f'R{i}{j}': kin[f'frame_rmat_{i}{j}']
+                 for i, j in ndrange(ndims, ndims)}
+
+        # Lab-frame position, x_lab = R*(x_body - x0) + x0 + loc
+        xlab = [_subst(' + '.join(f'R{i}{j}*(P{j} - X{j})'
+                                  for j in range(ndims)) + f' + X{i} + L{i}',
+                       subs)
+                for i in range(ndims)]
+
+        def lab_position(node):
+            if node in pos:
+                return xlab[pos.index(node)]
+            else:
+                return node.map(lab_position)
+
+        # Components of r x omega, where r is zero out of plane in 2D
+        r = [f'(P{i} - X{i})' if i < ndims else '0.0' for i in range(3)]
+        rxw = [f'W{k}*{r[j]} - W{j}*{r[k]}'
+               for j, k in [(1, 2), (2, 0), (0, 1)][:ndims]]
+
+        # Body-frame velocity, u_body = R^T*(u_lab - V) - omega x r
+        ubody = [' + '.join(f'R{j}{i}*(U{j} - V{j})'
+                            for j in range(ndims)) + f' + {c}'
+                 for i, c in enumerate(rxw)]
+
+        def body_frame(cfgsect, exprs):
+            exprs = {k: parse_expr(v) for k, v in exprs.items()}
+
+            # Position-dependent expressions are given at lab-frame points
+            lab = {k: lab_position(e) for k, e in exprs.items()}
+            rexprs = {k: e for k, e in lab.items() if e is not exprs[k]}
+
+            # A velocity given with other variables is a lab-frame velocity
+            if set(vkeys) < exprs.keys():
+                usubs = subs | {f'U{i}': lab[k] for i, k in enumerate(vkeys)}
+                rexprs |= {k: _subst(u, usubs) for k, u in zip(vkeys, ubody)}
+
+            return {k: _to_text(simp(e)) for k, e in rexprs.items()}
+
+        return body_frame
+
+    def _transform_bcs(self, intg):
+        pos = [parse_expr(f'ploc[{i}]') for i in range(self.ndims)]
+        body_frame = self._body_frame(self.motion.kin, pos)
+
+        # Externs the rewritten expressions may reference
+        externs = {k: ('scalar fpdtype_t', None)
+                   for k in self.motion.externs()}
+        if externs:
+            self._nirf_R = intg.backend.matrix((3, 3),
+                                               initval=self.motion.rmat)
+            externs['nirf_R'] = ('in broadcast fpdtype_t[3][3]', self._nirf_R)
+
+        intg.system.rewrite_bc_exprs(body_frame, externs)
+
+    def _update_extern_values(self):
+        self._extern_values = self.motion.externs()
+        self._nirf_R.set(self.motion.rmat)
+
+    def _init_loads(self, intg):
+        cfg, cfgsect = self.cfg, self.cfgsect
+
+        # The output file reports the loads and so needs a boundary
+        self._has_output = (cfg.hasopt(cfgsect, 'file') and
+                            cfg.hasopt(cfgsect, 'boundary'))
+
+        # Integrate the loads only where the body or the file needs them
+        if self.motion.needs_force or self._has_output:
+            # Default the quadrature degree to the solution order
+            if not cfg.hasopt(cfgsect, 'quad-deg'):
+                order = cfg.getint('solver', 'order')
+                cfg.set(cfgsect, 'quad-deg', max(order, 1))
+
+            self._ff_int = FluidForceIntegrator(
+                intg, cfgsect, cfg.get(cfgsect, 'boundary'), self.origin
+            )
+
+        if not self._has_output:
+            return
+
+        if cfg.hasopt(cfgsect, 'dt-out'):
+            self.dt_out = cfg.getfloat(cfgsect, 'dt-out')
+            self.tout_last = intg.tcurr
+
+            # Register our output times with the integrator
+            intg.call_plugin_dt(intg.tcurr, self.dt_out)
+        else:
+            self.dt_out = None
+            self.nsteps_out = cfg.getint(cfgsect, 'nsteps-out', 1)
+
+        # The root rank needs to open the output file
+        _, rank, root = get_comm_rank_root()
+        if rank == root:
+            self._init_series(intg, self._fields)
+
+    @property
+    def _fields(self):
+        comps = 'xyz'[:self.ndims]
+        rcomps = 'z' if self.ndims == 2 else 'xyz'
+
+        fields = [f'{k}_{c}' for k in ('rot', 'omega', 'omega_dot')
+                  for c in rcomps]
+        fields += [f'{k}_{c}' for k in ('loc', 'velo', 'accel') for c in comps]
+
+        return fields + [f'f{c}' for c in comps] + [f'm{c}' for c in rcomps]
+
+    def _transform_ics(self, intg):
+        ndims, m = self.ndims, self.motion
+
+        # Frame parameters at the start of the run
+        state = {'loc': m.floc, 'velo': m.fvelo, 'omega': m.fomega}
+        kin = {f'frame_{k}_{c}': Float(float(v))
+               for k, vals in state.items() for c, v in zip('xyz', vals)}
+        kin |= {f'frame_rmat_{i}{j}': Float(float(m.rmat[i, j]))
+                for i, j in ndrange(ndims, ndims)}
+
+        body_frame = self._body_frame(kin, [Var(c) for c in 'xyz'[:ndims]])
+
+        for eles, eb in zip(intg.system.ele_map.values(),
+                            intg.system.ele_banks):
+            cons = eles.set_ics_from_cfg(body_frame)
+
+            # Every RHS bank starts out holding the initial solution
+            for b in eb[:intg.system.nrhs]:
+                b.set(cons)
+
+    # Integrate the loads at most once per time level
+    def _integrate_loads(self, intg):
+        if self._loads[0] != intg.tcurr:
+            comm, rank, root = get_comm_rank_root()
+
+            # Sum the pressure and viscous loads over all ranks
+            fm = self._ff_int(intg).sum(axis=0)
+            comm.Allreduce(mpi.IN_PLACE, fm, op=mpi.SUM)
+
+            self._loads = intg.tcurr, (fm[:self.ndims], fm[self.ndims:])
+
+        return self._loads[1]
+
+    # Bring the frame up to the current time, at most once per time level
+    def _advance(self, intg):
+        t, m = intg.tcurr, self.motion
+
+        if self._tadv == t or not m.should_advance(t):
+            return
+
+        m.advance(t, *(self._integrate_loads(intg) if m.needs_force else ()))
+
+        if self._extern_values:
+            self._update_extern_values()
+            self.bind_externs()
+
+            # A stage derivative kept from the last step is now stale
+            intg.invalidate_rhs()
+
+        self._tadv = t
+
+    def _output_due(self, intg):
+        if not self._has_output:
+            return False
+        elif self.dt_out is None:
+            return intg.nacptsteps % self.nsteps_out == 0
+        else:
+            return intg.tcurr - self.tout_last >= self.dt_out - self.tol
+
+    def __call__(self, intg):
+        self._advance(intg)
+
+        if self._output_due(intg):
+            self.tout_last = intg.tcurr
+
+            force, moment = self._integrate_loads(intg)
+
+            # Only the root rank holds the output file
+            _, rank, root = get_comm_rank_root()
+            if rank == root:
+                m, nr = self.motion, len(moment)
+                euler = _quat_to_euler(m.fquat)
+
+                self._write(intg.tcurr, [
+                    *euler[-nr:], *m.fomega[-nr:], *m.falpha[-nr:],
+                    *m.floc, *m.fvelo, *m.faccel, *force, *moment
+                ])
+
+    def _serialise_data(self, intg):
+        # A writer may ask for the state before this plugin has been called
+        self._advance(intg)
+
+        m, pad = self.motion, (0, 3 - self.ndims)
+
         return np.void((
-            np.pad(self.motion.floc, (0, pad)),
-            np.pad(self.motion.fvelo, (0, pad)),
-            np.pad(self.motion.faccel, (0, pad)),
-            self.motion.fquat, self.motion.fomega, self.motion.falpha,
-            self.motion.tode_last
+            np.pad(m.floc, pad), np.pad(m.fvelo, pad), np.pad(m.faccel, pad),
+            m.fquat, m.fomega, m.falpha, m.tode_last
         ), dtype=self._sdata_dtype)
