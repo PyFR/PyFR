@@ -1,9 +1,10 @@
+from dataclasses import replace
 import re
 
 from pyfr.dsl.nodes import (BINARY_OPS, COMPOUND_ASSIGN, POSTFIX_OPS,
                             PRECEDENCE, RIGHT_ASSOC, UNARY_OPS, ArrayInit,
                             Assign, Binary, Block, Break, Call, Cast, Comment,
-                            Continue, DoWhile, DslCall, DslVar, ExprStmt,
+                            Continue, DoWhile, DSLCall, DSLVar, ExprStmt,
                             Float, For, If, Index, Int, MultiDecl, Postfix,
                             Program, Region, String, Ternary, Typedef, Unary,
                             Var, VarDecl, While)
@@ -88,10 +89,8 @@ class Parser:
 
     def statement(self):
         comments = self.take_comments()
-        stmt = self._statement()
-        stmt.comments = comments
 
-        return stmt
+        return replace(self._statement(), comments=comments)
 
     def _statement(self):
         tok = self.peek()
@@ -198,7 +197,7 @@ class Parser:
         if None in sizes:
             raise SyntaxError(f'Unsized extent on array {name!r}')
 
-        return VarDecl(is_const, vtype, name, sizes or None, init)
+        return VarDecl(vtype, name, sizes or None, init, const=is_const)
 
     def _check_initialiser(self, name, sizes, init):
         # Skip checks for scalars and non-trivial extents such as x[1+1]
@@ -320,9 +319,9 @@ class Parser:
                     return Var(tok.value)
             case 'DSL':
                 if self.accept('('):
-                    return DslCall(tok.value, self._parse_call_args())
+                    return DSLCall(tok.value, self._parse_call_args())
                 else:
-                    return DslVar(tok.value)
+                    return DSLVar(tok.value)
             case 'SYMBOL' if tok.value in UNARY_OPS:
                 return Unary(tok.value, self.expression(PRECEDENCE['unary']))
             case 'SYMBOL' if tok.value == '(':

@@ -1,5 +1,5 @@
 from pyfr.dsl.nodes import (ArrayInit, Assign, Binary, Block, Break, Call,
-                            Cast, Comment, Continue, DoWhile, DslCall, DslVar,
+                            Cast, Comment, Continue, DoWhile, DSLCall, DSLVar,
                             ExprStmt, Float, For, If, Index, Int, MultiDecl,
                             Postfix, Program, Region, String, Ternary, Typedef,
                             Unary, Var, VarDecl, While, COMPOUND_ASSIGN,
@@ -7,7 +7,7 @@ from pyfr.dsl.nodes import (ArrayInit, Assign, Binary, Block, Break, Call,
 
 
 class CodeGenerator:
-    _exprs = (Assign, Binary, Call, Cast, DslCall, DslVar, Float, Index, Int,
+    _exprs = (Assign, Binary, Call, Cast, DSLCall, DSLVar, Float, Index, Int,
               Postfix, String, Ternary, Unary, Var)
 
     # Anything which is not an operator never needs parenthesising
@@ -325,9 +325,9 @@ class CodeGenerator:
                     istr = f'({istr})'
 
                 return f'({ctype}){istr}'
-            case DslCall(name, args):
+            case DSLCall(name, args):
                 raise ValueError(f'Unresolved DSL call: @{name}')
-            case DslVar(name):
+            case DSLVar(name):
                 raise ValueError(f'Unresolved DSL variable: @{name}')
             case _:
                 raise ValueError('Unknown expression type: '

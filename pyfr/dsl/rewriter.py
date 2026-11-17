@@ -1,5 +1,5 @@
 from pyfr.dsl.lexer import Lexer
-from pyfr.dsl.nodes import (DslVar, Float, Var, VarDecl, map_ast,
+from pyfr.dsl.nodes import (DSLVar, Float, Transformer, Var, VarDecl,
                             unwrap_index, walk_ast)
 from pyfr.dsl.parser import Parser
 
@@ -26,9 +26,9 @@ def parse_program(code, types=()):
 def rename_vars(ast, renames):
     def rename(node):
         match node:
-            case Var(name) | DslVar(name) if name in renames:
+            case Var(name) | DSLVar(name) if name in renames:
                 return renames[name]
-            case VarDecl(c, vt, n, sz, init) if n in renames:
+            case VarDecl(vt, n, sz, init, const=c) if n in renames:
                 r = renames[n]
 
                 # Only a plain variable can stand in for a declaration
@@ -37,21 +37,22 @@ def rename_vars(ast, renames):
                         sz = [rename(s) for s in sz]
 
                     init = rename(init) if init else None
-                    return VarDecl(c, vt, r.name, sz, init)
+                    return VarDecl(vt, r.name, sz, init, const=c)
                 else:
-                    return map_ast(node, rename)
+                    return node.map(rename)
             case _:
-                return map_ast(node, rename)
+                return node.map(rename)
 
     return rename(ast)
 
 
-class Rewriter:
+class Rewriter(Transformer):
     def __init__(self, rules):
         self.rules = rules
 
     def transform(self, node, args):
-        node = self._transform(node, args)
+        self.args = args
+        node = self.visit(node)
 
         # Any argument reference which survives had no applicable rule
         for n in walk_ast(node):
@@ -60,28 +61,30 @@ class Rewriter:
 
         return node
 
-    def _transform(self, node, args):
+    def visit(self, node):
         # Check the arity is consistent
         n, ix = unwrap_index(node)
+        args = self.args
         if n in args and len(ix) > args[n].nidx:
             raise ValueError(f'Too many indices for {n}')
 
-        mapped = map_ast(node, lambda n: self._transform(n, args))
+        return super().visit(node)
 
+    def rewrite(self, node):
         # Extract the name and indices, then look up a matching arg
-        n, ix = unwrap_index(mapped)
-        if n is not None and n in args:
-            arg = args[n]
+        n, ix = unwrap_index(node)
+        if n in self.args:
+            arg = self.args[n]
             for r in self.rules:
                 if (result := r(n, ix, arg)) is not None:
                     return result
 
-        return mapped
+        return node
 
 
-class FloatSuffixer:
-    def transform(self, node):
+class FloatSuffixer(Transformer):
+    def rewrite(self, node):
         if isinstance(node, Float) and not node.suffix:
             return Float(node.value, 'f', node.ishex)
         else:
-            return map_ast(node, self.transform)
+            return node

@@ -3,12 +3,12 @@ from math import prod
 import numpy as np
 
 from pyfr.backends.base.generator.args import Arg
-from pyfr.backends.base.mathfns import lower_math_fns
-from pyfr.dsl.ad import lower_ad_regions
+from pyfr.backends.base.mathfns import MathFnLowering
+from pyfr.dsl.ad import ADLowering
 from pyfr.dsl.codegen import CodeGenerator
-from pyfr.dsl.nodes import (Assign, Binary, Call, DslCall, DslVar, ExprStmt,
-                            Index, Int, Program, Unary, Var, VarDecl, map_ast,
-                            region_kinds, walk_ast)
+from pyfr.dsl.nodes import (Assign, Binary, Call, DSLCall, DSLVar, ExprStmt,
+                            Index, Int, Program, Region, Unary, Var, VarDecl,
+                            walk_ast)
 from pyfr.dsl.rewriter import (FloatSuffixer, Rewriter, parse_expr,
                                parse_program, rename_vars)
 from pyfr.dsl.types import Environment
@@ -16,7 +16,7 @@ from pyfr.dsl.types import Environment
 
 def _rule(tpl, **preconds):
     proto = parse_expr(tpl)
-    dvars = {n.name for n in walk_ast(proto) if isinstance(n, DslVar)}
+    dvars = {n.name for n in walk_ast(proto) if isinstance(n, DSLVar)}
     nidx = sum(1 for v in dvars if v.startswith('I'))
     nvars = frozenset(v for v in dvars if v.startswith('N'))
 
@@ -120,13 +120,15 @@ class BaseKernelGenerator:
         for v in sargs:
             env.define(v.name, v.dtype, [Int(d) for d in v.cdims] or None)
 
-        self._ast = lower_ad_regions(self._ast, env)
+        self._ast = ADLowering(env).visit(self._ast)
 
         # Note the variables present in the body
-        used = {n.name for n in walk_ast(self._ast) if isinstance(n, Var)}
+        nodes = list(walk_ast(self._ast))
+        used = {n.name for n in nodes if isinstance(n, Var)}
 
         # Note the region kinds present in the body
-        self.regions = region_kinds(self._ast)
+        kinds = {n.kind for n in nodes if isinstance(n, Region)}
+        self.regions = frozenset(kinds)
 
         # Eliminate any arguments which go unreferenced in the body
         sargs = [v for v in sargs if v.name in used]
@@ -267,16 +269,16 @@ class BaseKernelGenerator:
                 pairs = [(Index(Var(rname), Int(j)), self._deref_arg(va, j))
                          for j in range(n)]
 
-                rdecl = VarDecl(False, 'fpdtype_t', rname, [Int(n)])
-                decl = VarDecl(False, 'fpdtype_t', va.name, [Int(n)])
+                rdecl = VarDecl('fpdtype_t', rname, [Int(n)])
+                decl = VarDecl('fpdtype_t', va.name, [Int(n)])
                 accum = [self._accum_stmt(va.reduceop, dst,
                                           Index(Var(va.name), Int(j)))
                          for j, (dst, _) in enumerate(pairs)]
             else:
                 pairs = [(Var(rname), self._deref_arg(va))]
 
-                rdecl = VarDecl(False, 'fpdtype_t', rname)
-                decl = VarDecl(False, 'fpdtype_t', va.name)
+                rdecl = VarDecl('fpdtype_t', rname)
+                decl = VarDecl('fpdtype_t', va.name)
                 accum = [self._accum_stmt(va.reduceop, pairs[0][0],
                                           Var(va.name))]
 
@@ -290,12 +292,12 @@ class BaseKernelGenerator:
             vs = va.viewstride
 
             if vs > 1:
-                decl = VarDecl(False, 'fpdtype_t', va.name, [Int(vs)])
+                decl = VarDecl('fpdtype_t', va.name, [Int(vs)])
                 atoms = [self._atomic_stmt(va.reduceop, self._deref_arg(va, i),
                                            Index(Var(va.name), Int(i)))
                          for i in range(vs)]
             else:
-                decl = VarDecl(False, 'fpdtype_t', va.name)
+                decl = VarDecl('fpdtype_t', va.name)
                 atoms = [self._atomic_stmt(va.reduceop, self._deref_arg(va),
                                            Var(va.name))]
 
@@ -311,18 +313,18 @@ class BaseKernelGenerator:
 
         def lower(node):
             match node:
-                case DslVar('xidx'):
+                case DSLVar('xidx'):
                     return xidx
-                case DslVar('soasz'):
+                case DSLVar('soasz'):
                     return soasz
-                case DslCall('aosoa', [v, nv]):
+                case DSLCall('aosoa', [v, nv]):
                     subs = {'v': lower(v), 'nv': lower(nv), 'soasz': soasz}
                     return rename_vars(parse_expr(self._aosoa), subs)
-                case DslCall('bcast', [r, c, ld]):
+                case DSLCall('bcast', [r, c, ld]):
                     subs = {'r': lower(r), 'c': lower(c), 'ld': lower(ld)}
                     return rename_vars(parse_expr(self._bcast), subs)
                 case _:
-                    return map_ast(node, lower)
+                    return node.map(lower)
 
         return lower(ast)
 
@@ -337,12 +339,13 @@ class BaseKernelGenerator:
 
     def _render_body(self, ast, codegen):
         # Lower math functions to helper function calls
-        ast, helpers = lower_math_fns(ast, self.lower_fns)
-        self._helper_calls |= helpers
+        mfl = MathFnLowering(self.lower_fns)
+        ast = mfl.visit(ast)
+        self._helper_calls |= mfl.helpers
 
         # At single precision suffix all floating point constants by 'f'
         if self.fpdtype == np.float32:
-            ast = FloatSuffixer().transform(ast)
+            ast = FloatSuffixer().visit(ast)
 
         # Apply any backend-specific finalisation passes
         ast = self._finalise_ast(ast)

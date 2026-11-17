@@ -9,7 +9,7 @@ import numpy as np
 
 from pyfr.backends.base.generator import Arg
 from pyfr.dsl.codegen import CodeGenerator
-from pyfr.dsl.nodes import Var, VarDecl, map_ast
+from pyfr.dsl.nodes import Var, VarDecl, walk_ast
 from pyfr.dsl.rewriter import parse_expr, parse_program, rename_vars
 from pyfr.dsl.types import INT_TYPES
 import pyfr.nputil as nputil
@@ -226,15 +226,11 @@ def expand(context, name, /, *args, **kwargs):
 
     # Identify local variable declarations and the names in use
     lvars, used = [], set()
-
-    def collect(node):
+    for node in walk_ast(ast):
         if isinstance(node, VarDecl):
             lvars.append(node.name)
         elif isinstance(node, Var):
             used.add(node.name)
-        return map_ast(node, collect)
-
-    collect(ast)
 
     # Suffix these variables by a '_'
     if lvars:

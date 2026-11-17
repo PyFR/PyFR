@@ -7,7 +7,7 @@ from numpy.polynomial.legendre import leggauss
 from numpy.polynomial.polynomial import polyfit, polyval
 
 from pyfr.dsl.nodes import (PRECISE_REGIONS, Binary, Call, Int, Number,
-                            Region, Unary, Var, map_ast)
+                            Region, Transformer, Unary, Var)
 from pyfr.dsl.simplifier import expand_power, reduce_pow
 from pyfr.template import DottedTemplateLookup
 from pyfr.util import subclasses
@@ -273,22 +273,25 @@ class PowMathFn(BaseMathFn):
         }
 
 
-def lower_math_fns(ast, fns, frozen=PRECISE_REGIONS):
-    mfs = {c.name: c for c in subclasses(BaseMathFn, just_leaf=True)}
-    mfcls = [mfs[n] for n in fns]
-    helpers = {}
+class MathFnLowering(Transformer):
+    def __init__(self, fns, frozen=PRECISE_REGIONS):
+        mfs = {c.name: c for c in subclasses(BaseMathFn, just_leaf=True)}
+        self.mfcls = [mfs[n] for n in fns]
+        self.frozen = frozen
 
-    def lower(node):
+        # Helper functions required by the lowered calls
+        self.helpers = {}
+
+    def visit(self, node):
         # Leave regions which forbid rearrangement untouched
-        if isinstance(node, Region) and node.kind in frozen:
+        if isinstance(node, Region) and node.kind in self.frozen:
             return node
+        else:
+            return super().visit(node)
 
-        node = map_ast(node, lower)
-        for c in mfcls:
-            if (new := c.lower(node, helpers)) is not None:
+    def rewrite(self, node):
+        for c in self.mfcls:
+            if new := c.lower(node, self.helpers):
                 return new
 
         return node
-
-    # Hand back the lowered AST plus the set of helpers it now requires
-    return lower(ast), helpers

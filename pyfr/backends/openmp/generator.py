@@ -1,8 +1,7 @@
 from math import prod
 
 from pyfr.backends.base.generator import BaseKernelGenerator
-from pyfr.dsl.nodes import (Binary, DslVar, Index, Int, Program, Var,
-                            VarDecl, map_ast)
+from pyfr.dsl.nodes import Binary, DSLVar, Index, Int, Program, Var, VarDecl
 
 
 class OpenMPKernelGenerator(BaseKernelGenerator):
@@ -29,10 +28,10 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
         return ast
 
     def _stage_reduce(self, ast, va):
-        rv, xidx = Var(f'_rv_{va.name}'), DslVar('xidx')
+        rv, xidx = Var(f'_rv_{va.name}'), DSLVar('xidx')
 
         def stage(node):
-            node = map_ast(node, stage)
+            node = node.map(stage)
             match node:
                 # Rewrite name into _rv_name[@xidx]
                 case Var(name) if name == va.name and not va.ismulti:
@@ -53,14 +52,14 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
 
             if va.ncdim:
                 # Declare a local accumulator fpdtype_t name[n]
-                decl = VarDecl(False, 'fpdtype_t', va.name, [Int(n)])
+                decl = VarDecl('fpdtype_t', va.name, [Int(n)])
                 # Emit name_v[...] = op(name_v[...], name[j]) per element
                 accum = [self._accum_stmt(va.reduceop, self._deref_arg(va, j),
                                           Index(Var(va.name), Int(j)))
                          for j in range(n)]
             else:
                 # Declare a local accumulator fpdtype_t name
-                decl = VarDecl(False, 'fpdtype_t', va.name)
+                decl = VarDecl('fpdtype_t', va.name)
                 # Emit name_v[...] = op(name_v[...], name)
                 accum = [self._accum_stmt(va.reduceop, self._deref_arg(va),
                                           Var(va.name))]
@@ -89,7 +88,7 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
             if vs > 1:
                 # Declare the staging array fpdtype_t _rv_name[vs][BLK_SZ]
                 sizes = [Int(vs), Var('BLK_SZ')]
-                decls.append(VarDecl(False, 'fpdtype_t', rv.name, sizes))
+                decls.append(VarDecl('fpdtype_t', rv.name, sizes))
                 for i in range(vs):
                     # Flush _rv_name[i][ix] into name_v[name_vix[vs*ix + i]]
                     vidx = Binary('+', Binary('*', Int(vs), ix), Int(i))
@@ -99,7 +98,7 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
             else:
                 # Declare the staging array fpdtype_t _rv_name[BLK_SZ]
                 sizes = [Var('BLK_SZ')]
-                decls.append(VarDecl(False, 'fpdtype_t', rv.name, sizes))
+                decls.append(VarDecl('fpdtype_t', rv.name, sizes))
                 # Flush _rv_name[ix] into name_v[name_vix[ix]]
                 dst, src = Index(gv, Index(vix, ix)), Index(rv, ix)
                 atoms.append(self._atomic_stmt(va.reduceop, dst, src))

@@ -1,9 +1,9 @@
 from collections import defaultdict
 from math import isfinite
 
-from pyfr.dsl.nodes import (PRECISE_REGIONS, Assign, Binary, Block, Call,
-                            Float, For, Int, Number, Region, Ternary, Typedef,
-                            Unary, VarDecl, call, map_ast)
+from pyfr.dsl.nodes import (PRECISE_REGIONS, Assign, Binary, Call, Float,
+                            Int, Number, Region, Ternary, Transformer, Unary,
+                            call)
 from pyfr.dsl.types import Environment
 
 
@@ -60,12 +60,23 @@ def reduce_pow(base, v):
     return result
 
 
-class Simplifier:
+def _is_sum(expr):
+    match expr:
+        case Binary('+' | '-', _, _) | Unary('-', _):
+            return True
+        case _:
+            return False
+
+
+class Simplifier(Transformer):
     # Region kinds whose statements must not be rearranged
     frozen_regions = PRECISE_REGIONS
 
     def __init__(self, env=None):
-        self.env = env or Environment()
+        super().__init__(env or Environment())
+
+        # Identities of the expressions already in simplified form
+        self.simplified = set()
 
     def _kind(self, expr):
         return self.env.type_of(expr).kind
@@ -126,10 +137,15 @@ class Simplifier:
             case Unary('-', x):
                 self._terms(x, -scale, terms)
             case _:
-                c, factors = self._factors(expr)
-                key = tuple(sorted(map(repr, factors)))
-                coeff, t = terms.get(key, (0, self._product(factors)))
-                terms[key] = (coeff + scale*c, t)
+                # Simplify the term, collecting any sum it turns into
+                s = self.simplify(expr)
+                if s is not expr and _is_sum(s):
+                    self._terms(s, scale, terms)
+                else:
+                    c, factors = self._factors(s)
+                    key = tuple(sorted(map(repr, factors)))
+                    coeff, t = terms.get(key, (0, self._product(factors)))
+                    terms[key] = (coeff + scale*c, t)
 
         return terms
 
@@ -169,21 +185,34 @@ class Simplifier:
                 bydenom[repr(t.right)].append(key)
 
         # a/x + b/x -> (a + b)/x
+        merged = {}
         for keys in bydenom.values():
             if len(keys) > 1:
                 num, denom = {}, terms[keys[0]][1].right
                 for k in keys:
-                    c, t = terms.pop(k)
+                    c, t = terms[k]
                     self._terms(t.left, c, num)
 
                 frac = Binary('/', self._sum(num, 'float'), denom)
-                terms[(repr(frac),)] = (1, frac)
+                merged |= dict.fromkeys(keys[:-1])
+                merged[keys[-1]] = frac
+
+        # Replace the terms sharing a denominator with their merged fraction
+        out = {}
+        for k, v in terms.items():
+            if k not in merged:
+                out[k] = v
+            elif frac := merged[k]:
+                out[(repr(frac),)] = (1, frac)
+
+        return out
 
     def _simplify_sum(self, expr):
-        terms = self._terms(expr)
-        self._merge_fractions(terms)
+        terms = self._merge_fractions(self._terms(expr))
+        new = self._sum(terms, self._kind(expr))
 
-        return self._sum(terms, self._kind(expr)) or expr
+        # Keep the simplified terms of a sum which can not be collected
+        return new or expr.map(self.simplify)
 
     def _cancel(self, c, factors):
         i = 0
@@ -263,8 +292,6 @@ class Simplifier:
 
     def _rewrite(self, expr):
         match expr:
-            case Binary('+' | '-', _, _) | Unary('-', _):
-                return self._simplify_sum(expr)
             case Binary('*', _, _):
                 return self._simplify_prod(expr)
             case Binary('/', _, _):
@@ -275,48 +302,52 @@ class Simplifier:
                 return expr
 
     def simplify(self, expr):
+        # Skip expressions already known to be simplified
+        if expr.nid in self.simplified:
+            return expr
+
+        # Collect a chain of sums as one
+        if _is_sum(expr):
+            mapped = expr
+            new = self._simplify_sum(expr)
         # Simplify the operands before the node itself
-        expr = map_ast(expr, self.simplify)
-        new = self._rewrite(expr)
+        else:
+            mapped = expr.map(self.simplify)
+            new = self._rewrite(mapped)
 
         # Refuse any rewrite which would change the type of the result
-        if new is not expr and self._kind(new) != self._kind(expr):
+        if new is not mapped and self._kind(new) != self._kind(mapped):
+            new = mapped.map(self.simplify)
+
+        # Hold an expression which comes back with its operands unchanged
+        if new is not mapped and new != mapped:
+            return new
+        elif mapped is expr:
+            self.simplified.add(expr.nid)
             return expr
         else:
-            return new
+            return mapped
 
     def simplify_fully(self, expr, max_iter=10):
         # One rewrite can expose another, so iterate to a fixed point
         for _ in range(max_iter):
-            if (simplified := self.simplify(expr)) == expr:
+            simplified = self.simplify(expr)
+            if simplified is expr:
                 return simplified
 
             expr = simplified
 
         return expr
 
-    def simplify_program(self, prog):
-        def walk(node):
-            match node:
-                # Freeze the contents of regions which forbid rearrangement
-                case Region(kind) if kind in self.frozen_regions:
-                    return node
-                # Open a scope for the declarations in this block
-                case Block() | Region() | For():
-                    outer, self.env = self.env, self.env.scope()
-                    node = map_ast(node, walk)
-                    self.env = outer
-                    return node
-                case VarDecl(_, vtype, name):
-                    node = map_ast(node, walk)
-                    self.env.define(name, vtype)
-                    return node
-                case Typedef(old, new):
-                    self.env.define(new, old)
-                    return node
-                case Binary() | Unary() | Call() | Ternary() | Assign():
-                    return self.simplify_fully(node)
-                case _:
-                    return map_ast(node, walk)
+    def visit(self, node):
+        match node:
+            # Freeze the contents of regions which forbid rearrangement
+            case Region(kind) if kind in self.frozen_regions:
+                return node
+            case Binary() | Unary() | Call() | Ternary() | Assign():
+                return self.simplify_fully(node)
+            case _:
+                return super().visit(node)
 
-        return walk(prog)
+    def simplify_program(self, prog):
+        return self.visit(prog)

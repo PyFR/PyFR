@@ -2,9 +2,9 @@ from dataclasses import dataclass
 from functools import reduce
 
 from pyfr.dsl.derivs import Differentiator
-from pyfr.dsl.nodes import (Assign, Binary, Call, Cast, DslCall, DslVar,
+from pyfr.dsl.nodes import (Assign, Binary, Call, Cast, DSLCall, DSLVar,
                             Float, Index, Int, MultiDecl, Postfix, Ternary,
-                            Unary, Var, VarDecl, unwrap_index)
+                            Typedef, Unary, Var, VarDecl, unwrap_index)
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,6 +62,7 @@ class Environment:
         self.default = default
         self.names = {}
         self.decls = {}
+        self.types = {}
 
     def scope(self):
         env = Environment(self.default)
@@ -95,18 +96,27 @@ class Environment:
     def declare(self, stmt):
         # Define the names introduced by a declaration statement
         match stmt:
-            case VarDecl(_, vtype, name, sizes, _):
+            case VarDecl(vtype, name, sizes, _):
                 self.define(name, vtype, sizes)
             case MultiDecl(decls):
                 for d in decls:
                     self.define(d.name, d.vtype, d.sizes)
+            case Typedef(old, new):
+                self.define(new, old)
 
     def get(self, name):
         return self.lookup(name) or self.default
 
     def type_of(self, expr):
+        # Type each expression once per scope
+        if not (t := self.types.get(expr.nid)):
+            t = self.types[expr.nid] = self._type_of(expr)
+
+        return t
+
+    def _type_of(self, expr):
         match expr:
-            case Int() | DslVar() | DslCall():
+            case Int() | DSLVar() | DSLCall():
                 return INT
             case Float():
                 return DOUBLE

@@ -1,14 +1,13 @@
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from math import prod
 import re
 
 from pyfr.dsl.derivs import Differentiator, build_index
 from pyfr.dsl.nodes import (PRECISE_REGIONS, ArrayInit, Assign, Block,
                             DoWhile, ExprStmt, For, If, Index, Int, MultiDecl,
-                            Number, Postfix, Program, Region, Stmt, Unary,
-                            Var, VarDecl, While, expr_children, map_ast,
-                            region_kinds, strip_regions, unwrap_index,
-                            walk_ast)
+                            Number, Postfix, Program, Region, Stmt,
+                            Transformer, Typedef, Unary, Var, VarDecl, While,
+                            expr_children, node, unwrap_index, walk_ast)
 from pyfr.dsl.simplifier import Simplifier
 from pyfr.util import ndrange
 
@@ -19,7 +18,7 @@ def _active_part(node):
         case Region('nodiff', _, _):
             return Block([])
         case _:
-            return map_ast(node, _active_part)
+            return node.map(_active_part)
 
 
 def _parse_ad_spec(args):
@@ -140,42 +139,31 @@ class JacobianRegion:
         return Block(body, comments=self.region.comments)
 
 
-def lower_ad_regions(prog, env):
-    # Replace the differentiation regions by their derivative bodies
-    def visit(node, env):
+class ADLowering(Transformer):
+    def visit(self, node):
+        # Replace the differentiation regions by their derivative bodies
         match node:
             case Region('tangent', _, _):
-                return TangentRegion(node, env).lower()
+                return self._lowered(TangentRegion(node, self.env))
             case Region('jacobian', _, _):
-                return JacobianRegion(node, env).lower()
-            case Program(body) | Block(body) | Region(_, body, _):
-                inner, nbody = env.scope(), []
-                for s in body:
-                    nbody.append(visit(s, inner))
-                    inner.declare(s)
-
-                return replace(node, body=nbody)
-            case If(_, then, else_):
-                nelse = visit(else_, env.scope()) if else_ else None
-                return replace(node, then=visit(then, env.scope()),
-                               else_=nelse)
-            case For(init, _, _, body):
-                inner = env.scope()
-                inner.declare(init)
-                return replace(node, body=visit(body, inner))
-            case While(_, body) | DoWhile(body, _):
-                return replace(node, body=visit(body, env.scope()))
+                return self._lowered(JacobianRegion(node, self.env))
             case _:
-                return node
+                return super().visit(node)
 
-    if not region_kinds(prog).isdisjoint({'tangent', 'jacobian'}):
-        prog = visit(prog, env)
+    def _lowered(self, region):
+        body = self.visit(region.lower())
 
         # Simplify the differentiated program without IEEE constraints
-        prog = Simplifier(env).simplify_program(prog)
+        return Simplifier(self.env).simplify_program(body)
 
-    # Strip any nodiff regions
-    return strip_regions(prog, {'nodiff'})
+    def rewrite(self, node):
+        # Strip any nodiff regions
+        match node:
+            # Replace regions of the given kinds with plain blocks
+            case Region('nodiff', body, _):
+                return Block(body, comments=node.comments)
+            case _:
+                return node
 
 
 def _check_pure(expr):
@@ -211,15 +199,16 @@ class DerivativeGenerator:
 
     def _analyse(self, stmts):
         # Gather the target and value of every write in the program
-        writes = []
+        writes, env = [], self.simplifier.env
         for node in walk_ast(Program(stmts)):
             # Let the simplifier see the declared type of each name
-            if isinstance(node, VarDecl):
-                self.simplifier.env.declare(node)
+            match node:
+                case VarDecl() | Typedef():
+                    env.declare(node)
 
         for node in walk_ast(_active_part(Program(stmts))):
             match node:
-                case VarDecl(_, _, name, sizes, init):
+                case VarDecl(_, name, sizes, init):
                     if init is not None:
                         writes.append((name, sizes is not None, init))
                 case Assign(lhs, rhs):
@@ -238,6 +227,10 @@ class DerivativeGenerator:
                         darrs.add(name)
                     else:
                         deps.add(name)
+
+        # Tangents share the type and extents of their primals
+        for name in deps | darrs | self.wrt | self.outs:
+            env.define(self.tangent_name(name), *env.lookup_decl(name))
 
     def _dependent(self, name):
         return name in self.dependent_vars or name in self.dependent_arrays
@@ -264,7 +257,7 @@ class DerivativeGenerator:
             case MultiDecl(decls):
                 return [s for d in decls for s in self._transform_stmt(d)]
             # Variable and array declarations
-            case VarDecl(_, vtype, name, sizes, init):
+            case VarDecl(vtype, name, sizes, init):
                 return self._transform_decl(stmt, vtype, name, sizes, init)
             # Assignments to variables and array entries
             case ExprStmt(Assign(Var() | Index() as lhs, expr)):
@@ -347,7 +340,7 @@ class DerivativeGenerator:
                 dinit = Int(0)
 
             dname = self.tangent_name(name)
-            out.append(VarDecl(False, vtype, dname, sizes, dinit))
+            out.append(VarDecl(vtype, dname, sizes, dinit))
 
         return out
 
@@ -399,7 +392,7 @@ class DerivativeGenerator:
 
 def _target_name(stmt):
     match stmt:
-        case VarDecl(_, _, name, _, _):
+        case VarDecl(_, name, _, _):
             return name
         case ExprStmt(Assign(lhs, _)):
             name, _ = unwrap_index(lhs)
@@ -437,7 +430,7 @@ def _init_entries(sizes, init):
     return out
 
 
-@dataclass(slots=True)
+@node
 class _Hole(Stmt):
     # Placeholder for tangent declarations hoisted out of nested blocks
     decls: dict = field(default_factory=dict)
@@ -518,6 +511,9 @@ class DirectionSpecialiser:
 
         # Depths of the enclosing conditional statements
         self._ifdepths = []
+
+        # Substituted expressions shared by the directions they are alike in
+        self._shared = {}
 
         # Declarations of tangents whose primal is declared outside the body
         self._top = _Hole()
@@ -624,7 +620,7 @@ class DirectionSpecialiser:
         self._state = state
         idxs = [Int(i) for i in ik]
         seed = self._sub_seed(name, idxs)
-        block.body += self._spec_write(name, idxs, ik, seed, self._depth)
+        block.body.extend(self._spec_write(name, idxs, ik, seed, self._depth))
 
     def _zero_tangent(self, state, block, name, ik):
         # Zero a tangent on the path where it is not live, if it may be stale
@@ -681,7 +677,7 @@ class DirectionSpecialiser:
             else:
                 init = None
 
-            hole.add(self._tangent_decl(name, array, init))
+            hole.add(self._tangent_decl(name, depth, array, init))
             self._state.declared.add(name)
             return True
         else:
@@ -693,7 +689,7 @@ class DirectionSpecialiser:
 
         match stmt:
             # Tangent declarations, with their non-zero initial entries
-            case VarDecl(_, _, name, sizes, init):
+            case VarDecl(_, name, sizes, init):
                 if sizes is None:
                     entries = [((), init)]
                 elif isinstance(init, ArrayInit):
@@ -751,9 +747,10 @@ class DirectionSpecialiser:
             # Skip the identity writes of accumulations with no tangent
             out = [ExprStmt(Assign(nl, expr))] if expr != nl else []
         elif idxs:
-            out = [self._tangent_decl(name, True), ExprStmt(Assign(nl, expr))]
+            decl = self._tangent_decl(name, self._depth, True)
+            out = [decl, ExprStmt(Assign(nl, expr))]
         else:
-            out = [self._tangent_decl(name, init=expr)]
+            out = [self._tangent_decl(name, self._depth, init=expr)]
 
         self._state.declared.add(name)
         self._state.live.add((name, ik))
@@ -770,13 +767,31 @@ class DirectionSpecialiser:
 
         return build_index(tile, idxs + [Int(self._k)])
 
-    def _tangent_decl(self, name, array=False, init=None):
+    def _tangent_decl(self, name, depth, array=False, init=None):
         # Declare the tangent temporary with the type and extents of its primal
         vt, sizes = self.env.lookup_decl(self._tannames[name])
-        return VarDecl(False, vt, self._mangle(name), sizes, init)
+        decl = VarDecl(vt, self._mangle(name), sizes, init)
+
+        # Make the name known to the scope of the block at the given depth
+        env = self.env
+        for _ in range(self._depth - depth):
+            env = env.enclosing
+
+        env.declare(decl)
+
+        return decl
 
     def _sub_expr(self, expr):
-        return self.simplifier.simplify_fully(self._sub(expr))
+        # Substitute the seeds and tangents of the direction, noting each leaf
+        self._leaves = []
+        sub = self._sub(expr)
+
+        # Share the result with every direction whose leaves are the same
+        key = (expr.nid, *self._leaves)
+        if not (out := self._shared.get(key)):
+            out = self._shared[key] = self.simplifier.simplify_fully(sub)
+
+        return out
 
     def _sub(self, node):
         match node:
@@ -788,10 +803,13 @@ class DirectionSpecialiser:
                     if ik is not None and (name, ik) in self._state.written:
                         return self._live_read(name, idxs, ik)
                     else:
-                        return self._sub_seed(name, idxs)
+                        seed = self._sub_seed(name, idxs)
+                        self._leaves.append(seed.value)
+                        return seed
                 elif name in self._outtiles:
                     # Redirect self-reads of written tile entries
                     if ik is not None and (name, ik) in self._state.outs:
+                        self._leaves.append((self._arr, self._k))
                         return self._tile(name, idxs)
                     else:
                         raise NotImplementedError(f'Output tile {name!r} '
@@ -803,15 +821,17 @@ class DirectionSpecialiser:
 
                     return self._live_read(name, idxs, ik)
                 else:
-                    return map_ast(node, self._sub)
+                    return node.map(self._sub)
             case _:
-                return map_ast(node, self._sub)
+                return node.map(self._sub)
 
     def _live_read(self, name, idxs, ik):
         # Read a live tangent entry, with dead entries reading as zero
         if (name, ik) in self._state.live:
+            self._leaves.append((self._arr, self._k))
             return build_index(Var(self._mangle(name)), idxs)
         else:
+            self._leaves.append(0)
             return Int(0)
 
     def _sub_seed(self, name, idxs):
