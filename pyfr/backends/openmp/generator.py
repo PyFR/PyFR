@@ -220,29 +220,25 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
     def needs_ldim(self, arg):
         return False
 
-    def _displace_arg(self, arg):
-        if arg.isview:
-            return None
+    def needs_blocksz(self, arg):
+        if arg.isview or arg.ismpi:
+            return False
+        # 2D broadcast vector
         elif self.ndim == 1:
-            # Vector
-            if arg.ncdim == 0 or arg.ismpi:
-                return '_ib*BLK_SZ'
-            # 2D broadcast vector
-            elif arg.isbroadcast:
-                return None
-            # Stacked vector:
-            else:
-                return f'_ib*BLK_SZ*{prod(arg.cdims)}'
+            return not arg.isbroadcast
+        # 2D broadcast vector or row broadcast matrix
         else:
-            # 2D broadcast vector or row broadcast matrix
-            if arg.isbroadcast or arg.isbroadcastr:
-                return None
-            # Column broadcast matrix
-            elif arg.isbroadcastc:
-                return f'_ib*BLK_SZ*{prod(arg.cdims)}'
-            # Matrix
-            else:
-                return f'_ib*BLK_SZ*{prod(arg.cdims)}*_ny'
+            return not (arg.isbroadcast or arg.isbroadcastr)
+
+    def _displace_arg(self, arg):
+        # Step a matrix by the size of the blocks it is bound with
+        if self.needs_blocksz(arg):
+            return f'_ib*{arg.name}_blocksz'
+        # Vector
+        elif arg.ismpi:
+            return '_ib*BLK_SZ'
+        else:
+            return None
 
     def _render_args(self, argn):
         # We first need the argument list; starting with the dimensions
@@ -265,6 +261,10 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
             else:
                 kargs.append((f'{va.dtype}*', f'{va.name}_v', da, mi))
 
+            # Size of the blocks of a matrix
+            if self.needs_blocksz(va):
+                kargs.append(('ixdtype_t', f'{va.name}_blocksz', None, None))
+
             # Views
             if va.isview:
                 vix_disp = f'_ib*BLK_SZ*{va.viewstride}'
@@ -279,7 +279,7 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                                   '_ib*BLK_SZ', None))
 
         # Argument definitions and assignments
-        kargdefn, kargassn = [], []
+        kargdefn, kargassn, kargdisp = [], [], []
         for dtype, name, disp, midx in kargs:
             assn = f'{dtype} {name} = {argn}->{name}'
 
@@ -290,6 +290,11 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                 assn += f' + {disp}'
 
             kargdefn.append(f'{dtype} {name}')
-            kargassn.append(assn)
 
-        return ';\n'.join(kargdefn), ';\n'.join(kargassn)
+            # Unpack the displaced pointers after the values they step by
+            if disp:
+                kargdisp.append(assn)
+            else:
+                kargassn.append(assn)
+
+        return ';\n'.join(kargdefn), ';\n'.join(kargassn + kargdisp)

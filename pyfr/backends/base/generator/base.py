@@ -186,6 +186,8 @@ class BaseKernelGenerator:
                         argt.append(('v', [np.uintp]*2))
             elif self.needs_ldim(va):
                 argt.append(('ml', [np.uintp, self.ixdtype]))
+            elif self.needs_blocksz(va):
+                argt.append(('mb', [np.uintp, self.ixdtype]))
             else:
                 argt.append(('m', [np.uintp]))
 
@@ -197,6 +199,9 @@ class BaseKernelGenerator:
 
     def needs_ldim(self, arg):
         pass
+
+    def needs_blocksz(self, arg):
+        return False
 
     def render(self):
         pass

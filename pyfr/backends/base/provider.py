@@ -198,11 +198,6 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
                     ka = int(argdict.get(aname, 0))
             else:
                 ka = argdict[aname]
-                mscls = self.backend.matrix_slice_cls
-
-                # Check that argument is not a row sliced matrix
-                if isinstance(ka, mscls) and ka.nrow != ka.parent.nrow:
-                    raise ValueError('Row sliced matrices are not supported')
 
             args[aname] = (i, (form, atypes), ka)
             i += len(atypes)

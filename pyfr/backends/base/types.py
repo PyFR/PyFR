@@ -12,7 +12,13 @@ from pyfr.mpiutil import autofree, mpi
 class _MatrixArg:
     def kargs(self, form):
         # Expand into a pointer, plus a leading dimension if present
-        return [self, self.leaddim] if form == 'ml' else [self]
+        match form:
+            case 'ml':
+                return [self, self.leaddim]
+            case 'mb':
+                return [self, self.blocksz]
+            case _:
+                return [self]
 
 
 class MatrixBase(_MatrixArg, _StorageBase):
