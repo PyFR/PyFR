@@ -32,7 +32,7 @@
     f[${i}] = -u[0]*(omega[${j}]*oxr[${k}] - omega[${k}]*oxr[${j}]
                      + 2.0*(omega[${j}]*v[${k}] - omega[${k}]*v[${j}])
                      + alpha[${j}]*r[${k}] - alpha[${k}]*r[${j}]
-                     + ${frame_baccel[i]});
+                     + (${frame_baccel[i]}));
     src[${i + 1}] += f[${i}];
 % endfor
 

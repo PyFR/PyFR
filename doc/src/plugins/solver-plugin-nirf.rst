@@ -212,13 +212,6 @@ reported in body axes, the moment being taken about ``center-of-rot``.
 
     *string*
 
-.. note::
-
-   For Navier--Stokes systems the viscous stress is integrated over
-   every boundary named in ``boundary``, including slip walls on which
-   it should vanish.  Name only no-slip walls when the viscous
-   contribution matters.
-
 Example:
 
 .. code-block:: ini

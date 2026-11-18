@@ -7,13 +7,13 @@ from pyfr.dsl.derivs import Differentiator
 from pyfr.dsl.nodes import Float, Int, Ternary, Var, walk_expr
 from pyfr.dsl.rewriter import rename_vars
 from pyfr.mpiutil import get_comm_rank_root, mpi
+from pyfr.nputil import Quaternion
 from pyfr.plugins.mixins import SeriesWriterMixin
 from pyfr.plugins.soln.fluidforce import FluidForceIntegrator
 from pyfr.plugins.solver.base import BaseSolverPlugin
 from pyfr.util import ndrange, subclass_where
 
 
-# Renders conditionals in Python syntax for evaluation on the host
 class _HostCodeGenerator(CodeGenerator):
     def _generate_expr(self, expr):
         match expr:
@@ -25,53 +25,8 @@ class _HostCodeGenerator(CodeGenerator):
                 return super()._generate_expr(expr)
 
 
-# Substitute expressions for the variables of a template
 def _subst(tpl, subs):
     return rename_vars(parse_expr(tpl), subs)
-
-
-# Parenthesise, as the kernels substitute these textually
-def _to_text(expr):
-    return f'({CodeGenerator().generate(expr)})'
-
-
-# Quaternion of the ZYX Euler angle sequence
-def _euler_to_quat(rx, ry, rz):
-    cx, sx = np.cos(rx / 2), np.sin(rx / 2)
-    cy, sy = np.cos(ry / 2), np.sin(ry / 2)
-    cz, sz = np.cos(rz / 2), np.sin(rz / 2)
-
-    return np.array([cz*cy*cx + sz*sy*sx, cz*cy*sx - sz*sy*cx,
-                     cz*sy*cx + sz*cy*sx, sz*cy*cx - cz*sy*sx])
-
-
-def _quat_to_euler(q):
-    w, x, y, z = q
-    rx = np.arctan2(2*(w*x + y*z), 1 - 2*(x*x + y*y))
-    ry = np.arcsin(np.clip(2*(w*y - z*x), -1, 1))
-    rz = np.arctan2(2*(w*z + x*y), 1 - 2*(y*y + z*z))
-
-    return rx, ry, rz
-
-
-def quat_to_rotmat(q):
-    w, x, y, z = q
-
-    return np.array([
-        [1 - 2*(y*y + z*z), 2*(x*y - w*z), 2*(x*z + w*y)],
-        [2*(x*y + w*z), 1 - 2*(x*x + z*z), 2*(y*z - w*x)],
-        [2*(x*z - w*y), 2*(y*z + w*x), 1 - 2*(x*x + y*y)]
-    ])
-
-
-def _quat_mult(q, r):
-    w1, x1, y1, z1 = q
-    w2, x2, y2, z2 = r
-
-    return np.array([w1*w2 - x1*x2 - y1*y2 - z1*z2,
-                     w1*x2 + x1*w2 + y1*z2 - z1*y2,
-                     w1*y2 - x1*z2 + y1*w2 + z1*x2,
-                     w1*z2 + x1*y2 - y1*x2 + z1*w2])
 
 
 class BaseMotion:
@@ -86,9 +41,8 @@ class BaseMotion:
 
     @property
     def rmat(self):
-        return quat_to_rotmat(self.fquat)
+        return self.fquat.to_rotmat()
 
-    # Values of those frame parameters which are runtime kernel arguments
     def externs(self):
         return {}
 
@@ -115,13 +69,11 @@ class PrescribedMotion(BaseMotion):
         self._hexprs = {k: compile(gen(v), k, 'eval')
                         for k, v in self.kin.items()}
 
-        # The generator spells min and max as fmin and fmax
         self._hsyms = {**vars(math), 'fmin': min, 'fmax': max,
                        '__builtins__': {}}
 
         self.advance(intg.tcurr)
 
-    # Kinematics derived from the position and orientation expressions
     def _kinematics(self):
         cfg, cfgsect, ndims = self.cfg, self.cfgsect, self.ndims
 
@@ -156,34 +108,34 @@ class PrescribedMotion(BaseMotion):
         if ndims == 2:
             rot = {'rx': Float(0.0), 'ry': Float(0.0),
                    'rz': cfgexpr('frame-rot-z')}
-            omega = [Float(0.0), Float(0.0), d(rot['rz'])]
-            rmat = [['cos(rz)', '-sin(rz)'], ['sin(rz)', 'cos(rz)']]
+            omega = ['0.0', '0.0', 'drz']
+            rmat = [['cz', '-sz'], ['sz', 'cz']]
         else:
             rot = {f'r{c}': cfgexpr(f'frame-rot-{c}') for c in 'xyz'}
 
             # Body-frame angular velocity of the ZYX Euler angle sequence
-            subs = rot | {f'd{k}': d(v) for k, v in rot.items()}
-            omega = [simp(_subst(w, subs))
-                     for w in ['drx - drz*sin(ry)',
-                               'dry*cos(rx) + drz*sin(rx)*cos(ry)',
-                               'drz*cos(rx)*cos(ry) - dry*sin(rx)']]
+            omega = ['drx - drz*sy', 'dry*cx + drz*sx*cy',
+                     'drz*cx*cy - dry*sx']
 
-            rmat = [['cos(rz)*cos(ry)',
-                     'cos(rz)*sin(ry)*sin(rx) - sin(rz)*cos(rx)',
-                     'cos(rz)*sin(ry)*cos(rx) + sin(rz)*sin(rx)'],
-                    ['sin(rz)*cos(ry)',
-                     'sin(rz)*sin(ry)*sin(rx) + cos(rz)*cos(rx)',
-                     'sin(rz)*sin(ry)*cos(rx) - cos(rz)*sin(rx)'],
-                    ['-sin(ry)', 'cos(ry)*sin(rx)', 'cos(ry)*cos(rx)']]
+            # Rotation matrix of the ZYX Euler angle sequence
+            rmat = [['cz*cy', 'cz*sy*sx - sz*cx', 'cz*sy*cx + sz*sx'],
+                    ['sz*cy', 'sz*sy*sx + cz*cx', 'sz*sy*cx - cz*sx'],
+                    ['-sy', 'cy*sx', 'cy*cx']]
+
+        # Sines and cosines of the angles, and the rates of the angles
+        subs = {f'{f[0]}{c}': _subst(f'{f}(r{c})', rot)
+                for f in ('sin', 'cos') for c in 'xyz'}
+        subs |= {f'd{k}': d(v) for k, v in rot.items()}
 
         for c, w in zip('xyz', omega):
+            w = simp(_subst(w, subs))
+
             kin[f'frame_rot_{c}'] = rot[f'r{c}']
             kin[f'frame_omega_{c}'] = w
             kin[f'frame_alpha_{c}'] = d(w)
 
-        # Rotation matrix of the ZYX Euler angle sequence
         for i, j in ndrange(ndims, ndims):
-            kin[f'frame_rmat_{i}{j}'] = simp(_subst(rmat[i][j], rot))
+            kin[f'frame_rmat_{i}{j}'] = simp(_subst(rmat[i][j], subs))
 
         # Linear acceleration resolved in body axes, R^T*a
         asubs = {f'a{j}': kin[f'frame_accel_{c}'] for j, c in enumerate(comps)}
@@ -206,7 +158,7 @@ class PrescribedMotion(BaseMotion):
 
         self.floc, self.fvelo = state('loc', comps), state('velo', comps)
         self.faccel = state('accel', comps)
-        self.fquat = _euler_to_quat(*state('rot', 'xyz'))
+        self.fquat = Quaternion.from_euler(*state('rot', 'xyz'))
         self.fomega, self.falpha = state('omega', 'xyz'), state('alpha', 'xyz')
 
         self.tode_last = t
@@ -259,7 +211,6 @@ class FreeMotion(BaseMotion):
             self.kin |= {f'frame_{k}_{c}': Float(0.0)
                          for k in ('omega', 'alpha') for c in 'xy'}
 
-    # Angular vectors only have a z component in 2D
     def _rvec(self, name):
         cfg, cfgsect = self.cfg, self.cfgsect
 
@@ -298,18 +249,17 @@ class FreeMotion(BaseMotion):
             raise ValueError('Specify frame-rot0-euler or frame-rot0-quat, '
                              'not both')
         elif has_euler:
-            return _euler_to_quat(*self._rvec('frame-rot0-euler'))
+            return Quaternion.from_euler(*self._rvec('frame-rot0-euler'))
         elif has_quat:
-            q = np.array(cfg.getliteral(cfgsect, 'frame-rot0-quat'),
-                         dtype=float)
+            q = Quaternion(cfg.getliteral(cfgsect, 'frame-rot0-quat'))
 
             # Only rotations about z exist in 2D
-            if self.ndims == 2 and q[1:3].any():
+            if self.ndims == 2 and q.q[1:3].any():
                 raise ValueError('frame-rot0-quat must be about z in 2D')
 
-            return q / np.linalg.norm(q)
+            return q.normalised()
         else:
-            return np.array([1., 0., 0., 0.])
+            return Quaternion([1., 0., 0., 0.])
 
     def externs(self):
         ndims = self.ndims
@@ -365,9 +315,8 @@ class FreeMotion(BaseMotion):
         fomega = self.fomega + 0.5*dt*(self.falpha + falpha)
 
         omega_avg = 0.5*(self.fomega + fomega)
-        dqdt = 0.5*_quat_mult(self.fquat, np.array([0, *omega_avg]))
-        self.fquat = self.fquat + dt*dqdt
-        self.fquat /= np.linalg.norm(self.fquat)
+        dqdt = 0.5*(self.fquat*Quaternion([0, *omega_avg])).q
+        self.fquat = Quaternion(self.fquat.q + dt*dqdt).normalised()
 
         # The force is integrated in body axes; the frame moves in lab axes
         faccel = self.rmat[:ndims, :ndims] @ force / self.mass
@@ -430,8 +379,10 @@ class NIRFPlugin(SeriesWriterMixin, BaseSolverPlugin):
         if not intg.isrestart:
             self._transform_ics(intg)
 
+        gen = CodeGenerator().generate
+
         def texts(kind, comps):
-            return [_to_text(m.kin[f'frame_{kind}_{c}']) for c in comps]
+            return [gen(m.kin[f'frame_{kind}_{c}']) for c in comps]
 
         # Frame parameters as they are to appear in the source term kernels
         tplargs = {
@@ -442,7 +393,7 @@ class NIRFPlugin(SeriesWriterMixin, BaseSolverPlugin):
         }
 
         for eles in intg.system.ele_map.values():
-            eles.add_src_macro('pyfr.plugins.solver.kernels.nirf',
+            eles.add_src_macro('pyfr.plugins.solver.kernels.macros.nirf',
                                'nirf_source', tplargs, ploc=True, soln=True)
 
     def _restore_state(self, sdata):
@@ -451,16 +402,15 @@ class NIRFPlugin(SeriesWriterMixin, BaseSolverPlugin):
         m.floc = np.array(sdata['loc'][:ndims])
         m.fvelo = np.array(sdata['velo'][:ndims])
         m.faccel = np.array(sdata['accel'][:ndims])
-        m.fquat = np.array(sdata['quat'])
+        m.fquat = Quaternion(sdata['quat'])
         m.fomega = np.array(sdata['omega'])
         m.falpha = np.array(sdata['alpha'])
         m.tode_last = float(sdata['tode_last'])
 
-    # Rewriter taking lab-frame expressions at pos into the body frame
     def _body_frame(self, kin, pos):
         ndims = self.ndims
         comps, vkeys = 'xyz'[:ndims], 'uvw'[:ndims]
-        simp = Simplifier().simplify_fully
+        simp, gen = Simplifier().simplify_fully, CodeGenerator().generate
 
         subs = {f'X{i}': Float(v) for i, v in enumerate(self.origin.tolist())}
         subs |= {f'P{i}': p for i, p in enumerate(pos)}
@@ -504,7 +454,8 @@ class NIRFPlugin(SeriesWriterMixin, BaseSolverPlugin):
                 usubs = subs | {f'U{i}': lab[k] for i, k in enumerate(vkeys)}
                 rexprs |= {k: _subst(u, usubs) for k, u in zip(vkeys, ubody)}
 
-            return {k: _to_text(simp(e)) for k, e in rexprs.items()}
+            # Parenthesise, as these are pasted into larger expressions
+            return {k: f'({gen(simp(e))})' for k, e in rexprs.items()}
 
         return body_frame
 
@@ -593,7 +544,6 @@ class NIRFPlugin(SeriesWriterMixin, BaseSolverPlugin):
             for b in eb[:intg.system.nrhs]:
                 b.set(cons)
 
-    # Integrate the loads at most once per time level
     def _integrate_loads(self, intg):
         if self._loads[0] != intg.tcurr:
             comm, rank, root = get_comm_rank_root()
@@ -606,7 +556,6 @@ class NIRFPlugin(SeriesWriterMixin, BaseSolverPlugin):
 
         return self._loads[1]
 
-    # Bring the frame up to the current time, at most once per time level
     def _advance(self, intg):
         t, m = intg.tcurr, self.motion
 
@@ -644,7 +593,7 @@ class NIRFPlugin(SeriesWriterMixin, BaseSolverPlugin):
             _, rank, root = get_comm_rank_root()
             if rank == root:
                 m, nr = self.motion, len(moment)
-                euler = _quat_to_euler(m.fquat)
+                euler = m.fquat.to_euler()
 
                 self._write(intg.tcurr, [
                     *euler[-nr:], *m.fomega[-nr:], *m.falpha[-nr:],
@@ -659,5 +608,5 @@ class NIRFPlugin(SeriesWriterMixin, BaseSolverPlugin):
 
         return np.void((
             np.pad(m.floc, pad), np.pad(m.fvelo, pad), np.pad(m.faccel, pad),
-            m.fquat, m.fomega, m.falpha, m.tode_last
+            m.fquat.q, m.fomega, m.falpha, m.tode_last
         ), dtype=self._sdata_dtype)
