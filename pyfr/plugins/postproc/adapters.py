@@ -27,8 +27,20 @@ class PostProcData:
     def has_grads(self):
         return any(n.startswith('grad_') for n in self.pvars)
 
-    def __getitem__(self, name):
-        return self.pvars[name]
+    def __getitem__(self, names):
+        if isinstance(names, str):
+            return self.pvars[names]
+        # Several variables are stacked along a new last axis
+        else:
+            return np.stack([self[n] for n in names], axis=-1)
+
+    def __setitem__(self, names, vals):
+        if isinstance(names, str):
+            self[names][:] = vals
+        # Each of several variables takes its slice of the last axis
+        else:
+            for n, v in zip(names, np.moveaxis(vals, -1, 0)):
+                self[n][:] = v
 
 
 class BoundaryPostProcData(PostProcData):
@@ -73,10 +85,14 @@ class BoundaryPostProcData(PostProcData):
         r = op @ self._spts.reshape(op.shape[1], -1)
         x_upt = r.reshape(op.shape[0], *self._spts.shape[1:])
 
+        # Surface points and unit normals in the frame of the mesh
+        ploc = self._metrics.ploc_at(self._finfo.svpts).swapaxes(1, 2)
+        unorm = self.pnorm / np.linalg.norm(self.pnorm, axis=0)
+
         # Offset of each interior point from each surface point
-        dx = x_upt[:, None] - self.ploc[None]
+        dx = x_upt[:, None] - ploc[None]
 
         # Distance along the local surface normal at each surface point
-        dist = np.abs(np.einsum('ipek,kpe->ipe', dx, self.normals))
+        dist = np.abs(np.einsum('ipek,kpe->ipe', dx, unorm))
 
         return dist.min(axis=0)

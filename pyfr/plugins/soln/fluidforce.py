@@ -42,7 +42,7 @@ class FluidForceIntegrator(BackendMixin, SurfaceIntegrator):
         ncomp = self.ndims + self.mcomp
         self._nout = (2 if self.viscous else 1)*ncomp
 
-        # Initialise GPU kernel infrastructure
+        # Initialise kernel infrastructure
         self._init_kernels()
 
     def _init_kernels(self):
@@ -51,7 +51,7 @@ class FluidForceIntegrator(BackendMixin, SurfaceIntegrator):
         # Register our kernel template
         backend.pointwise.register('pyfr.plugins.soln.kernels.fluidforce')
 
-        # Precompute per-face data and upload to device
+        # Precompute per-face data and pass it to the backend
         self._efaces = []
 
         for (etype, fidx), m0 in self.m0.items():
@@ -114,7 +114,7 @@ class FluidForceIntegrator(BackendMixin, SurfaceIntegrator):
         return kerns
 
     def __call__(self, intg):
-        # Compute gradients on device if viscous
+        # Compute gradients on the backend if viscous
         if self.viscous:
             intg.compute_grads()
 
