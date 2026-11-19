@@ -152,6 +152,12 @@ def subclass_where(cls, **kwargs):
     raise KeyError(f'No subclasses of {cls.__name__} with attrs == ({attrs})')
 
 
+def subclasses_where(cls, **kwargs):
+    return [s for s in subclasses(cls)
+            if all(hasattr(s, k) and getattr(s, k) == v
+                   for k, v in kwargs.items())]
+
+
 def ndrange(*args):
     return it.product(*map(range, args))
 
