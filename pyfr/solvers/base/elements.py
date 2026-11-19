@@ -361,6 +361,18 @@ class BaseElements:
     def pnorm_at(self, name, fidx):
         return self.metrics.pnorm_at(name, fidx)
 
+    @cached_property
+    def _gcorr_fpts(self):
+        m0, m3 = self.basis.m0, self.basis.m3
+
+        # Correction of a unit jump on each face at its own flux points
+        gcorr = np.concatenate([m0[fp] @ m3[:, fp].sum(axis=1)
+                                for fp in self.basis.facefpts])
+
+        # Transform to physical space along the face normal
+        pn = np.linalg.norm(self._pnorm_fpts, axis=-1)
+        return gcorr[:, None]*pn*self.rcpdjac_at_np('fpts')
+
     def get_pnorms(self, eidx, fidx):
         fpts_idx = self.basis.facefpts[fidx]
         return self._pnorm_fpts[fpts_idx, eidx]
@@ -384,6 +396,11 @@ class BaseElements:
     @inters_map
     def get_comm_fpts_for_inters(self, eidxs, fidx):
         return self._comm_fpts.mid, self.srtd_face_fpts[fidx][eidxs]
+
+    def get_gcorr_for_inters(self, eidxs, fidx):
+        fpts_idx = self.srtd_face_fpts[fidx][eidxs]
+        gcorr = self._gcorr_fpts[fpts_idx, eidxs[:, None]]
+        return gcorr.reshape(-1, 1),
 
     def get_ploc_for_inters(self, eidxs, fidx):
         fpts_idx = self.srtd_face_fpts[fidx][eidxs]

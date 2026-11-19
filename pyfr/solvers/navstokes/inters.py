@@ -118,9 +118,22 @@ class NavierStokesBaseBCInters(TplargsMixin, BaseAdvectionDiffusionBCInters):
         )
 
 
-class NavierStokesNoSlpIsotWallBCInters(NavierStokesBaseBCInters):
+class NavierStokesNoSlpWallBCInters(NavierStokesBaseBCInters):
+    cflux_state = 'ghost'
+
+    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
+        super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
+
+        # Walls take no penalty on the jump to their Riemann state
+        self.c['ldg-tau'] = 0.0
+
+        # Correction of the normal gradient at the wall for a unit jump
+        gcorr = self._const_mat(lhs, 'get_gcorr_for_inters')
+        self.set_external('gcorr', 'in fpdtype_t', value=gcorr)
+
+
+class NavierStokesNoSlpIsotWallBCInters(NavierStokesNoSlpWallBCInters):
     type = 'no-slp-isot-wall'
-    cflux_state = 'ghost-imperm'
 
     def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
         super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
@@ -150,9 +163,8 @@ class NavierStokesNoSlpIsotWallBCInters(NavierStokesBaseBCInters):
         return [rho, *uw, p]
 
 
-class NavierStokesNoSlpAdiaWallBCInters(NavierStokesBaseBCInters):
+class NavierStokesNoSlpAdiaWallBCInters(NavierStokesNoSlpWallBCInters):
     type = 'no-slp-adia-wall'
-    cflux_state = 'ghost-imperm'
 
     @staticmethod
     def common_pri_state(pl, nl, c):
