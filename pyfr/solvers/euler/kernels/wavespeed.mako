@@ -14,8 +14,9 @@
               upts='in broadcast-row fpdtype_t[${str(ndims)}]'
               wspd='out broadcast-col reduce(max) fpdtype_t'>
 % if 'linear' in ktype:
+    shared vs = @load(verts);
     fpdtype_t ${smats}[${ndims}][${ndims}], djac;
-    ${pyfr.expand('calc_smats_detj', 'verts', 'upts', smats, 'djac')};
+    ${pyfr.expand('calc_smats_detj', 'vs', 'upts', smats, 'djac')};
     fpdtype_t ${rcpdjac_v} = 1/djac;
 % endif
 

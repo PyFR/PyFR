@@ -20,9 +20,10 @@
               upts='in broadcast-row fpdtype_t[${str(ndims)}]'
               avop='in broadcast-row fpdtype_t[${str(nverts)}]'>
 % if 'linear' in ktype:
+    shared vs = @load(verts);
     // Compute the S matrices
     fpdtype_t ${smats}[${ndims}][${ndims}], djac;
-    ${pyfr.expand('calc_smats_detj', 'verts', 'upts', smats, 'djac')};
+    ${pyfr.expand('calc_smats_detj', 'vs', 'upts', smats, 'djac')};
     fpdtype_t ${rcpdjac} = 1 / djac;
 % endif
 

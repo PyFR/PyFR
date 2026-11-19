@@ -26,6 +26,9 @@ class CodeGenerator:
     # Region kinds to the text which opens them
     region_markers = {}
 
+    # Spellings of the intrinsic calls a backend provides to the body
+    intrinsics = {}
+
     def __init__(self):
         self.nind = 0
         self.ind = ' '*4
@@ -325,6 +328,9 @@ class CodeGenerator:
                     istr = f'({istr})'
 
                 return f'({ctype}){istr}'
+            case DSLCall(name, args) if name in self.intrinsics:
+                args = [self._generate_expr(a) for a in args]
+                return self.intrinsics[name].format(*args)
             case DSLCall(name, args):
                 raise ValueError(f'Unresolved DSL call: @{name}')
             case DSLVar(name):

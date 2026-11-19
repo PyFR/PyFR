@@ -50,9 +50,16 @@ class Parser:
         return self.advance()
 
     def _parse_decl_head(self):
+        is_shared = bool(self.accept('shared'))
         is_const = bool(self.accept('const'))
 
-        return is_const, self.expect('TYPE')
+        if self.tok.kind == 'TYPE':
+            return is_shared, is_const, self.advance()
+        # Let a shared declaration leave its type to the load it names
+        elif is_shared and not is_const and self.tok.kind == 'IDENT':
+            return is_shared, is_const, None
+        else:
+            raise self.error('Expected type, got', self.tok)
 
     def parse(self):
         body = []
@@ -80,7 +87,7 @@ class Parser:
 
     def _statement(self):
         match self.tok.kind:
-            case 'TYPE' | 'const':
+            case 'TYPE' | 'const' | 'shared':
                 return self.declaration()
             case 'typedef':
                 return self.typedef_stmt()
@@ -141,15 +148,16 @@ class Parser:
         return decl
 
     def _decl_list(self):
-        is_const, type_tok = self._parse_decl_head()
+        is_shared, is_const, type_tok = self._parse_decl_head()
+        vtype = type_tok.value if type_tok is not None else None
 
-        decls = [self._declarator(is_const, type_tok.value)]
+        decls = [self._declarator(is_shared, is_const, vtype)]
         while self.accept(','):
-            decls.append(self._declarator(is_const, type_tok.value))
+            decls.append(self._declarator(is_shared, is_const, vtype))
 
         return decls[0] if len(decls) == 1 else MultiDecl(decls)
 
-    def _declarator(self, is_const, vtype):
+    def _declarator(self, is_shared, is_const, vtype):
         name = self.expect('IDENT').value
 
         sizes = []
@@ -176,7 +184,13 @@ class Parser:
         if None in sizes:
             raise SyntaxError(f'Unsized extent on array {name!r}')
 
-        return VarDecl(vtype, name, sizes or None, init, const=is_const)
+        # Check an untyped shared declaration is loaded from an argument
+        isload = isinstance(init, DSLCall) and init.name == 'load'
+        if vtype is None and (sizes or not isload):
+            raise SyntaxError(f'Shared {name!r} needs a type or a load')
+
+        return VarDecl(vtype, name, sizes or None, init, const=is_const,
+                       shared=is_shared)
 
     def _check_initialiser(self, name, sizes, init):
         # Skip checks for scalars and non-trivial extents such as x[1+1]
@@ -240,7 +254,7 @@ class Parser:
 
         if self.tok.kind == ';':
             init = None
-        elif self.tok.kind in ('TYPE', 'const'):
+        elif self.tok.kind in ('TYPE', 'const', 'shared'):
             init = self._decl_list()
         else:
             init = self.expression(0)

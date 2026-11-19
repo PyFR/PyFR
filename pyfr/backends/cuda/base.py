@@ -58,6 +58,12 @@ class CUDABackend(BaseBackend):
         self.soasz = 32
         self.csubsz = self.soasz
 
+        # Lanes of a warp, which execute in lockstep
+        self.subgrpsz = 32
+
+        # Bytes of storage the warps of a block may share
+        self.shared_budget = 48*1024
+
         # Get the MPI runtime type
         self.mpitype = cfg.get('backend-cuda', 'mpi-type', 'standard')
         if self.mpitype not in {'standard', 'cuda-aware'}:

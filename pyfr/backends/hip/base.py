@@ -55,6 +55,12 @@ class HIPBackend(BaseBackend):
         self.soasz = self.props['warp_size']
         self.csubsz = self.soasz
 
+        # Lanes of a warp, which execute in lockstep
+        self.subgrpsz = self.props['warp_size']
+
+        # Bytes of storage the warps of a block may share
+        self.shared_budget = self.props['shared_mem_per_block']
+
         # Determine the number of compute dies
         self.ndies = self.hip.device_xcc_count(devid)
 

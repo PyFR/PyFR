@@ -13,6 +13,16 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
     _aosoa = '(_xi / @soasz*@nv + @v)*@soasz + _xj'
     _bcast = '@c % @ld + (@c / @ld)*@ld*@r'
 
+    # Prefix for variables in shared storage, which lives on the stack
+    _shared_prfx = None
+
+    # Largest lane-group size
+    max_lanes = 1
+
+    def _lane_decls(self):
+        return '\n'.join(f'{d.dtype} {d.name}{d.cdimstr};'
+                         for d in self.lanemodel.decls)
+
     def _render_body_preamble_epilogue(self):
         self._staged_reduces = []
         self._bcol_reduces = []
@@ -121,73 +131,51 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
     def render(self):
         kargdefn, kargassn = self._render_args('args')
         rdecls, rflush = self._render_staging()
+        soasz = self.soasz
 
         # View reduce: atomic flush after each SIMD chunk
         if rflush:
-            rflush_core = (f'for (int _xj = 0; _xj < {self.soasz}; _xj++) '
-                           f'{{ {rflush} }}')
-            rflush_clean = (f'for (int _xj = 0; _xj < _xjn; _xj++) '
-                            f'{{ {rflush} }}')
-        else:
-            rflush_core = rflush_clean = ''
+            rflush = f'for (int _xj = 0; _xj < _xjn; _xj++) {{ {rflush} }}'
 
         # Broadcast-col reduce identity init
         rinit = self._render_bcol_reduce_init()
 
-        if self.ndim == 1:
-            core = f'''
-                for (int _xi = 0; _xi < BLK_SZ; _xi += {self.soasz})
+        # Give each item its own copy of the storage shared by its lanes
+        body = f'{self._lane_decls()}\n{self.body}'
+        simd = '' if self.lanemodel.coop else '#pragma omp simd'
+
+        # Walk the items of a SoA group
+        body = f'''
+            {simd}
+            for (int _xj = 0; _xj < _xjn; _xj++)
+            {{
+                {body}
+            }}
+            {rflush}'''
+
+        def groups(bound, nxj):
+            # Walk the SoA groups of a block, row by row for a 2D kernel
+            loop = f'''
+                for (int _xi = 0; _xi < {bound}; _xi += {soasz})
                 {{
-                    #pragma omp simd
-                    for (int _xj = 0; _xj < {self.soasz}; _xj++)
-                    {{
-                        {self.body}
-                    }}
-                    {rflush_core}
+                    const int _xjn = {nxj};
+                    {body}
                 }}'''
-            clean = f'''
-                int _rem = _nx % BLK_SZ;
-                for (int _xi = 0; _xi < _rem; _xi += {self.soasz})
-                {{
-                    int _xjn = min({self.soasz}, _rem - _xi);
-                    #pragma omp simd
-                    for (int _xj = 0; _xj < _xjn; _xj++)
+            if self.ndim == 2:
+                return f'''
+                    for (ixdtype_t _y = 0; _y < _ny; _y++)
                     {{
-                        {self.body}
-                    }}
-                    {rflush_clean}
-                }}'''
-        else:
-            core = f'''
-                {rinit}
-                for (ixdtype_t _y = 0; _y < _ny; _y++)
-                {{
-                    for (int _xi = 0; _xi < BLK_SZ; _xi += {self.soasz})
-                    {{
-                        #pragma omp simd
-                        for (int _xj = 0; _xj < {self.soasz}; _xj++)
-                        {{
-                            {self.body}
-                        }}
-                        {rflush_core}
-                    }}
-                }}'''
-            clean = f'''
-                {rinit}
-                int _rem = _nx % BLK_SZ;
-                for (ixdtype_t _y = 0; _y < _ny; _y++)
-                {{
-                    for (int _xi = 0; _xi < _rem; _xi += {self.soasz})
-                    {{
-                        int _xjn = min({self.soasz}, _rem - _xi);
-                        #pragma omp simd
-                        for (int _xj = 0; _xj < _xjn; _xj++)
-                        {{
-                            {self.body}
-                        }}
-                        {rflush_clean}
-                    }}
-                }}'''
+                        {loop}
+                    }}'''
+            else:
+                return loop
+
+        # Walk every group of the full blocks and the rest of the partial block
+        core = f'{rinit}\n{groups("BLK_SZ", soasz)}'
+        clean = f'''
+            {rinit}
+            int _rem = _nx % BLK_SZ;
+            {groups('_rem', f'min({soasz}, _rem - _xi)')}'''
 
         result = f'''
             {self.helpers}

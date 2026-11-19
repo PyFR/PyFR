@@ -8,16 +8,19 @@ class MetalCodeGenerator(CodeGenerator):
     region_markers = {
         'fp-precise': '_Pragma("clang fp reassociate(off) contract(off)")'
     }
+    intrinsics = {'sync': 'threadgroup_barrier(mem_flags::mem_threadgroup)'}
 
 
 class MetalKernelGenerator(BaseGPUKernelGenerator):
+    block1d = (128, 1, 1)
+    block2d = (32, 8, 1)
     codegen_cls = MetalCodeGenerator
 
     _lid = ('_tpitg.x', '_tpitg.y')
     _gid = '_tpig.x'
+    _grp = '_tgpig.x'
     _shared_prfx = 'threadgroup'
     _ptr_arg = 'device {c}{t}* {n}'
-    _shared_sync = 'threadgroup_barrier(mem_flags::mem_threadgroup)'
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -35,10 +38,13 @@ class MetalKernelGenerator(BaseGPUKernelGenerator):
         kargs = ['constant _sargs_t& _sa',
                  *(self._karg(*a) for a in kargs if a[0])]
 
-        # Finally, the attribute arguments
+        # Finally, the attribute arguments referenced by the kernel
+        src = f'{self._prologue} {self.preamble} {self.body}'
         kargs.append('uint2 _tpig [[thread_position_in_grid]]')
-        if re.search(r'\b_tpitg\b', self.preamble):
+        if re.search(r'\b_tpitg\b', src):
             kargs.append('uint2 _tpitg [[thread_position_in_threadgroup]]')
+        if re.search(r'\b_tgpig\b', src):
+            kargs.append('uint2 _tgpig [[threadgroup_position_in_grid]]')
 
         return 'struct _sargs_t {{ {0}}};\nkernel void {1}({2})'.format(
             fields, self.name, ', '.join(kargs)

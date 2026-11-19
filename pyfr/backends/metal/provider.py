@@ -108,32 +108,17 @@ class MetalKernelProvider(BaseKernelProvider):
 
 class MetalPointwiseKernelProvider(MetalKernelProvider,
                                    BasePointwiseKernelProvider):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        self._tgrp1d = (128, 1, 1)
-        self._tgrp2d = (32, 8, 1)
-
-        # Pass these block sizes to the generator
-        class KernelGenerator(MetalKernelGenerator):
-            block1d = self._tgrp1d
-            block2d = self._tgrp2d
-
-        self.kernel_generator_cls = KernelGenerator
+    kernel_generator_cls = MetalKernelGenerator
 
     def _build_kernel(self, name, src, argtypes, regions=frozenset()):
         # Pack the scalar arguments of generated kernels into one struct
         return super()._build_kernel(name, src, argtypes, regions,
                                      pack_scalars=True)
 
-    def _instantiate_kernel(self, dims, fun, args):
+    def _instantiate_kernel(self, dims, fun, args, meta):
         # Determine the thread group and grid sizes
-        if len(dims) == 1:
-            tgrp = self._tgrp1d
-            grid = (dims[0] - dims[0] % -tgrp[0], 1, 1)
-        else:
-            tgrp = self._tgrp2d
-            grid = (dims[1] - dims[1] % -tgrp[0], tgrp[1], 1)
+        tgrp, n = meta['block'], dims[-1]*meta['lanes']
+        grid = (n - n % -tgrp[0], tgrp[1], 1)
 
         # Argument setting with buffers as (buffer, offset) pairs
         def set_arg(i, k):

@@ -25,6 +25,12 @@ class OpenMPBackend(BaseBackend):
         self.soasz = self.alignb // np.dtype(self.fpdtype).itemsize
         self.csubsz = self.soasz*cfg.getint('backend-openmp', 'n-soa', 1)
 
+        # Lanes of a subgroup, of which each item takes one
+        self.subgrpsz = 1
+
+        # Bytes of storage each item of a SoA group may hold on the stack
+        self.shared_budget = 64*1024 // self.soasz
+
         # OpenMP schedule
         sched = cfg.get('backend-openmp', 'schedule', 'static')
         if not re.match(r'(static|(dynamic|guided)(\s*,\s*\d+)?)$', sched):

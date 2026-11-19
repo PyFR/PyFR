@@ -29,6 +29,12 @@ class MetalBackend(BaseBackend):
         self.soasz = 32
         self.csubsz = self.soasz
 
+        # Lanes of a SIMD group, which execute in lockstep
+        self.subgrpsz = 32
+
+        # Bytes of storage the SIMD groups of a threadgroup may share
+        self.shared_budget = self.dev.maxThreadgroupMemoryLength()
+
         from pyfr.backends.metal import (blasext, compiler, gimmik, mps,
                                          packing, linalg, provider, types)
 

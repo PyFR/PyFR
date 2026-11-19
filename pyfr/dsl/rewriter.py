@@ -28,16 +28,14 @@ def rename_vars(ast, renames):
         match node:
             case Var(name) | DSLVar(name) if name in renames:
                 return renames[name]
-            case VarDecl(vt, n, sz, init, const=c) if n in renames:
+            case VarDecl(vt, n, sz, init, const=c, shared=sh) if n in renames:
                 r = renames[n]
 
                 # Only a plain variable can stand in for a declaration
                 if isinstance(r, Var):
-                    if sz:
-                        sz = [rename(s) for s in sz]
-
+                    sz = [rename(s) for s in sz] if sz else None
                     init = rename(init) if init else None
-                    return VarDecl(vt, r.name, sz, init, const=c)
+                    return VarDecl(vt, r.name, sz, init, const=c, shared=sh)
                 else:
                     return node.map(rename)
             case _:

@@ -152,6 +152,59 @@ arguments are read, those of ``out`` and ``inout`` arguments written,
 and every output must be mapped.  Mapped arguments must be floating
 point and the kernel may have no reduction arguments.
 
+Cooperative Kernels
+^^^^^^^^^^^^^^^^^^^
+
+A one dimensional kernel may assign a group of lanes to each item of its
+iteration range with ``coop='N'``, ``N`` being the number of lanes the
+body can use on one item.  In the body ``@lidx`` and ``@lsz`` give the
+index of the lane and the size of the group, ``@sync();`` is a barrier
+every lane must reach, and storage shared by the group is declared at
+the top level with the ``shared`` qualifier:
+
+.. code-block:: none
+
+    <%pyfr:kernel name='kernel_name' ndim='1' coop='${str(npts)}'
+                  u='inout fpdtype_t[${str(npts)}][${str(nvars)}]'
+                  vdm='in broadcast fpdtype_t[${str(npts)}][${str(npts)}]'>
+        shared fpdtype_t s_u[${npts}][${nvars}];
+        for (int i = @lidx; i < ${npts*nvars}; i += @lsz)
+            s_u[i / ${nvars}][i % ${nvars}] = u[i / ${nvars}][i % ${nvars}];
+        @sync();
+        for (int i = @lidx; i < ${npts*nvars}; i += @lsz)
+        {
+            fpdtype_t a = 0.0;
+            for (int k = 0; k < ${npts}; k++)
+                a += vdm[i / ${nvars}][k]*s_u[k][i % ${nvars}];
+            u[i / ${nvars}][i % ${nvars}] = a;
+        }
+    </%pyfr:kernel>
+
+Shared storage is limited to the ``shared_budget`` of the backend.  On
+the OpenMP backend a group is a single lane.  Broadcast arguments may
+have a single dimension, in which case they are indexed directly and
+the matrix must have a single row.
+
+A two dimensional kernel may stage a ``broadcast-col`` array argument
+in storage shared by its block with ``shared vs = @load(verts);`` at
+the top of the body; the block fills the storage before walking its
+rows and the body reads it in place of the argument, with the same
+indices.  The storage counts against the budget once per column of the
+block.  On the OpenMP backend it is the argument itself.
+
+Within a ``tangent`` or ``jacobian`` region, and so in a kernel
+requested with ``tangent``, shared storage can not depend on the inputs
+of the region, and a call such as ``@load`` can name neither what
+depends on them nor an output.
+
+The lanes of an item are modelled by
+:class:`~pyfr.backends.base.generator.lanes.LaneGroup` and, for a two
+dimensional kernel, :class:`~pyfr.backends.base.generator.lanes.RowLanes`
+or the :class:`~pyfr.backends.base.generator.lanes.StagedRowLanes` of
+the GPU backends, which size the group, hoist the shared declarations
+and lower the lane intrinsics; the kernel generators render what the
+lanes supply.
+
 PyFR-Mako Macros
 ----------------
 

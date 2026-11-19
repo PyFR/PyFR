@@ -3,6 +3,7 @@ from math import prod
 import numpy as np
 
 from pyfr.backends.base.generator.args import Arg
+from pyfr.backends.base.generator.lanes import RowLanes, make_lanemodel
 from pyfr.backends.base.mathfns import MathFnLowering
 from pyfr.dsl.ad import ADLowering
 from pyfr.dsl.codegen import CodeGenerator
@@ -30,11 +31,23 @@ class BaseKernelGenerator:
     # Code generator class used to render the AST
     codegen_cls = CodeGenerator
 
+    # Lane model class of the two dimensional kernels
+    rowlanes_cls = RowLanes
+
     # Math functions we rewrite on all backends
     lower_fns = frozenset({'pow'})
 
     # Qualifier needed for helper functions to be callable from kernels
     _function_qual = ''
+
+    # NumPy data types of the backend independent DSL scalar types
+    _npdtypes = {
+        'int8_t': np.int8, 'uint8_t': np.uint8, 'int16_t': np.int16,
+        'uint16_t': np.uint16, 'int': np.int32, 'int32_t': np.int32,
+        'uint32_t': np.uint32, 'int64_t': np.int64, 'uint64_t': np.uint64,
+        'ssize_t': np.intp, 'size_t': np.uintp, 'float': np.float32,
+        'double': np.float64
+    }
 
     # Lowerings for the @-intrinsics produced by the dereference rules
     _xidx = None
@@ -55,6 +68,7 @@ class BaseKernelGenerator:
         _rule('@N_v[_nx*@I0 + @xidx]', isview=False, ismpi=True),
         _rule('@N_v[(@V1*@I0 + @I1)*_nx + @xidx]', isview=False, ismpi=True),
         # Broadcast
+        _rule('@N_v[@I0]', isview=False, isbroadcast=True),
         _rule('@N_v[@S*@I0 + @bcast(@V0, @I1, @S)]',
               isview=False, isbroadcast=True),
         # Stacked
@@ -80,6 +94,7 @@ class BaseKernelGenerator:
         _rule('@N_v[@xidx]', isview=False, isbroadcastc=True),
         _rule('@N_v[@S*_y + @xidx]', isview=False, isbroadcastc=False),
         # Broadcast
+        _rule('@N_v[@I0]', isview=False, isbroadcast=True),
         _rule('@N_v[@S*@I0 + @bcast(@V0, @I1, @S)]',
               isview=False, isbroadcast=True),
         # Broadcast-col
@@ -97,7 +112,7 @@ class BaseKernelGenerator:
               isview=False, isbroadcast=False, isbroadcastc=False),
     ]
 
-    def __init__(self, backend, name, ndim, args, body):
+    def __init__(self, backend, name, ndim, args, body, coop=None):
         self.backend = backend
         self.name = name
         self.ndim = ndim
@@ -106,8 +121,16 @@ class BaseKernelGenerator:
         self.soasz = backend.soasz
         self.fpdtype_max = float(np.finfo(self.fpdtype).max)
 
+        # NumPy data types of the DSL scalar types
+        self._npdtypes = self._npdtypes | {
+            'fpdtype_t': self.fpdtype, 'ixdtype_t': self.ixdtype
+        }
+
         # Parse and sort our argument list
         sargs = [Arg(k, v) for k, v in sorted(args.items())]
+
+        # Lanes assigned to each item of the iteration range
+        self.lanemodel = make_lanemodel(self, coop)
 
         # Argument data types may be typedefs defined outside the body
         atypes = {v.dtype for v in sargs}
@@ -115,16 +138,21 @@ class BaseKernelGenerator:
         # Parse the body of our kernel into an AST
         self._ast = parse_program(body, types=atypes)
 
-        # Differentiate the tangent and Jacobian regions of the body
+        # Define the types of the arguments as seen by the body
         env = Environment()
         for v in sargs:
             env.define(v.name, v.dtype, [Int(d) for d in v.cdims] or None)
 
-        self._ast = ADLowering(env).visit(self._ast)
+        # Lower the regions and intrinsics of the body
+        argmap = {v.name: v for v in sargs}
+        self._ast = self._lower(self._ast, argmap, env)
 
         # Note the variables present in the body
         nodes = list(walk_ast(self._ast))
         used = {n.name for n in nodes if isinstance(n, Var)}
+
+        # Keep the arguments staged by the block, which the body may not name
+        used |= self.lanemodel.staged
 
         # Note the region kinds present in the body
         kinds = {n.kind for n in nodes if isinstance(n, Region)}
@@ -144,6 +172,12 @@ class BaseKernelGenerator:
             if any(v.ismpi for v in vargs):
                 raise ValueError('2D kernels do not support MPI matrices')
 
+        # Validate the argument constraints of our lanes
+        self.lanemodel.validate_args(vargs)
+
+        # Check the shared declarations fit the storage of a lane-group
+        self.lanemodel.check_storage()
+
         # Math helper functions required by the kernel
         self._helper_calls = {}
 
@@ -157,6 +191,16 @@ class BaseKernelGenerator:
 
         # Determine the dimensions to be iterated over
         self._dims = ['_nx'] if ndim == 1 else ['_ny', '_nx']
+
+    def _lower(self, ast, args, env):
+        # Differentiate the tangent and Jacobian regions of the body
+        ast = ADLowering(env).visit(ast)
+
+        # Hoist the shared storage declarations out of the body
+        ast = self.lanemodel.hoist_shared(ast, args)
+
+        # Lower the lane intrinsics and barriers of the body
+        return self.lanemodel.lower(ast)
 
     def argspec(self):
         # Argument names plus their form and types
@@ -195,6 +239,14 @@ class BaseKernelGenerator:
 
         # Return
         return self.ndim, argn, argt
+
+    @property
+    def meta(self):
+        # Metadata with which the provider builds and launches the kernel
+        return {'regions': self.regions}
+
+    def npdtype(self, ctype):
+        return np.dtype(self._npdtypes[ctype])
 
     def ldim_size(self, name, factor=1):
         pass

@@ -56,8 +56,8 @@ class Arg:
         if (self.attrs.startswith('broadcast') and
             self.intent != 'in' and not self.isreduce):
             raise ValueError('Broadcast arguments must be of intent in')
-        if self.isbroadcast and self.ncdim != 2:
-            raise ValueError('Broadcasts must have two dimensions')
+        if self.isbroadcast and self.ncdim == 0:
+            raise ValueError('Broadcasts must have one or two dimensions')
         if self.isbroadcastr and self.ncdim != 1:
             raise ValueError('Row broadcasts must have one dimension')
         if self.isreduce and self.intent != 'out':

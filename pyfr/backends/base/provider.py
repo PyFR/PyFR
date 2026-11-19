@@ -177,9 +177,9 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
             raise ValueError(f'Kernel {name!r} not defined in template')
 
         # Extract the metadata for the kernel
-        (ndim, argn, argt), regions = meta[name]
+        (ndim, argn, argt), kmeta = meta[name]
 
-        return src, ndim, argn, argt, regions
+        return src, ndim, argn, argt, kmeta
 
     def _build_kernel(self, name, src, args, regions=frozenset()):
         pass
@@ -204,7 +204,7 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
 
         return args
 
-    def _instantiate_kernel(self, dims, fun, args):
+    def _instantiate_kernel(self, dims, fun, args, meta):
         pass
 
     def register(self, mod):
@@ -225,19 +225,19 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
         def kernel_meth(self, tplargs, dims, extrns={}, tangent={},
                         **kwargs):
             # Render the source of kernel
-            src, ndim, argn, argt, regions = self._render_kernel(
+            src, ndim, argn, argt, meta = self._render_kernel(
                 name, mod, extrns, tplargs, tangent
             )
 
             # Compile the kernel
             argtypes = [t for _, ts in argt for t in ts]
-            fun = self._build_kernel(name, src, argtypes, regions)
+            fun = self._build_kernel(name, src, argtypes, meta['regions'])
 
             # Process the argument list
             args = self._build_args(len(dims), argn, argt, kwargs)
 
             # Create the kernel and set its arguments
-            kern = self._instantiate_kernel(dims, fun, args)
+            kern = self._instantiate_kernel(dims, fun, args, meta)
             kern.bind(**{n: v for n, (_, _, v) in args.items()})
 
             return kern

@@ -4,7 +4,7 @@ import re
 from pyfr.dsl.types import SCALAR_TYPES
 
 
-_KEYWORDS = 'if else while for const break continue do typedef'.split()
+_KEYWORDS = 'if else while for const shared break continue do typedef'.split()
 _TYPES = frozenset(SCALAR_TYPES) | {'void'}
 _OPS = '<<= >>= == != <= >= && || ++ -- += -= *= /= %= &= |= ^= << >> **'
 _ESC = dict(zip('ntr\\"\'', '\n\t\r\\"\''))

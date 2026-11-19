@@ -61,6 +61,12 @@ class OpenCLBackend(BaseBackend):
         self.soasz = 2*self.alignb // np.dtype(self.fpdtype).itemsize
         self.csubsz = self.soasz
 
+        # Lanes of a sub-group, which execute in lockstep
+        self.subgrpsz = 32
+
+        # Bytes of storage the sub-groups of a work-group may share
+        self.shared_budget = device.local_mem_size
+
         from pyfr.backends.opencl import (blasext, clblast, gimmik, packing,
                                           linalg, provider, tinytc, types)
 

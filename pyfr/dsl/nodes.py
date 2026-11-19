@@ -72,6 +72,7 @@ class VarDecl(Stmt):
     sizes: list | None = None
     init: object = None
     const: bool = field(default=False, kw_only=True)
+    shared: bool = field(default=False, kw_only=True)
 
 
 @node

@@ -87,27 +87,12 @@ class OpenCLKernelProvider(BaseKernelProvider):
 
 class OpenCLPointwiseKernelProvider(OpenCLKernelProvider,
                                     BasePointwiseKernelProvider):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    kernel_generator_cls = OpenCLKernelGenerator
 
-        self._ls1d = (64,)
-        self._ls2d = (64, 4)
-
-        # Pass the local work group sizes to the generator
-        class KernelGenerator(OpenCLKernelGenerator):
-            block1d = self._ls1d
-            block2d = self._ls2d
-
-        self.kernel_generator_cls = KernelGenerator
-
-    def _instantiate_kernel(self, dims, fun, args):
+    def _instantiate_kernel(self, dims, fun, args, meta):
         # Determine the work group sizes
-        if len(dims) == 1:
-            ls = self._ls1d
-            gs = (dims[0] - dims[0] % -ls[0],)
-        else:
-            ls = self._ls2d
-            gs = (dims[1] - dims[1] % -ls[0], ls[1])
+        ls, n = meta['block'][:len(dims)], dims[-1]*meta['lanes']
+        gs = (n - n % -ls[0], *ls[1:])
 
         fun.set_dims(gs, ls)
 

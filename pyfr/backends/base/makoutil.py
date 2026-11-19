@@ -325,7 +325,7 @@ def _dualise(name, args, body, tangent):
 
 
 @supports_caller
-def kernel(context, name, ndim, kargs={}, **kwargs):
+def kernel(context, name, ndim, kargs={}, coop=None, **kwargs):
     extrns = context['_extrns']
 
     # Merge any argument declarations computed by the template
@@ -351,10 +351,10 @@ def kernel(context, name, ndim, kargs={}, **kwargs):
 
     # Instantiate the generator of the backend
     kerngen = context['_kernel_generator']
-    kern = kerngen(name, int(ndim), kwargs, body)
+    kern = kerngen(name, int(ndim), kwargs, body, coop=coop)
 
     # Save the argument/type list and region kinds for later use
-    context['_kernel_meta'][name] = (kern.argspec(), kern.regions)
+    context['_kernel_meta'][name] = (kern.argspec(), kern.meta)
 
     # Render and return the complete kernel
     return kern.render()

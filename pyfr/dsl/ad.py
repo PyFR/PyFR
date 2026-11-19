@@ -4,8 +4,8 @@ import re
 
 from pyfr.dsl.derivs import Differentiator, build_index
 from pyfr.dsl.nodes import (PRECISE_REGIONS, ArrayInit, Assign, Block,
-                            DoWhile, ExprStmt, For, If, Index, Int, MultiDecl,
-                            Number, Postfix, Program, Region, Stmt,
+                            DoWhile, DSLCall, ExprStmt, For, If, Index, Int,
+                            MultiDecl, Number, Postfix, Program, Region, Stmt,
                             Transformer, Typedef, Unary, Var, VarDecl, While,
                             expr_children, node, unwrap_index, walk_ast)
 from pyfr.dsl.simplifier import Simplifier
@@ -384,8 +384,24 @@ class DerivativeGenerator:
         else:
             return Block(stmts)
 
+    def _check_shared(self, stmts):
+        # Reject derivatives the lanes would have to share or pass to a call
+        for part in walk_ast(_active_part(Program(stmts))):
+            match part:
+                case VarDecl(name=name, shared=True) if self._dependent(name):
+                    raise ValueError(f'Shared {name!r} can not depend on the '
+                                     'inputs of a differentiated region')
+                case DSLCall(kind, args):
+                    nodes = [n for a in args for n in walk_ast(a)]
+                    names = [n.name for n in nodes if isinstance(n, Var)]
+
+                    if taken := [n for n in names if self._carries(n)]:
+                        raise ValueError(f'@{kind} can not take {taken[0]!r} '
+                                         'in a differentiated region')
+
     def transform(self, stmts):
         self._analyse(stmts)
+        self._check_shared(stmts)
 
         return [s for st in stmts for s in self._transform_stmt(st)]
 

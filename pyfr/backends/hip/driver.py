@@ -442,9 +442,11 @@ class HIP:
         self.lib.hipGetDeviceProperties(buf, devid)
 
         cint = lambda off: cast(buf[off:], POINTER(c_int)).contents.value
+        csize = lambda off: cast(buf[off:], POINTER(c_size_t)).contents.value
         return {
             'name': cast(buf, c_char_p).value.decode(),
             'gcn_arch_name': cast(buf[1160:], c_char_p).value.decode(),
+            'shared_mem_per_block': csize(296),
             'warp_size': cint(308),
             'multiprocessor_count': cint(388)
         }

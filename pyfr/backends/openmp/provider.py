@@ -152,7 +152,7 @@ class OpenMPPointwiseKernelProvider(OpenMPKernelProvider,
                                     BasePointwiseKernelProvider):
     kernel_generator_cls = OpenMPKernelGenerator
 
-    def _instantiate_kernel(self, dims, fun, args):
+    def _instantiate_kernel(self, dims, fun, args, meta):
         # Set the number of blocks
         fun.set_nblocks(-(-dims[-1] // self.backend.csubsz))
 

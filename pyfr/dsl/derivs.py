@@ -1,8 +1,8 @@
 import math
 
-from pyfr.dsl.nodes import (Binary, Call, Cast, Float, Index, Int, Number,
-                            String, Ternary, Unary, Var, call, expr_children,
-                            unwrap_index)
+from pyfr.dsl.nodes import (Binary, Call, Cast, DSLCall, Float, Index, Int,
+                            Number, String, Ternary, Unary, Var, call,
+                            expr_children, unwrap_index)
 
 
 def build_index(base, indices):
@@ -165,6 +165,9 @@ class Differentiator:
             # Comparison and logical operators are piecewise constant
             case (Binary('<' | '>' | '<=' | '>=' | '==' | '!=', _, _)
                   | Unary('!', _)):
+                return Int(0)
+            # Differentiate intrinsic calls, which take constants, to zero
+            case DSLCall():
                 return Int(0)
             case _:
                 raise NotImplementedError('Cannot differentiate '
