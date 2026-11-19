@@ -4,23 +4,23 @@ from pyfr.dsl.nodes import (DSLVar, Float, Transformer, Var, VarDecl,
 from pyfr.dsl.parser import Parser
 
 
-def parse_expr(code, lexer=Lexer):
-    p = Parser(lexer(code).tokenise())
+def parse_expr(code):
+    p = Parser(Lexer(code))
     expr = p.expression(0)
 
     # Trailing tokens would otherwise be silently discarded
-    if (tok := p.peek()).kind != 'EOF':
-        raise SyntaxError(f'Unexpected {tok.value!r} in expression: {code}')
+    if p.tok.kind != 'EOF':
+        raise SyntaxError(f'Unexpected {p.tok.value!r} in expression: {code}')
 
     return expr
 
 
 def parse_stmt(code):
-    return Parser(Lexer(code).tokenise()).statement()
+    return Parser(Lexer(code)).statement()
 
 
 def parse_program(code, types=()):
-    return Parser(Lexer(code, types=types).tokenise()).parse()
+    return Parser(Lexer(code, types=types)).parse()
 
 
 def rename_vars(ast, renames):

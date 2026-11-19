@@ -11,64 +11,52 @@ from pyfr.dsl.nodes import (BINARY_OPS, COMPOUND_ASSIGN, POSTFIX_OPS,
 
 
 class Parser:
-    def __init__(self, tokens):
-        self.tokens = tokens
-        self.i = 0
+    def __init__(self, lexer):
+        self.lexer = lexer
+        self.tokens = iter(lexer)
         self.pcomments = []
-        self._typedefs = set()
-
-    def peek(self):
-        return self.tokens[self.i]
+        self.tok = None
+        self.advance()
 
     def advance(self):
-        tok = self.peek()
-        self.i += 1
+        tok = self.tok
 
         # Bank any comment trivia for the next statement position
-        if tok.comments:
-            self.pcomments += tok.comments
+        while (nxt := next(self.tokens, tok)).kind == 'COMMENT':
+            self.pcomments.append(nxt.value)
 
+        self.tok = nxt
         return tok
 
     def take_comments(self):
-        tok = self.peek()
-        comments, self.pcomments = self.pcomments + list(tok.comments), []
-        tok.comments = ()
+        comments, self.pcomments = self.pcomments, []
 
         return tuple(comments)
 
     def drain_comments(self):
         return [Comment(k, t) for k, t in self.take_comments()]
 
-    def accept(self, value):
-        if self.peek().value == value:
+    def error(self, msg, tok):
+        return self.lexer.error(f'{msg} {tok.value!r}', tok.pos)
+
+    def accept(self, kind):
+        if self.tok.kind == kind:
             return self.advance()
 
-    def expect(self, kind, value=None):
-        tok = self.peek()
-        if tok.kind != kind or (value is not None and tok.value != value):
-            raise SyntaxError(f'Expected {kind} {value}, got {tok}')
+    def expect(self, kind):
+        if self.tok.kind != kind:
+            raise self.error(f'Expected {kind}, got', self.tok)
 
         return self.advance()
-
-    def _is_type(self, tok):
-        return tok.kind == 'TYPE' or tok.value in self._typedefs
-
-    def _is_decl_start(self, tok):
-        return self._is_type(tok) or tok.value == 'const'
 
     def _parse_decl_head(self):
         is_const = bool(self.accept('const'))
 
-        tok = self.peek()
-        if not self._is_type(tok):
-            raise SyntaxError(f'Expected type, got {tok}')
-
-        return is_const, self.advance()
+        return is_const, self.expect('TYPE')
 
     def parse(self):
         body = []
-        while self.peek().kind != 'EOF':
+        while self.tok.kind != 'EOF':
             body.append(self.statement())
 
         body += self.drain_comments()
@@ -76,14 +64,12 @@ class Parser:
 
     def typedef_stmt(self):
         self.advance()
-        tok = self.peek()
-        if not self._is_type(tok):
-            raise SyntaxError(f'Expected type after typedef, got {tok}')
-
-        old = self.advance().value
+        old = self.expect('TYPE').value
         new = self.expect('IDENT').value
-        self.expect('SYMBOL', ';')
-        self._typedefs.add(new)
+
+        # Have the lexer yield the new name as a type from here on
+        self.lexer.kinds[new] = 'TYPE'
+        self.expect(';')
 
         return Typedef(old, new)
 
@@ -93,50 +79,44 @@ class Parser:
         return replace(self._statement(), comments=comments)
 
     def _statement(self):
-        tok = self.peek()
-        match tok.kind, tok.value:
-            case ('TYPE', _) | ('KEYWORD', 'const'):
+        match self.tok.kind:
+            case 'TYPE' | 'const':
                 return self.declaration()
-            case ('KEYWORD', 'typedef'):
+            case 'typedef':
                 return self.typedef_stmt()
-            case ('KEYWORD', 'if'):
+            case 'if':
                 return self.if_stmt()
-            case ('KEYWORD', 'while'):
+            case 'while':
                 return self.while_stmt()
-            case ('KEYWORD', 'for'):
+            case 'for':
                 return self.for_stmt()
-            case ('KEYWORD', 'do'):
+            case 'do':
                 return self.do_while_stmt()
-            case ('KEYWORD', 'break' | 'continue'):
-                self.advance()
-                self.expect('SYMBOL', ';')
-                return Break() if tok.value == 'break' else Continue()
-            case ('KEYWORD', kw):
-                p = f'{tok.line}:{tok.col}'
-                raise SyntaxError(f'Unexpected keyword {kw!r} at {p}')
-            case ('PRAGMA', _):
+            case 'break' | 'continue':
+                tok = self.advance()
+                self.expect(';')
+                return Break() if tok.kind == 'break' else Continue()
+            case 'PRAGMA':
                 return self.pragma_stmt()
-            case ('SYMBOL', '{'):
+            case '{':
                 return self.block()
-            case ('SYMBOL', ';'):
+            case ';':
                 self.advance()
                 return ExprStmt(None)
-            case ('IDENT', name) if name in self._typedefs:
-                return self.declaration()
             case _:
                 expr = self.expression(0)
-                self.expect('SYMBOL', ';')
+                self.expect(';')
                 return ExprStmt(expr)
 
     def block(self):
-        self.expect('SYMBOL', '{')
+        self.expect('{')
 
         stmts = []
-        while self.peek().value != '}':
+        while self.tok.kind != '}':
             stmts.append(self.statement())
 
         stmts += self.drain_comments()
-        self.expect('SYMBOL', '}')
+        self.expect('}')
 
         return Block(stmts)
 
@@ -147,8 +127,7 @@ class Parser:
         name, _, rest = tok.value.partition(' ')
         m = re.match(r'([\w-]+)\s*(?:\((.*)\))?$', rest.strip())
         if name != 'pyfr' or m is None:
-            p = f'{tok.line}:{tok.col}'
-            raise SyntaxError(f'Unsupported pragma {tok.value!r} at {p}')
+            raise self.error('Unsupported pragma', tok)
 
         # Split any parenthesised region arguments on commas
         args = tuple(a.strip() for a in m[2].split(',')) if m[2] else ()
@@ -157,7 +136,7 @@ class Parser:
 
     def declaration(self):
         decl = self._decl_list()
-        self.expect('SYMBOL', ';')
+        self.expect(';')
 
         return decl
 
@@ -175,15 +154,15 @@ class Parser:
 
         sizes = []
         while self.accept('['):
-            if self.peek().value == ']':
+            if self.tok.kind == ']':
                 sizes.append(None)
             else:
                 sizes.append(self.expression(0))
-            self.expect('SYMBOL', ']')
+            self.expect(']')
 
         if self.accept('='):
             # Check if it is an array-style init
-            if self.peek().value == '{':
+            if self.tok.kind == '{':
                 init = self.array_initialiser()
                 if sizes and sizes[0] is None:
                     sizes[0] = Int(len(init.values))
@@ -219,26 +198,26 @@ class Parser:
         check(init.values, sizes)
 
     def array_initialiser(self):
-        self.expect('SYMBOL', '{')
+        self.expect('{')
 
         values = []
-        while self.peek().value != '}':
-            if self.peek().value == '{':
+        while self.tok.kind != '}':
+            if self.tok.kind == '{':
                 values.append(self.array_initialiser())
             else:
                 values.append(self.expression(PRECEDENCE[','] + 1))
 
-            if self.peek().value != '}':
-                self.expect('SYMBOL', ',')
+            if self.tok.kind != '}':
+                self.expect(',')
 
-        self.expect('SYMBOL', '}')
+        self.expect('}')
 
         return ArrayInit(values)
 
     def _parse_cond_stmt(self):
-        self.expect('SYMBOL', '(')
+        self.expect('(')
         cond = self.expression(0)
-        self.expect('SYMBOL', ')')
+        self.expect(')')
 
         return cond
 
@@ -257,44 +236,37 @@ class Parser:
 
     def for_stmt(self):
         self.advance()
-        self.expect('SYMBOL', '(')
+        self.expect('(')
 
-        tok = self.peek()
-        if tok.value == ';':
+        if self.tok.kind == ';':
             init = None
-        elif self._is_decl_start(tok):
+        elif self.tok.kind in ('TYPE', 'const'):
             init = self._decl_list()
         else:
             init = self.expression(0)
 
-        self.expect('SYMBOL', ';')
-        cond = None if self.peek().value == ';' else self.expression(0)
-        self.expect('SYMBOL', ';')
-        step = None if self.peek().value == ')' else self.expression(0)
-        self.expect('SYMBOL', ')')
+        self.expect(';')
+        cond = None if self.tok.kind == ';' else self.expression(0)
+        self.expect(';')
+        step = None if self.tok.kind == ')' else self.expression(0)
+        self.expect(')')
 
         return For(init, cond, step, self.statement())
 
     def do_while_stmt(self):
         self.advance()
         body = self.statement()
-        self.expect('KEYWORD', 'while')
+        self.expect('while')
         cond = self._parse_cond_stmt()
-        self.expect('SYMBOL', ';')
+        self.expect(';')
 
         return DoWhile(body, cond)
-
-    def _op_prec(self, tok):
-        # Only symbol tokens may act as operators
-        if tok.kind == 'SYMBOL':
-            return PRECEDENCE.get(tok.value, 0)
-        else:
-            return 0
 
     def expression(self, rbp=0):
         left = self.nud(self.advance())
 
-        while self._op_prec(self.peek()) > rbp:
+        # Only symbol tokens may act as operators
+        while PRECEDENCE.get(self.tok.kind, 0) > rbp:
             left = self.led(self.advance(), left)
 
         return left
@@ -322,51 +294,48 @@ class Parser:
                     return DSLCall(tok.value, self._parse_call_args())
                 else:
                     return DSLVar(tok.value)
-            case 'SYMBOL' if tok.value in UNARY_OPS:
-                return Unary(tok.value, self.expression(PRECEDENCE['unary']))
-            case 'SYMBOL' if tok.value == '(':
-                next_tok = self.peek()
-
+            case op if op in UNARY_OPS:
+                return Unary(op, self.expression(PRECEDENCE['unary']))
+            case '(':
                 # A leading type makes this a cast rather than a group
-                if self._is_type(next_tok):
-                    type_tok = self.advance()
-                    self.expect('SYMBOL', ')')
+                if type_tok := self.accept('TYPE'):
+                    self.expect(')')
                     return Cast(type_tok.value,
                                 self.expression(PRECEDENCE['unary']))
                 else:
                     expr = self.expression(0)
-                    self.expect('SYMBOL', ')')
+                    self.expect(')')
                     return expr
             case _:
-                raise SyntaxError(f'Invalid expression start {tok}')
+                raise self.error('Invalid expression start', tok)
 
     def _parse_call_args(self):
         args = []
-        if self.peek().value != ')':
+        if self.tok.kind != ')':
             while True:
                 args.append(self.expression(PRECEDENCE[','] + 1))
-                if self.peek().value == ')':
+                if self.tok.kind == ')':
                     break
 
-                self.expect('SYMBOL', ',')
+                self.expect(',')
 
-        self.expect('SYMBOL', ')')
+        self.expect(')')
 
         return args
 
     def led(self, tok, left):
-        match tok.value:
+        match tok.kind:
             case op if op in POSTFIX_OPS:
                 return Postfix(op, left)
             case '[':
                 index = self.expression(0)
-                self.expect('SYMBOL', ']')
+                self.expect(']')
                 return Index(left, index)
             case '(':
                 return Call(left, self._parse_call_args())
             case '?':
                 true_expr = self.expression(0)
-                self.expect('SYMBOL', ':')
+                self.expect(':')
 
                 # The else branch of a ternary is a conditional-expression
                 false_expr = self.expression(PRECEDENCE['?'] - 1)
@@ -383,4 +352,4 @@ class Parser:
                 rbp = prec - 1 if op in RIGHT_ASSOC else prec
                 return Binary(op, left, self.expression(rbp))
             case _:
-                raise SyntaxError(f'Invalid operator {tok.value}')
+                raise self.error('Invalid operator', tok)
