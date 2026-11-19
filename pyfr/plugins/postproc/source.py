@@ -7,7 +7,7 @@ from pyfr.plugins.postproc.adapters import (BoundaryPostProcData,
 from pyfr.plugins.postproc.base import BasePostProcPlugin
 from pyfr.plugins.postproc.derived import TableDerivedPostProc
 from pyfr.readers.native import group_names
-from pyfr.util import subclass_where, subclasses
+from pyfr.util import subclass_where, subclasses_where
 
 
 def get_source(prefix, cfg, stats, ndims):
@@ -29,9 +29,9 @@ class BaseDataSource:
 
     @property
     def plugins(self):
-        # Named plugins self-declare their data source via source_prefix
-        return {cls.name: cls for cls in subclasses(BasePostProcPlugin)
-                if cls.source_prefix == self.prefix}
+        pps = subclasses_where(BasePostProcPlugin, source_prefix=self.prefix)
+
+        return {cls.name: cls for cls in pps}
 
     def adapter(self, kind, names, samples, ploc, *args):
         pvars = {n: samples[:, i] for i, n in enumerate(names)}

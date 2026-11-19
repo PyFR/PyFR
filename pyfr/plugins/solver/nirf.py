@@ -421,10 +421,10 @@ class NIRFPlugin(SeriesWriterMixin, BaseSolverPlugin):
                  for i, j in ndrange(ndims, ndims)}
 
         # Lab-frame position, x_lab = R*(x_body - x0) + x0 + loc
-        xlab = [_subst(' + '.join(f'R{i}{j}*(P{j} - X{j})'
-                                  for j in range(ndims)) + f' + X{i} + L{i}',
-                       subs)
-                for i in range(ndims)]
+        xlab = []
+        for i in range(ndims):
+            rx = ' + '.join(f'R{i}{j}*(P{j} - X{j})' for j in range(ndims))
+            xlab.append(_subst(f'{rx} + X{i} + L{i}', subs))
 
         def lab_position(node):
             if node in pos:
@@ -438,9 +438,10 @@ class NIRFPlugin(SeriesWriterMixin, BaseSolverPlugin):
                for j, k in [(1, 2), (2, 0), (0, 1)][:ndims]]
 
         # Body-frame velocity, u_body = R^T*(u_lab - V) - omega x r
-        ubody = [' + '.join(f'R{j}{i}*(U{j} - V{j})'
-                            for j in range(ndims)) + f' + {c}'
-                 for i, c in enumerate(rxw)]
+        ubody = []
+        for i, c in enumerate(rxw):
+            rtu = ' + '.join(f'R{j}{i}*(U{j} - V{j})' for j in range(ndims))
+            ubody.append(f'{rtu} + {c}')
 
         def body_frame(cfgsect, exprs):
             exprs = {k: parse_expr(v) for k, v in exprs.items()}
@@ -525,7 +526,7 @@ class NIRFPlugin(SeriesWriterMixin, BaseSolverPlugin):
         return fields + [f'f{c}' for c in comps] + [f'm{c}' for c in rcomps]
 
     def _transform_ics(self, intg):
-        ndims, m = self.ndims, self.motion
+        ndims, m, system = self.ndims, self.motion, intg.system
 
         # Frame parameters at the start of the run
         state = {'loc': m.floc, 'velo': m.fvelo, 'omega': m.fomega}
@@ -536,12 +537,11 @@ class NIRFPlugin(SeriesWriterMixin, BaseSolverPlugin):
 
         body_frame = self._body_frame(kin, [Var(c) for c in 'xyz'[:ndims]])
 
-        for eles, eb in zip(intg.system.ele_map.values(),
-                            intg.system.ele_banks):
+        for eles, eb in zip(system.ele_map.values(), system.ele_banks):
             cons = eles.set_ics_from_cfg(body_frame)
 
-            # Every RHS bank starts out holding the initial solution
-            for b in eb[:intg.system.nrhs]:
+            # Write the initial conditions to each of the RHS banks
+            for b in eb[:system.nrhs]:
                 b.set(cons)
 
     def _integrate_loads(self, intg):
