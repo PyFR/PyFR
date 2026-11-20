@@ -47,7 +47,7 @@ class BaseSDIRKStepper(BaseImplicitStepper):
         self._guess_norms = {}
 
         self._fsal = self.A[0][0] == 0 and self.A[-1] == self.b
-        self._fsal_valid = False
+        self._fsal_reg = None
 
         super().__init__(*args, **kwargs)
 
@@ -152,7 +152,8 @@ class BaseSDIRKStepper(BaseImplicitStepper):
             f_reg = r_f[i]
 
             if Ai[i] == 0:
-                if i != 0 or not self._fsal_valid:
+                # Reuse the FSAL flux only if its step was accepted
+                if i != 0 or r_un != self._fsal_reg:
                     self._rhs(t_i, r_un, f_reg)
             else:
                 f_prev = r_f[:i]
@@ -186,17 +187,19 @@ class BaseSDIRKStepper(BaseImplicitStepper):
         if self.comp_accum:
             r_ui = self._accumulate_step(dt, r_un, r_ui, r_f)
 
-        # Handle FSAL
-        if self._fsal:
-            r_f[0], r_f[-1] = r_f[-1], r_f[0]
-            self._fsal_valid = True
-
-        # Compute error estimate if this scheme has an embedded pair
+        # Compute error estimate before FSAL reorders the stage fluxes
         if self.stepper_has_errest:
             self._compute_error_estimate(dt, r_f)
-            return r_ui, r_un, self._r_err
 
-        return r_ui
+        # Handle FSAL; the flux is for u(t + dt) which is now held in r_ui
+        if self._fsal:
+            r_f[0], r_f[-1] = r_f[-1], r_f[0]
+            self._fsal_reg = r_ui
+
+        if self.stepper_has_errest:
+            return r_ui, r_un, self._r_err
+        else:
+            return r_ui
 
     def _compute_error_estimate(self, dt, r_f):
         ecoeffs = [dt*ei for ei in self._err_coeffs]
