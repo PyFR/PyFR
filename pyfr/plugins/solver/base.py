@@ -32,6 +32,9 @@ class BaseSolverPlugin(InSituMixin, BasePlugin):
         self._extern_binders.append(binder)
         binder(**self._extern_values)
 
-    def bind_externs(self):
+    def bind_externs(self, intg):
         for b in self._extern_binders:
             b(**self._extern_values)
+
+        # Invalidate the right hand side held by the integrator
+        intg.invalidate_rhs()

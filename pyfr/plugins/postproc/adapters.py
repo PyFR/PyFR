@@ -27,20 +27,15 @@ class PostProcData:
     def has_grads(self):
         return any(n.startswith('grad_') for n in self.pvars)
 
-    def __getitem__(self, names):
-        if isinstance(names, str):
-            return self.pvars[names]
-        # Several variables are stacked along a new last axis
-        else:
-            return np.stack([self[n] for n in names], axis=-1)
+    def __getitem__(self, name):
+        return self.pvars[name]
 
-    def __setitem__(self, names, vals):
-        if isinstance(names, str):
-            self[names][:] = vals
-        # Each of several variables takes its slice of the last axis
-        else:
-            for n, v in zip(names, np.moveaxis(vals, -1, 0)):
-                self[n][:] = v
+    def stack(self, names):
+        return np.stack([self.pvars[n] for n in names], axis=-1)
+
+    def unstack(self, names, vals):
+        for n, v in zip(names, np.moveaxis(vals, -1, 0)):
+            self.pvars[n][:] = v
 
 
 class BoundaryPostProcData(PostProcData):
