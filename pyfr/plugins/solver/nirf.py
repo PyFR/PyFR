@@ -496,23 +496,21 @@ class NIRFPlugin(SeriesWriterMixin, BaseSolverPlugin):
                 intg, cfgsect, cfg.get(cfgsect, 'boundary'), self.origin
             )
 
-        if not self._has_output:
-            return
+        if self._has_output:
+            if cfg.hasopt(cfgsect, 'dt-out'):
+                self.dt_out = cfg.getfloat(cfgsect, 'dt-out')
+                self.tout_last = intg.tcurr
 
-        if cfg.hasopt(cfgsect, 'dt-out'):
-            self.dt_out = cfg.getfloat(cfgsect, 'dt-out')
-            self.tout_last = intg.tcurr
+                # Register our output times with the integrator
+                intg.call_plugin_dt(intg.tcurr, self.dt_out)
+            else:
+                self.dt_out = None
+                self.nsteps_out = cfg.getint(cfgsect, 'nsteps-out', 1)
 
-            # Register our output times with the integrator
-            intg.call_plugin_dt(intg.tcurr, self.dt_out)
-        else:
-            self.dt_out = None
-            self.nsteps_out = cfg.getint(cfgsect, 'nsteps-out', 1)
-
-        # The root rank needs to open the output file
-        _, rank, root = get_comm_rank_root()
-        if rank == root:
-            self._init_series(intg, self._fields)
+            # The root rank needs to open the output file
+            _, rank, root = get_comm_rank_root()
+            if rank == root:
+                self._init_series(intg, self._fields)
 
     @property
     def _fields(self):
@@ -559,19 +557,15 @@ class NIRFPlugin(SeriesWriterMixin, BaseSolverPlugin):
     def _advance(self, intg):
         t, m = intg.tcurr, self.motion
 
-        if self._tadv == t or not m.should_advance(t):
-            return
+        if self._tadv != t and m.should_advance(t):
+            loads = self._integrate_loads(intg) if m.needs_force else ()
+            m.advance(t, *loads)
 
-        m.advance(t, *(self._integrate_loads(intg) if m.needs_force else ()))
+            if self._extern_values:
+                self._update_extern_values()
+                self.bind_externs(intg)
 
-        if self._extern_values:
-            self._update_extern_values()
-            self.bind_externs()
-
-            # A stage derivative kept from the last step is now stale
-            intg.invalidate_rhs()
-
-        self._tadv = t
+            self._tadv = t
 
     def _output_due(self, intg):
         if not self._has_output:

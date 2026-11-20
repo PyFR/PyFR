@@ -33,7 +33,7 @@ class NIRFPostProc(BasePostProcPlugin):
 
     def _process(self, data):
         ndims, R, W = self.ndims, self._R, self._W
-        vnames, dims = list('uvw'[:ndims]), 'xyz'[:ndims]
+        vnames, dims = 'uvw'[:ndims], 'xyz'[:ndims]
 
         # Lab-frame normals
         if self.kind == 'boundary':
@@ -47,16 +47,15 @@ class NIRFPostProc(BasePostProcPlugin):
         ploc[:] = r @ R.T + self._x0lab
 
         # Lab-frame velocity, u_lab = R*(u_body + omega x r) + V
-        data[vnames] = (data[vnames] + r @ W.T) @ R.T + self._velo
+        u = (data.stack(vnames) + r @ W.T) @ R.T + self._velo
+        data.unstack(vnames, u)
 
-        if not data.has_grads:
-            return
+        if data.has_grads:
+            # Gradients as (..., variable, direction)
+            privars = self.source.elementscls.privars(ndims, data.cfg)
+            gnames = [f'grad_{n}_{d}' for n in privars for d in dims]
+            G = data.stack(gnames).reshape(*ploc.shape[:-1], -1, ndims)
 
-        # Gradients as (..., variable, direction)
-        privars = self.source.elementscls.privars(ndims, data.cfg)
-        gnames = [f'grad_{n}_{d}' for n in privars for d in dims]
-        G = data[gnames].reshape(*ploc.shape[:-1], -1, ndims)
-
-        # The velocity gradient picks up the frame rotation rate
-        G[..., 1:ndims + 1, :] = R @ (G[..., 1:ndims + 1, :] + W)
-        data[gnames] = (G @ R.T).reshape(*ploc.shape[:-1], -1)
+            # The velocity gradient picks up the frame rotation rate
+            G[..., 1:ndims + 1, :] = R @ (G[..., 1:ndims + 1, :] + W)
+            data.unstack(gnames, (G @ R.T).reshape(*ploc.shape[:-1], -1))
