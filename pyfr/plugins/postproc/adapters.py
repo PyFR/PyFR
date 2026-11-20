@@ -30,6 +30,13 @@ class PostProcData:
     def __getitem__(self, name):
         return self.pvars[name]
 
+    def stack(self, names):
+        return np.stack([self.pvars[n] for n in names], axis=-1)
+
+    def unstack(self, names, vals):
+        for n, v in zip(names, np.moveaxis(vals, -1, 0)):
+            self.pvars[n][:] = v
+
 
 class BoundaryPostProcData(PostProcData):
     def __init__(self, source, pvars, ploc, spts, curved, finfo):
@@ -73,10 +80,14 @@ class BoundaryPostProcData(PostProcData):
         r = op @ self._spts.reshape(op.shape[1], -1)
         x_upt = r.reshape(op.shape[0], *self._spts.shape[1:])
 
+        # Surface points and unit normals in the frame of the mesh
+        ploc = self._metrics.ploc_at(self._finfo.svpts).swapaxes(1, 2)
+        unorm = self.pnorm / np.linalg.norm(self.pnorm, axis=0)
+
         # Offset of each interior point from each surface point
-        dx = x_upt[:, None] - self.ploc[None]
+        dx = x_upt[:, None] - ploc[None]
 
         # Distance along the local surface normal at each surface point
-        dist = np.abs(np.einsum('ipek,kpe->ipe', dx, self.normals))
+        dist = np.abs(np.einsum('ipek,kpe->ipe', dx, unorm))
 
         return dist.min(axis=0)

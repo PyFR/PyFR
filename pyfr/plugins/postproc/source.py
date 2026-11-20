@@ -4,9 +4,10 @@ from pyfr.fields import con_block_to_pri
 from pyfr.plugins.common import get_elementscls
 from pyfr.plugins.postproc.adapters import (BoundaryPostProcData,
                                             PostProcData)
+from pyfr.plugins.postproc.base import BasePostProcPlugin
 from pyfr.plugins.postproc.derived import TableDerivedPostProc
 from pyfr.readers.native import group_names
-from pyfr.util import subclass_where
+from pyfr.util import subclass_where, subclasses_where
 
 
 def get_source(prefix, cfg, stats, ndims):
@@ -16,7 +17,6 @@ def get_source(prefix, cfg, stats, ndims):
 class BaseDataSource:
     prefix = None
     adapters = None
-    plugins = {}
 
     def __init__(self, cfg, stats, ndims):
         self.cfg = cfg
@@ -26,6 +26,12 @@ class BaseDataSource:
     @cached_property
     def elementscls(self):
         return get_elementscls(self.cfg)
+
+    @property
+    def plugins(self):
+        pps = subclasses_where(BasePostProcPlugin, source_prefix=self.prefix)
+
+        return {cls.name: cls for cls in pps}
 
     def adapter(self, kind, names, samples, ploc, *args):
         pvars = {n: samples[:, i] for i, n in enumerate(names)}
@@ -50,7 +56,7 @@ class BaseDataSource:
         # Resolve the explicitly requested plugins and derived tables
         qs = []
         for name in dict.fromkeys(names):
-            if (q := resolve(name)).fields:
+            if (q := resolve(name)).transform or q.fields:
                 qs.append(q)
 
         # Requested fields nothing else supplies become table derivations
@@ -59,9 +65,15 @@ class BaseDataSource:
             if (q := resolve(name)).fields:
                 qs.append(q)
 
+        # Transforms run ahead of the quantities derived from their output
+        qs.sort(key=lambda q: not q.transform)
+
         return qs
 
     def prepare(self, mesh, soln, pp_plugins):
+        for pp in pp_plugins:
+            pp.prepare(mesh, soln)
+
         return []
 
     def pvar_names(self, rownames, groups):

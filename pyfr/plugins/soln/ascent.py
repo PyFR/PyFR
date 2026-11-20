@@ -13,7 +13,7 @@ from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.plugins.common import region_data
 from pyfr.plugins.postproc import FaceInfo, get_source
 from pyfr.plugins.soln.base import BaseSolnPlugin
-from pyfr.readers.native import group_names
+from pyfr.readers.native import Solution, group_names
 from pyfr.shapes import BaseShape, interp_pts, proj_pts
 from pyfr.subdiv import get_subdiv
 from pyfr.util import (file_path_gen, first, paren_depths,
@@ -187,6 +187,14 @@ class _IntegratorAdapter:
     def grad_soln(self):
         return dict(zip(self.intg.system.ele_types, self.intg.grad_soln))
 
+    def prepare(self, pp_plugins, grads):
+        if pp_plugins:
+            # Give the plugins the state which a solution file would hold
+            state = self.intg.serialiser.serialise()
+            soln = Solution(self.scfg, None, None, state=state)
+
+            self.source.prepare(self.mesh, soln, pp_plugins)
+
     def block(self, etype, eidxs, grads):
         # Stack the solution and any gradients as the reader does
         block = self.soln[etype][..., eidxs]
@@ -286,7 +294,9 @@ class _VolumeAscentOutput:
 
         # Interpolate the primitives to the subdiv points
         samples = interp_pts(self.soln_ops[etype], block)
-        yield names, samples, self.plocs[etype]
+
+        # Transforms move the points in place, so pass them a copy
+        yield names, samples, self.plocs[etype].copy()
 
     def _emit(self, mesh_n, dom, fname, arr):
         # Scalars publish at values; vectors split into values/x, /y, /z
@@ -526,6 +536,10 @@ class AscentRenderer:
             mesh_n[f'{dom}/fields/{fname}/volume_dependent'] = 'false'
             mesh_n[f'{dom}/fields/{fname}/topology'] = sname
 
+    def _write_coords(self, dom, sname, xyz):
+        for l, x in zip('xyz', xyz):
+            self.mesh_n[f'{dom}/coordsets/{sname}_coords/values/{l}'] = x
+
     def _write_domain(self, dom, sname, domid, etype, neles, xyz, conn):
         mesh_n = self.mesh_n
         cs = f'{sname}_coords'
@@ -537,8 +551,7 @@ class AscentRenderer:
         mesh_n[f'{dom}/topologies/{sname}/coordset'] = cs
         mesh_n[f'{dom}/topologies/{sname}/type'] = 'unstructured'
 
-        for l, x in zip('xyz', xyz):
-            mesh_n[f'{dom}/coordsets/{cs}/values/{l}'] = x
+        self._write_coords(dom, sname, xyz)
 
         self._write_field_meta(mesh_n, dom, sname)
 
@@ -755,10 +768,11 @@ class AscentRenderer:
             pipe = self._pipelines[sname]
 
             # Run each patch, merge by field across patches
-            merged = defaultdict(list)
+            merged, plocs = defaultdict(list), []
             for args in source.samples(adapter, key, self._need_grads):
                 # Run the postproc plugins for this source/key
                 data = pipe(*args)
+                plocs.append(data.ploc)
 
                 # Prepare the substitutions dictionary
                 subs = data.pvars | {'t': tcurr}
@@ -772,6 +786,11 @@ class AscentRenderer:
 
                 for field, arr in data.fields.items():
                     merged[field].append(np.atleast_3d(arr))
+
+            # Republish the points where a transform has moved them
+            if any(pp.transform for pp in pipe.plugins):
+                xyz = source._points(key, np.hstack(plocs))
+                self._write_coords(dom, sname, xyz)
 
             out[sname][key] = [(self._field_name(sname, f), np.hstack(a))
                                for f, a in merged.items()]
@@ -825,4 +844,10 @@ class AscentPlugin(BaseSolnPlugin):
         self._renderer = AscentRenderer(adapter, intg.isrestart)
 
     def __call__(self, intg):
-        self._renderer.render(_IntegratorAdapter(intg, intg.cfg, self.cfgsect))
+        renderer = self._renderer
+        adapter = _IntegratorAdapter(intg, intg.cfg, self.cfgsect)
+
+        # Let the plugins see the current state
+        adapter.prepare(renderer.postproc_plugins, renderer.need_grads)
+
+        renderer.render(adapter)

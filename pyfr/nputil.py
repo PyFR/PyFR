@@ -238,6 +238,50 @@ def npdtype_to_ctypestype(dtype):
     return _ctypestype_map[np.dtype(dtype).type]
 
 
+class Quaternion:
+    def __init__(self, q):
+        self.q = np.array(q, dtype=float)
+
+    @classmethod
+    def from_euler(cls, rx, ry, rz):
+        cx, sx = np.cos(rx / 2), np.sin(rx / 2)
+        cy, sy = np.cos(ry / 2), np.sin(ry / 2)
+        cz, sz = np.cos(rz / 2), np.sin(rz / 2)
+
+        # ZYX sequence of rotations about x, y and z
+        return cls([cz*cy*cx + sz*sy*sx, cz*cy*sx - sz*sy*cx,
+                    cz*sy*cx + sz*cy*sx, sz*cy*cx - cz*sy*sx])
+
+    def __mul__(self, other):
+        w1, x1, y1, z1 = self.q
+        w2, x2, y2, z2 = other.q
+
+        return Quaternion([w1*w2 - x1*x2 - y1*y2 - z1*z2,
+                           w1*x2 + x1*w2 + y1*z2 - z1*y2,
+                           w1*y2 - x1*z2 + y1*w2 + z1*x2,
+                           w1*z2 + x1*y2 - y1*x2 + z1*w2])
+
+    def normalised(self):
+        return Quaternion(self.q / np.linalg.norm(self.q))
+
+    def to_euler(self):
+        w, x, y, z = self.q
+        rx = np.arctan2(2*(w*x + y*z), 1 - 2*(x*x + y*y))
+        ry = np.arcsin(np.clip(2*(w*y - z*x), -1, 1))
+        rz = np.arctan2(2*(w*z + x*y), 1 - 2*(y*y + z*z))
+
+        return rx, ry, rz
+
+    def to_rotmat(self):
+        w, x, y, z = self.q
+
+        return np.array([
+            [1 - 2*(y*y + z*z), 2*(x*y - w*z), 2*(x*z + w*y)],
+            [2*(x*y + w*z), 1 - 2*(x*x + z*z), 2*(y*z - w*x)],
+            [2*(x*z - w*y), 2*(y*z + w*x), 1 - 2*(x*x + y*y)]
+        ])
+
+
 class BLASThreadCtrl:
     _instance = None
 

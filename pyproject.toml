@@ -59,6 +59,7 @@ include = ["pyfr*"]
 "pyfr.integrators.implicit.kernels" = ["*.mako"]
 "pyfr.plugins.soln.kernels" = ["*.mako"]
 "pyfr.plugins.solver.kernels" = ["*.mako"]
+"pyfr.plugins.solver.kernels.macros" = ["*.mako"]
 "pyfr.quadrules" = [
     "hex/*.txt",
     "line/*.txt",

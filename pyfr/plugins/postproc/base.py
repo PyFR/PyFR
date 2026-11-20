@@ -10,6 +10,12 @@ class BasePostProcPlugin(BasePlugin):
     needs_gridh = False
     fields = {}
 
+    # If the plugin modifies the data in place instead of adding fields
+    transform = False
+
+    # Prefix of the data source the plugin applies to
+    source_prefix = None
+
     def __init__(self, source, cfg, export_type=None, kind=None, want=None):
         cfgsect = f'postproc-plugin-{self.name}'
         super().__init__(cfg=cfg, cfgsect=cfgsect, ndims=source.ndims)
@@ -24,6 +30,9 @@ class BasePostProcPlugin(BasePlugin):
 
     def derived_fields(self, fields):
         return {}
+
+    def prepare(self, mesh, soln):
+        pass
 
     def run(self, data):
         if self.needs_grads and not data.has_grads:

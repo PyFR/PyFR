@@ -305,6 +305,11 @@ class BaseIntegrator(metaclass=RegisterMeta):
             if not tlist or t - tlist[-1] > self.dtmin:
                 tlist.append(t)
 
+    def invalidate_rhs(self):
+        self._curr_grad_soln = None
+        self._curr_dt_soln = None
+        self._grads_current = False
+
     def _invalidate_caches(self):
         self._curr_soln = None
         self._curr_grad_soln = None
