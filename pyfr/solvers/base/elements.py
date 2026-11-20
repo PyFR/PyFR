@@ -65,7 +65,6 @@ class BaseElements:
         # Field variables
         self.convars = self.convars(ndims, cfg)
         self.privars = self.privars(ndims, cfg)
-        self.dualcoeffs = self.dualcoeffs(ndims, cfg)
 
         # Kernels we provide
         self.kernels = {}

@@ -22,8 +22,6 @@ class BaseFluidElements:
         elif ndims == 3:
             return ['rho', 'rhou', 'rhov', 'rhow', 'E']
 
-    dualcoeffs = convars
-
     @staticmethod
     def visvars(ndims, cfg):
         if ndims == 2:
