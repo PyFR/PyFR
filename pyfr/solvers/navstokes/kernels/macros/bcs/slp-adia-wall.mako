@@ -1,17 +1,9 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
 <%include file='pyfr.solvers.euler.kernels.macros.rsolvers.${rsolver}'/>
+<%include file='pyfr.solvers.euler.kernels.macros.bcs.slp-adia-wall'/>
 <%include file='pyfr.solvers.navstokes.kernels.macros.bcs.common'/>
 <%include file='pyfr.solvers.navstokes.kernels.macros.viscous'/>
-
-<%pyfr:macro name='bc_rsolve_state' params='ul, nl, ur'>
-    fpdtype_t nor = ${' + '.join(f'ul[{i + 1}]*nl[{i}]' for i in range(ndims))};
-    ur[0] = ul[0];
-% for i in range(ndims):
-    ur[${i + 1}] = ul[${i + 1}] - 2*nor*nl[${i}];
-% endfor
-    ur[${nvars - 1}] = ul[${nvars - 1}];
-</%pyfr:macro>
 
 <%pyfr:macro name='bc_common_flux_state' params='ul, gradul, artvisc, nl, magnl'>
     // Ghost state r

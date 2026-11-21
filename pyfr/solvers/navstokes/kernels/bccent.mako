@@ -13,7 +13,7 @@
 
     // Compute the RHS
     fpdtype_t ur[${nvars}];
-    ${pyfr.expand('bc_rsolve_state', 'ul', 'norm_nl', 'ur')};
+    ${pyfr.expand('bc_ldg_state', 'ul', 'norm_nl', 'ur')};
 
     // Compute entropy for boundary state
     fpdtype_t p, d, entmin_rhs;
