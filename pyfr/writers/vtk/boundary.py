@@ -5,7 +5,7 @@ import numpy as np
 from pyfr.bases import get_basis
 from pyfr.cache import memoize
 from pyfr.plugins.postproc import FaceInfo
-from pyfr.shapes import BaseShape, interp_pts, proj_pts
+from pyfr.shapes import BaseShape, apply_op, proj_pts
 from pyfr.subdiv import get_subdiv
 from pyfr.util import expand_braces, subclass_where
 from pyfr.writers.vtk.base import BaseVTKWriter
@@ -114,8 +114,8 @@ class VTKBoundaryWriter(BaseVTKWriter):
             # Pre-process the solution
             soln = self.source.to_pvars(soln, self.soln.groups)
 
-            face_vpts = interp_pts(mesh_op, spts)
-            face_vsoln = interp_pts(soln_op, soln)
+            face_vpts = apply_op(mesh_op, spts)
+            face_vsoln = apply_op(soln_op, soln)
 
             vspts.append(face_vpts)
             vsoln.append(face_vsoln)
@@ -133,7 +133,7 @@ class VTKBoundaryWriter(BaseVTKWriter):
                     data = np.moveaxis(aux[f.name][idxs], 0, 1)
                     # At order 1 nupts == nlpts, so vertices win the tie
                     op = lin_op if data.shape[0] == nlpts else soln_op
-                    pointf[f.name].append(interp_pts(op, data))
+                    pointf[f.name].append(apply_op(op, data))
 
             fields = self._postproc(face_vsoln, face_vpts, spts, curved[-1],
                                     finfo)

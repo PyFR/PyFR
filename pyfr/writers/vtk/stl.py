@@ -3,7 +3,7 @@ import numpy as np
 from pyfr.bases import TriBasis
 from pyfr.mpiutil import get_comm_rank_root
 from pyfr.points import PointLocator, PointSampler
-from pyfr.shapes import interp_pts, TriShape
+from pyfr.shapes import apply_op, TriShape
 from pyfr.util import first
 from pyfr.writers.vtk.base import BaseVTKWriter
 
@@ -226,7 +226,7 @@ class VTKSTLWriter(BaseVTKWriter):
         op = basis.nodal_basis_at(TriShape.std_ele(order))
 
         # Flat linear subdivision
-        pts = interp_pts(op, stl[:, 1:].swapaxes(0, 1))
+        pts = apply_op(op, stl[:, 1:].swapaxes(0, 1))
 
         if subdiv == 'spherigon' and order > 1:
             fnorms = stl[:, 0].astype(float)

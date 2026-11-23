@@ -10,20 +10,20 @@ from pyfr.quadrules import get_quadrule
 from pyfr.util import subclass_where
 
 
-def interp_pts(op, pts):
-    ipts = op.astype(pts.dtype) @ pts.reshape(op.shape[1], -1)
-    ipts = ipts.reshape(op.shape[0], *pts.shape[1:])
+def apply_op(op, vals):
+    ovals = op.astype(vals.dtype) @ vals.reshape(op.shape[1], -1)
+    ovals = ovals.reshape(op.shape[0], *vals.shape[1:])
 
-    return ipts
+    return ovals
 
 
-def proj_pts(projector, pts):
+def proj_pts(proj, pts):
     pts = np.atleast_2d(pts.T)
-    return np.vstack(np.broadcast_arrays(*projector(*pts))).T
+    return np.vstack(np.broadcast_arrays(*proj(*pts))).T
 
 
 @clean
-def proj_l2(qrule, basis):
+def l2_proj_op(qrule, basis):
     return basis.vdm.T @ (qrule.wts*basis.ortho_basis_at(qrule.pts))
 
 
@@ -134,7 +134,7 @@ class BaseShape:
             for kind, *_ in self.faces:
                 # Project the anti-aliased faces onto the face basis
                 if kind in self.surfaa:
-                    p = proj_l2(self._iqrules[kind], self.facebases[kind])
+                    p = l2_proj_op(self._iqrules[kind], self.facebases[kind])
                 else:
                     p = np.eye(self.npts_for_face[kind](self.order))
 
@@ -160,7 +160,7 @@ class BaseShape:
 
     @cached_property
     def m8(self):
-        return proj_l2(self._eqrule, self.ubasis)
+        return l2_proj_op(self._eqrule, self.ubasis)
 
     @property
     def m9(self):

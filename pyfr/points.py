@@ -337,7 +337,7 @@ class PointSampler:
 
     def configure_with_intg_nvars(self, intg, nvars):
         # Get the solution bases from the system
-        ubases = {etype: eles.basis.ubasis
+        ubases = {etype: eles.shape.ubasis
                   for etype, eles in intg.system.ele_map.items()}
 
         self._configure_ubases_nvars(ubases, nvars)

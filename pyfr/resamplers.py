@@ -21,10 +21,10 @@ def get_interpolator(name, ndims, is_admissible, opts, order=None):
 def _ploc_op(etype, nspts, cfg):
     # Shape and associated basis
     shapecls = subclass_where(BaseShape, name=etype)
-    basis = shapecls(nspts, cfg)
+    shape = shapecls(nspts, cfg)
 
     # Interpolate the shape points to the solution points
-    return basis.sbasis.nodal_basis_at(basis.upts)
+    return shape.sbasis.nodal_basis_at(shape.upts)
 
 
 class BaseInterpolator:

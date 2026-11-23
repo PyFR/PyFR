@@ -59,7 +59,7 @@ def element_metrics(mm):
         jvar = np.min(adjac, axis=0) / np.max(adjac, axis=0)
 
     # Element volume from the solution point quadrature
-    wts = mm.basis.ubasis.invvdm[:, 0]
+    wts = mm.shape.ubasis.invvdm[:, 0]
     vol = wts.sum() * (wts @ djac)
 
     # Volume-based characteristic length
@@ -103,12 +103,12 @@ class MeshQuality:
              'mesh-scale', 'aspect-ratio', 'size-ratio')
 
     def __init__(self, mesh, cfg):
-        basismap = {b.name: b for b in subclasses(BaseShape, just_leaf=True)}
+        shapemap = {b.name: b for b in subclasses(BaseShape, just_leaf=True)}
 
         self.metrics = {}
         for etype, spts in mesh.spts.items():
-            basis = basismap[etype](len(spts), cfg)
-            mm = MeshMetrics(basis, spts, mesh.spts_curved[etype])
+            shape = shapemap[etype](len(spts), cfg)
+            mm = MeshMetrics(shape, spts, mesh.spts_curved[etype])
             self.metrics[etype] = element_metrics(mm)
 
         char_len = {et: m.char_len for et, m in self.metrics.items()}

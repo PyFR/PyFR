@@ -30,7 +30,7 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
         super().set_backend(*args, **kwargs)
 
         # Can elide interior flux calculations at p = 0
-        if self.basis.order == 0:
+        if self.shape.order == 0:
             return
 
         # Register our flux kernels
@@ -46,9 +46,9 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
         tplargs = {
             'ndims': self.ndims,
             'nvars': self.nvars,
-            'nverts': len(self.basis.linspts),
+            'nverts': len(self.shape.linspts),
             'c': self.cfg.items_as('constants', float),
-            'jac_exprs': self.basis.jac_exprs,
+            'jac_exprs': self.shape.jac_exprs,
             'visc_corr': visc_corr
         }
 

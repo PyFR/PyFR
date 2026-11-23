@@ -3,26 +3,26 @@ from functools import cached_property
 import numpy as np
 
 from pyfr.cache import memoize
-from pyfr.shapes import interp_pts
+from pyfr.shapes import apply_op
 from pyfr.util import ndrange
 
 
 class MeshMetrics:
-    def __init__(self, basis, spts, curved):
-        self.basis = basis
+    def __init__(self, shape, spts, curved):
+        self.shape = shape
         self.spts = spts
 
         self.nspts, self.neles, self.ndims = spts.shape
-        self.nmpts = basis.nmpts
+        self.nmpts = shape.nmpts
 
         # Treat all elements up to the last curved one as curved
-        if basis.order >= 2:
+        if shape.order >= 2:
             self.ncurved = int(np.max(*np.nonzero(curved), initial=-1)) + 1
         else:
             self.ncurved = self.neles
 
     def _pts(self, name):
-        return getattr(self.basis, name) if isinstance(name, str) else name
+        return getattr(self.shape, name) if isinstance(name, str) else name
 
     @property
     def centred_spts(self):
@@ -33,7 +33,7 @@ class MeshMetrics:
         pt = self._pts(name)
 
         # Metric basis with grid point (q<=p) or pseudo grid points (q>p)
-        mbasis = self.basis.mbasis
+        mbasis = self.shape.mbasis
 
         # Jacobian operator at these points
         jacop = np.rollaxis(mbasis.jac_nodal_basis_at(pt), 2)
@@ -58,7 +58,7 @@ class MeshMetrics:
         smats_mpts, _ = self._smats_djacs_mpts
 
         # Interpolation operator from mpts to our pts
-        op = self.basis.mbasis.nodal_basis_at(self._pts(name))
+        op = self.shape.mbasis.nodal_basis_at(self._pts(name))
 
         # Apply and reshape
         smats = op @ smats_mpts
@@ -69,7 +69,7 @@ class MeshMetrics:
         _, djacs_mpts = self._smats_djacs_mpts
 
         # Interpolation matrix to pts
-        m0 = self.basis.mbasis.nodal_basis_at(self._pts(name))
+        m0 = self.shape.mbasis.nodal_basis_at(self._pts(name))
 
         # Interpolate the djacs
         djac = m0 @ djacs_mpts
@@ -81,20 +81,20 @@ class MeshMetrics:
 
     @memoize
     def ploc_at(self, name):
-        op = self.basis.sbasis.nodal_basis_at(self._pts(name))
+        op = self.shape.sbasis.nodal_basis_at(self._pts(name))
 
-        return interp_pts(op, self.spts).swapaxes(1, 2)
+        return apply_op(op, self.spts).swapaxes(1, 2)
 
     @memoize
     def centred_ploc_at(self, name):
-        op = self.basis.sbasis.nodal_basis_at(self._pts(name))
+        op = self.shape.sbasis.nodal_basis_at(self._pts(name))
 
-        return interp_pts(op, self.centred_spts).swapaxes(1, 2)
+        return apply_op(op, self.centred_spts).swapaxes(1, 2)
 
     @memoize
     def pnorm_at(self, name, fidx):
         # Reference normal of the face
-        norm = self.basis.faces[fidx][2]
+        norm = self.shape.faces[fidx][2]
 
         # We need to compute |J|*[(J^{-1})^{T}.N] where J is the
         # Jacobian and N is the normal for each point. Using

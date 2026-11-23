@@ -72,19 +72,19 @@ class BaseAdvectionElements(ShockCapturingMixin, BaseElements):
             out=self._scal_fpts
         )
 
-        if self.fluxaa and self.basis.order > 0:
+        if self.fluxaa and self.shape.order > 0:
             kernels['qptsu'] = lambda uin: self._be.kernel(
                 'mul', self.opmat('M7'), self.scal_upts[uin],
                 out=self._scal_qpts
             )
 
         # First flux correction kernel
-        if self.fluxaa and self.basis.order > 0:
+        if self.fluxaa and self.shape.order > 0:
             kernels['divpcorf'] = lambda uin, fout: self._be.kernel(
                 'mul', self.opmat('(M1 - M3*M2)*M9'), self._vect_qpts,
                 out=self._div_upts(uin, fout)
             )
-        elif self.basis.order > 0:
+        elif self.shape.order > 0:
             kernels['divpcorf'] = lambda uin, fout: self._be.kernel(
                 'mul', self.opmat('M1 - M3*M2'), self._vect_upts,
                 out=self._div_upts(uin, fout)
@@ -93,7 +93,7 @@ class BaseAdvectionElements(ShockCapturingMixin, BaseElements):
         # Second flux correction kernel
         kernels['divconf'] = lambda uin, fout: self._be.kernel(
             'mul', self.opmat('M3'), self._scal_fpts,
-            out=self._div_upts(uin, fout), beta=float(self.basis.order > 0)
+            out=self._div_upts(uin, fout), beta=float(self.shape.order > 0)
         )
 
         # Transformed to physical divergence kernel + source term

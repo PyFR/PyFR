@@ -14,7 +14,7 @@ from pyfr.plugins.common import region_data
 from pyfr.plugins.postproc import FaceInfo, get_source
 from pyfr.plugins.soln.base import BaseSolnPlugin
 from pyfr.readers.native import group_names
-from pyfr.shapes import BaseShape, interp_pts, proj_pts
+from pyfr.shapes import BaseShape, apply_op, proj_pts
 from pyfr.subdiv import get_subdiv
 from pyfr.util import (file_path_gen, first, paren_depths,
                        subclass_where)
@@ -285,7 +285,7 @@ class _VolumeAscentOutput:
         names, block = adapter.block(etype, self.rdata[etype], grads)
 
         # Interpolate the primitives to the subdiv points
-        samples = interp_pts(self.soln_ops[etype], block)
+        samples = apply_op(self.soln_ops[etype], block)
         yield names, samples, self.plocs[etype]
 
     def _emit(self, mesh_n, dom, fname, arr):
@@ -404,11 +404,11 @@ class _BoundaryAscentOutput(_VolumeAscentOutput):
             names, block = adapter.block(etype, eidxs, grads)
 
             # Interpolate the primitives to the face visualisation points
-            samples = interp_pts(sop, block)
+            samples = apply_op(sop, block)
 
             # Physical locations of the face visualisation points
             psp = spts[etype][:, eidxs]
-            ploc = interp_pts(mop, psp)
+            ploc = apply_op(mop, psp)
 
             finfo = FaceInfo(etype, fidx, svpts)
             yield names, samples, ploc, psp, curved[etype][eidxs], finfo

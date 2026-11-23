@@ -68,13 +68,13 @@ class ArtificialViscosity(BaseShockCapturing):
 
     def _setup_etype(self, etype, eles, mesh, c_av):
         be = self._be
-        basis = eles.basis
-        nverts = len(basis.linspts)
+        shape = eles.shape
+        nverts = len(shape.linspts)
         enodes = mesh.spts_nodes[etype]
 
         # Find which shape point indices correspond to vertices
-        spts = np.array(basis.spts)
-        linspts = np.array(basis.linspts)
+        spts = np.array(shape.spts)
+        linspts = np.array(shape.linspts)
         vtx_idxs = np.argmin(
             np.linalg.norm(spts - linspts[:, None], axis=2), axis=1
         )
@@ -88,7 +88,7 @@ class ArtificialViscosity(BaseShockCapturing):
         self.artvisc_fpts[etype] = artvisc_fpts
 
         # Linear interpolation basis for vertex → point interpolation
-        linbasis = basis.lbasis
+        linbasis = shape.lbasis
 
         # Build vertex views (full view + per-region views)
         vtx_view = self._setup_vtx_views(etype, eles, mesh, nverts, vnodes)
@@ -134,7 +134,7 @@ class ArtificialViscosity(BaseShockCapturing):
         # Avfill template arguments
         tplargs_avfill = dict(
             nverts=nverts, nfpts=eles.nfpts,
-            av_op=linbasis.nodal_basis_at(eles.basis.fpts).tolist()
+            av_op=linbasis.nodal_basis_at(eles.shape.fpts).tolist()
         )
 
         # Register kernel factories on elements
@@ -170,9 +170,9 @@ class ArtificialViscosity(BaseShockCapturing):
     def _sensor_tplargs(self, eles, c_av):
         shockvar = eles.convars.index(eles.shockvar)
 
-        ubname = eles.basis.ubasis.name
-        ubdegs = eles.basis.ubasis.degrees
-        uborder = eles.basis.ubasis.order
+        ubname = eles.shape.ubasis.name
+        ubdegs = eles.shape.ubasis.degrees
+        uborder = eles.shape.ubasis.order
 
         lubdegs = get_basis(ubname, max(0, uborder - 1)).degrees
         ind_modes = [d not in lubdegs for d in ubdegs]
@@ -194,8 +194,8 @@ class ArtificialViscosity(BaseShockCapturing):
 
         return dict(
             nvars=eles.nvars, nupts=eles.nupts, svar=shockvar,
-            c=c_av, order=eles.basis.order, ind_modes=ind_modes,
-            invvdm=eles.basis.ubasis.invvdm.T,
+            c=c_av, order=eles.shape.order, ind_modes=ind_modes,
+            invvdm=eles.shape.ubasis.invvdm.T,
             mode_degs=mode_degs, ndeg=ndeg, s_weights=s_weights,
             baseline_decay=baseline_decay
         )

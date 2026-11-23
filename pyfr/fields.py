@@ -10,7 +10,7 @@ from pyfr.mpiutil import (DistributedDirectory, first_coll,
                           get_comm_rank_root)
 from pyfr.nputil import zip_chunks
 from pyfr.readers.native import group_names
-from pyfr.shapes import BaseShape, interp_pts
+from pyfr.shapes import BaseShape, apply_op
 from pyfr.subdiv import get_subdiv
 from pyfr.util import first, subclass_where, subclasses
 
@@ -279,21 +279,21 @@ class FieldRecovery:
         cnodemap, divmap, nsvptsmap = {}, {}, {}
         for et in mesh.spts:
             shapecls = subclass_where(BaseShape, name=et)
-            basis = shapecls(len(mesh.spts[et]), cfg)
-            metrics = MeshMetrics(basis, mesh.spts[et], mesh.spts_curved[et])
+            shape = shapecls(len(mesh.spts[et]), cfg)
+            metrics = MeshMetrics(shape, mesh.spts[et], mesh.spts_curved[et])
             nodes = shapecls.std_ele(p)
 
             # Gradient operator flattened for BLAS; J^-1 from the smats
-            jac = basis.ubasis.jac_nodal_basis_at(basis.upts)
-            jacop = jac.swapaxes(1, 2).reshape(-1, basis.nupts)
+            jac = shape.ubasis.jac_nodal_basis_at(shape.upts)
+            jacop = jac.swapaxes(1, 2).reshape(-1, shape.nupts)
             rcpd = metrics.rcpdjac_at('upts')
             jinv = metrics.smat_at('upts')*rcpd[None, :, None, :]
 
             self.metrics[et] = metrics
             self.gops[et] = (jacop, jinv)
             nbasis = get_basis(et, p, nodes)
-            self.up2n[et] = basis.ubasis.nodal_basis_at(nodes)
-            self.n2up[et] = nbasis.nodal_basis_at(basis.upts)
+            self.up2n[et] = shape.ubasis.nodal_basis_at(nodes)
+            self.n2up[et] = nbasis.nodal_basis_at(shape.upts)
 
             # Corner node numbers key the shared-vdof classes
             snodes = mesh.spts_nodes[et]
@@ -308,7 +308,7 @@ class FieldRecovery:
         # Node-average per-etype (nupts, ..., neles) fields across elements
         shapes, nodal = {}, {}
         for et, f in fmap.items():
-            fn = interp_pts(self.up2n[et], f)
+            fn = apply_op(self.up2n[et], f)
             shapes[et] = fn.shape
             nodal[et] = fn.reshape(len(fn), -1, fn.shape[-1]).swapaxes(1, 2)
 
@@ -321,7 +321,7 @@ class FieldRecovery:
         for et, f in avg.items():
             remap = self.cleaner.layouts[et][0]
             fe = f[remap].transpose(1, 2, 0).reshape(shapes[et])
-            out[et] = interp_pts(self.n2up[et], fe)
+            out[et] = apply_op(self.n2up[et], fe)
 
         return out
 
@@ -353,16 +353,16 @@ class FieldRecovery:
         kind, vidxs = bcrows
 
         for et, fidx, eidxs in con.items():
-            metrics, basis = self.metrics[et], self.metrics[et].basis
-            fp = basis.facefpts[fidx]
+            metrics, shape = self.metrics[et], self.metrics[et].shape
+            fp = shape.facefpts[fidx]
 
             # Unit outward normals at the face flux points
-            pn = metrics.pnorm_at(basis.fpts[fp], fidx)
+            pn = metrics.pnorm_at(shape.fpts[fp], fidx)
             pn = pn[:, eidxs].transpose(2, 0, 1)
             nl = pn / np.linalg.norm(pn, axis=0)
 
             # Interior state at the face flux points
-            ul = interp_pts(basis.m0[fp], fmap[et][:, *np.ix_(vidxs, eidxs)])
+            ul = apply_op(shape.m0[fp], fmap[et][:, *np.ix_(vidxs, eidxs)])
             ulv = list(ul.swapaxes(0, 1))
 
             # Evaluate the boundary common state in primitive variables
@@ -378,7 +378,7 @@ class FieldRecovery:
         # Flux-point jumps between the common values and local states
         out = {}
         for et, f in fmap.items():
-            out[et] = interp_pts(self.metrics[et].basis.m0, favg[et] - f)
+            out[et] = apply_op(self.metrics[et].shape.m0, favg[et] - f)
 
         # Boundaries with known common states refine the deltas
         if bcrows is not None:
@@ -393,12 +393,12 @@ class FieldRecovery:
 
         out = {}
         for et, f in fmap.items():
-            basis = self.metrics[et].basis
+            shape = self.metrics[et].shape
             jacop, jinv = self.gops[et]
 
             # Compute the corrected gradients in transformed space
-            refg = interp_pts(jacop, f).reshape(-1, *f.shape)
-            refg += interp_pts(basis.m6, dmap[et]).reshape(refg.shape)
+            refg = apply_op(jacop, f).reshape(-1, *f.shape)
+            refg += apply_op(shape.m6, dmap[et]).reshape(refg.shape)
 
             # Transform the gradients from reference to physical space
             out[et] = np.einsum('ijkm,ijlm->jlkm', jinv, refg)
@@ -420,7 +420,7 @@ class FieldRecovery:
             chunks = zip_chunks(csize, lap[et], gf, jinv, axis=-1)
 
             for lchunk, gchunk, jchunk in chunks:
-                refg = interp_pts(jacop, gchunk)
+                refg = apply_op(jacop, gchunk)
                 refg = refg.reshape(-1, *g.shape[:-1], lchunk.shape[-1])
                 np.einsum('ijkm,ijlkm->jlm', jchunk, refg, out=lchunk)
 

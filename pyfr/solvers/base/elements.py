@@ -8,7 +8,7 @@ from pyfr.exprs import npeval
 from pyfr.metrics import MeshMetrics
 from pyfr.nputil import fuzzysort
 from pyfr.quadrules import get_quadrule
-from pyfr.shapes import interp_pts, proj_l2
+from pyfr.shapes import apply_op, l2_proj_op
 
 
 @dataclass
@@ -52,7 +52,7 @@ class BaseElements:
         # Absent an equation of state every state is admissible
         return np.ones(np.shape(cons[0]), dtype=bool)
 
-    def __init__(self, basiscls, eles, cfg, curved):
+    def __init__(self, shapecls, eles, cfg, curved):
         self._be = None
 
         self.eles = eles
@@ -73,31 +73,31 @@ class BaseElements:
         self.export_fields = []
 
         # Check the dimensionality of the problem
-        if ndims != basiscls.ndims:
+        if ndims != shapecls.ndims:
             raise ValueError('Invalid element matrix dimensions')
 
         # Determine the number of dynamical variables
         self.nvars = len(self.convars)
 
         # Instantiate the basis class
-        self.basis = basis = basiscls(nspts, cfg)
-        self.name = basis.name
+        self.shape = shape = shapecls(nspts, cfg)
+        self.name = shape.name
 
         # See what kind of projection the basis is using
-        self.fluxaa = basis.fluxaa
+        self.fluxaa = shape.fluxaa
 
         # Sizes
-        self.nupts = basis.nupts
-        self.nqpts = basis.nqpts if self.fluxaa else None
-        self.nfpts = basis.nfpts
-        self.nfacefpts = basis.nfacefpts
-        self.nmpts = basis.nmpts
+        self.nupts = shape.nupts
+        self.nqpts = shape.nqpts if self.fluxaa else None
+        self.nfpts = shape.nfpts
+        self.nfacefpts = shape.nfacefpts
+        self.nmpts = shape.nmpts
 
         # Metric terms of the mapping from the reference element
-        self.metrics = MeshMetrics(basis, eles, curved)
+        self.metrics = MeshMetrics(shape, eles, curved)
         self.ncurved = self.metrics.ncurved
 
-        if self.basis.fpts_in_upts:
+        if self.shape.fpts_in_upts:
             self.get_vect_fpts_for_inters = self._get_vect_upts_for_inters
         else:
             self.get_vect_fpts_for_inters = self._get_vect_fpts_for_inters
@@ -110,7 +110,7 @@ class BaseElements:
             raise ValueError('Invalid constants (x, y, or z) in config file')
 
         # See if performing L2 projection
-        ename = self.basis.name
+        ename = self.shape.name
         upts = self.cfg.get(f'solver-elements-{ename}', 'soln-pts')
         qdeg = (self.cfg.getint('soln-ics', f'quad-deg-{ename}', 0) or
                 self.cfg.getint('soln-ics', 'quad-deg', 0))
@@ -124,7 +124,7 @@ class BaseElements:
             coords = self.ploc_at_np(qrule.pts)
 
             # Compute projection operator
-            m8 = proj_l2(qrule, self.basis.ubasis)
+            m8 = l2_proj_op(qrule, self.shape.ubasis)
         else:
             m8 = None
             coords = self.ploc_at_np('upts')
@@ -149,17 +149,17 @@ class BaseElements:
 
     def set_ics_from_soln(self, solnmat, solncfg):
         # Recreate the existing solution basis
-        solnb = self.basis.__class__(None, solncfg)
+        solnb = self.shape.__class__(None, solncfg)
 
         # Interpolate its solution onto our solution points
-        interp = solnb.ubasis.nodal_basis_at(self.basis.upts)
-        return interp_pts(interp, solnmat[:, :self.nvars])
+        interp = solnb.ubasis.nodal_basis_at(self.shape.upts)
+        return apply_op(interp, solnmat[:, :self.nvars])
 
     @cached_property
     def plocfpts(self):
         # Interpolate the physical mesh locations to the flux points
-        plocop = self.basis.sbasis.nodal_basis_at(self.basis.fpts)
-        return interp_pts(plocop, self.eles)
+        plocop = self.shape.sbasis.nodal_basis_at(self.shape.fpts)
+        return apply_op(plocop, self.eles)
 
     @cached_property
     def _scal_upts_tmp(self):
@@ -171,7 +171,7 @@ class BaseElements:
         plocfpts = self.plocfpts
         sffpts = []
 
-        for ffpts in self.basis.facefpts:
+        for ffpts in self.shape.facefpts:
             ffpts = np.asarray(ffpts)
             coords = plocfpts[ffpts].transpose(1, 2, 0)
             perm = fuzzysort(coords)
@@ -229,7 +229,7 @@ class BaseElements:
         # If we are doing gradient fusion
         self.grad_fusion = not (self._be.blocks or self.fluxaa)
 
-        if self.basis.order >= 2:
+        if self.shape.order >= 2:
             self.linoff = self.ncurved - self.ncurved % -backend.csubsz
         else:
             self.linoff = self.neles
@@ -279,7 +279,7 @@ class BaseElements:
 
     @memoize
     def opmat(self, expr):
-        return self._be.const_matrix(self.basis.opmat(expr),
+        return self._be.const_matrix(self.shape.opmat(expr),
                                      tags={expr, 'align'})
 
     def sliceat(fn):
@@ -316,7 +316,7 @@ class BaseElements:
 
     @cached_property
     def mean_wts(self):
-        wts = self.basis.ubasis.invvdm[:, 0, None]/self.rcpdjac_at_np('upts')
+        wts = self.shape.ubasis.invvdm[:, 0, None]/self.rcpdjac_at_np('upts')
         wts /= np.sum(wts, axis=0)
 
         return self._be.const_matrix(wts, tags={'align'})
@@ -341,39 +341,39 @@ class BaseElements:
 
     @memoize
     def vtx_interp_at(self, name):
-        op = self.basis.lbasis.nodal_basis_at(getattr(self.basis, name))
+        op = self.shape.lbasis.nodal_basis_at(getattr(self.shape, name))
         return self._be.const_matrix(op, tags={'align'})
 
     @cached_property
     def upts(self):
-        return self._be.const_matrix(self.basis.upts)
+        return self._be.const_matrix(self.shape.upts)
 
     @cached_property
     def qpts(self):
-        return self._be.const_matrix(self.basis.qpts)
+        return self._be.const_matrix(self.shape.qpts)
 
     @cached_property
     def _pnorm_fpts(self):
-        return np.vstack([self.pnorm_at(self.basis.fpts[fp], fidx)
-                          for fidx, fp in enumerate(self.basis.facefpts)])
+        return np.vstack([self.pnorm_at(self.shape.fpts[fp], fidx)
+                          for fidx, fp in enumerate(self.shape.facefpts)])
 
     def pnorm_at(self, name, fidx):
         return self.metrics.pnorm_at(name, fidx)
 
     @cached_property
     def _gcorr_fpts(self):
-        m0, m3 = self.basis.m0, self.basis.m3
+        m0, m3 = self.shape.m0, self.shape.m3
 
         # Correction of a unit jump on each face at its own flux points
         gcorr = np.concatenate([m0[fp] @ m3[:, fp].sum(axis=1)
-                                for fp in self.basis.facefpts])
+                                for fp in self.shape.facefpts])
 
         # Transform to physical space along the face normal
         pn = np.linalg.norm(self._pnorm_fpts, axis=-1)
         return gcorr[:, None]*pn*self.rcpdjac_at_np('fpts')
 
     def get_pnorms(self, eidx, fidx):
-        fpts_idx = self.basis.facefpts[fidx]
+        fpts_idx = self.shape.facefpts[fidx]
         return self._pnorm_fpts[fpts_idx, eidx]
 
     def get_pnorms_for_inters(self, eidxs, fidx):
@@ -389,7 +389,7 @@ class BaseElements:
     @inters_map
     def _get_vect_upts_for_inters(self, eidxs, fidx):
         rmap = self.srtd_face_fpts[fidx][eidxs]
-        fmap = self.basis.fpts_map_upts[rmap]
+        fmap = self.shape.fpts_map_upts[rmap]
         return self._vect_upts.mid, fmap, self.nupts
 
     @inters_map

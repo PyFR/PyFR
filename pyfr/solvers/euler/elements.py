@@ -145,7 +145,7 @@ class BaseFluidElements:
 
         def cfl_getter():
             with np.errstate(divide='ignore'):
-                wspd = (2*self.basis.order + 1)*self._wspd.get()[0]
+                wspd = (2*self.shape.order + 1)*self._wspd.get()[0]
                 return np.nan_to_num(1/wspd, posinf=0.0)
 
         self.export_fields.append(ExportableField(
@@ -159,9 +159,9 @@ class BaseFluidElements:
         tplargs = {
             'ndims': self.ndims,
             'nvars': self.nvars,
-            'nverts': len(self.basis.linspts),
+            'nverts': len(self.shape.linspts),
             'c': self.cfg.items_as('constants', float),
-            'jac_exprs': self.basis.jac_exprs
+            'jac_exprs': self.shape.jac_exprs
         }
 
         wkerns = []
@@ -193,7 +193,7 @@ class EulerElements(BaseFluidElements, BaseAdvectionElements):
         super().set_backend(*args, **kwargs)
 
         # Can elide interior flux calculations at p = 0
-        if self.basis.order == 0:
+        if self.shape.order == 0:
             return
 
         # Register our flux kernels
@@ -203,9 +203,9 @@ class EulerElements(BaseFluidElements, BaseAdvectionElements):
         tplargs = {
             'ndims': self.ndims,
             'nvars': self.nvars,
-            'nverts': len(self.basis.linspts),
+            'nverts': len(self.shape.linspts),
             'c': self.cfg.items_as('constants', float),
-            'jac_exprs': self.basis.jac_exprs
+            'jac_exprs': self.shape.jac_exprs
         }
 
         # Helpers

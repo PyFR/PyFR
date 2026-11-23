@@ -10,7 +10,7 @@ from pyfr.mpiutil import (AlltoallMixin, get_comm_rank_root, home_rank, mpi,
                           scal_coll)
 from pyfr.nputil import fuzzysort, range_offsets, search_unsorted
 from pyfr.points import PointLocator
-from pyfr.shapes import BaseShape, interp_pts, proj_pts
+from pyfr.shapes import BaseShape, apply_op, proj_pts
 from pyfr.subdiv import get_subdiv
 from pyfr.util import subclass_where
 from pyfr.writers.vtk.base import BaseVTKWriter
@@ -278,17 +278,17 @@ class ExtrudedSpanwise(_SpanwiseBase, AlltoallMixin):
             sel = np.flatnonzero(bot == fidx)
 
             # Interpolate to the bottom face lattice and span-integrate
-            v = interp_pts(ei.spanop, soln_pre[..., sel]).transpose(2, 0, 1)
+            v = apply_op(ei.spanop, soln_pre[..., sel]).transpose(2, 0, 1)
 
             # Canonically order the lattice by its physical position
-            sp = interp_pts(ei.smpop, spts[:, sel])
+            sp = apply_op(ei.smpop, spts[:, sel])
             perm = fuzzysort(sp.transpose(1, 2, 0)[:, self.in_axes])
 
             eles['sum'][sel] = np.take_along_axis(v, perm[..., None], axis=1)
             eles['vperm'][sel] = perm
 
             # Footprint geometry and output topology
-            fp = interp_pts(ei.geop, spts[:, sel])
+            fp = apply_op(ei.geop, spts[:, sel])
             eles['xy'][sel] = fp.transpose(1, 0, 2)[..., self.in_axes]
             eles['cnodes'][sel] = snodes[sel][:, ei.cnidx]
 
@@ -352,8 +352,8 @@ class SampledSpanwise(_SpanwiseBase, AlltoallMixin):
         mesh_op = self.shape[etype].sbasis.nodal_basis_at(svpts)
         smesh_op = self.shape[etype].sbasis.nodal_basis_at(spts)
 
-        vpts = interp_pts(mesh_op, self.mesh.spts[etype][:, idxs])
-        spts = interp_pts(smesh_op, self.mesh.spts[etype][:, idxs])
+        vpts = apply_op(mesh_op, self.mesh.spts[etype][:, idxs])
+        spts = apply_op(smesh_op, self.mesh.spts[etype][:, idxs])
         cnodes = self._face_cnodes(etype, fidx, idxs)
 
         return itype, vpts.swapaxes(0, 1), spts.swapaxes(0, 1), cnodes
@@ -381,7 +381,7 @@ class SampledSpanwise(_SpanwiseBase, AlltoallMixin):
         out = []
         for m, (itype, vpts, spts, cnodes) in zip(means, self.fgroups):
             m = m.reshape(*spts.shape[:2], -1)
-            vsoln = interp_pts(self._vis_op(itype), m.swapaxes(0, 1))
+            vsoln = apply_op(self._vis_op(itype), m.swapaxes(0, 1))
             out.append((itype, vsoln.swapaxes(0, 1), vpts, cnodes))
 
         return out

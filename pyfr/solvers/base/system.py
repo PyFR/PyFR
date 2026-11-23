@@ -187,10 +187,10 @@ class BaseSystem:
         self._rhs_uin_fout = set()
 
     def _load_eles(self, mesh, initsoln, nonce):
-        basismap = {b.name: b for b in subclasses(BaseShape, just_leaf=True)}
+        shapemap = {b.name: b for b in subclasses(BaseShape, just_leaf=True)}
 
         # Load the elements
-        elemap = {etype: self.elementscls(basismap[etype], spts, self.cfg,
+        elemap = {etype: self.elementscls(shapemap[etype], spts, self.cfg,
                                           mesh.spts_curved[etype])
                   for etype, spts in mesh.spts.items()}
 

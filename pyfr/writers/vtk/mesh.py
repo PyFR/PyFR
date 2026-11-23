@@ -1,7 +1,7 @@
 import numpy as np
 
 from pyfr.quality import MeshQuality
-from pyfr.shapes import interp_pts
+from pyfr.shapes import apply_op
 from pyfr.writers.vtk.base import extra_field
 from pyfr.writers.vtk.volume import BaseVolumeVTKWriter
 
@@ -59,7 +59,7 @@ class VTKMeshWriter(BaseVolumeVTKWriter):
         spts = self.mesh.spts[etype].astype(self.dtype)
 
         # Calculate node locations of VTU elements
-        vpts = interp_pts(self._mesh_op(etype), spts)
+        vpts = apply_op(self._mesh_op(etype), spts)
 
         # Append dummy z dimension for points in 2D
         if self.ndims == 2:

@@ -149,7 +149,7 @@ class _MeshAnalyser:
              'n_high_aspect', 'n_curved')
     gmins = ('min_scaled_jac', 'min_curved_scaled_jac')
 
-    def __init__(self, mesh, basismap, cfg, jac_thresh, ar_thresh,
+    def __init__(self, mesh, shapemap, cfg, jac_thresh, ar_thresh,
                  sr_thresh=0):
         self.mesh = mesh
         self.cfg = cfg
@@ -165,8 +165,8 @@ class _MeshAnalyser:
 
         for etype, spts in mesh.spts.items():
             curved = mesh.spts_curved[etype]
-            basis = basismap[etype](len(spts), cfg)
-            mm = MeshMetrics(basis, spts, curved)
+            shape = shapemap[etype](len(spts), cfg)
+            mm = MeshMetrics(shape, spts, curved)
             m = element_metrics(mm)
             n_curved = int(np.sum(curved))
 
@@ -178,7 +178,7 @@ class _MeshAnalyser:
             n_ha = int(np.sum(np.any(m.aspect > ar_thresh, axis=0)))
 
             self.etypes[etype] = EleInfo(
-                mm.neles, basis.nupts, mm.nmpts, basis.nsptsord, curved,
+                mm.neles, shape.nupts, mm.nmpts, shape.nsptsord, curved,
                 mesh.eidxs[etype], m, n_inv, n_nan, n_pj, n_ha
             )
 
@@ -517,9 +517,9 @@ class MeshCLIPlugin(BaseCLIPlugin):
         if args.order is not None:
             cfg.set('solver', 'order', args.order)
 
-        basismap = {b.name: b for b in subclasses(BaseShape, just_leaf=True)}
+        shapemap = {b.name: b for b in subclasses(BaseShape, just_leaf=True)}
 
-        ma = _MeshAnalyser(reader.mesh, basismap, cfg, args.jac_thresh,
+        ma = _MeshAnalyser(reader.mesh, shapemap, cfg, args.jac_thresh,
                            args.ar_thresh, args.nsr_thresh)
 
         if ma.reduce(args.worst):

@@ -14,7 +14,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         elif self.grad_fusion:
             bufs |= {'grad_upts'}
 
-        if self.basis.fpts_in_upts and self.grad_fusion:
+        if self.shape.fpts_in_upts and self.grad_fusion:
             bufs -= {'vect_fpts'}
 
         return bufs
@@ -23,7 +23,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         super().set_backend(backend, nonce)
 
         # Ensure we point to the correct gradient array
-        if self.basis.fpts_in_upts:
+        if self.shape.fpts_in_upts:
             if self.grad_fusion:
                 self.get_vect_fpts_for_inters = self._get_grad_upts_for_inters
             else:
@@ -40,7 +40,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         regions = self.mesh_regions
 
         # Uncorrected gradient at the solution points
-        if self.basis.order > 0:
+        if self.shape.order > 0:
             kernels['gradpcoru_upts'] = lambda uin: kernel(
                 'mul', self.opmat('M4'), self.scal_upts[uin],
                 out=self._grad_upts
@@ -49,15 +49,15 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         # Correct using the common solution jumps at the flux points
         kernels['gradcoru_upts'] = lambda: kernel(
             'mul', self.opmat('M6'), self._comm_fpts,
-            out=self._grad_upts, beta=float(self.basis.order > 0)
+            out=self._grad_upts, beta=float(self.shape.order > 0)
         )
 
         # Template arguments for the physical gradient kernel
         tplargs = {
             'ndims': self.ndims,
             'nvars': self.nvars,
-            'nverts': len(self.basis.linspts),
-            'jac_exprs': self.basis.jac_exprs
+            'nverts': len(self.shape.linspts),
+            'jac_exprs': self.shape.jac_exprs
         }
 
         gradcoru_phys = []
@@ -79,7 +79,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
 
         kernels['gradcoru_phys'] = lambda: slicedk(k() for k in gradcoru_phys)
 
-        if not self.grad_fusion or self.basis.order == 0:
+        if not self.grad_fusion or self.shape.order == 0:
             kernels['gradcoru_phys_upts'] = kernels['gradcoru_phys']
 
         def gradcoru_fpts():
@@ -95,10 +95,10 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
             return self._be.unordered_meta_kernel(muls)
 
         # Elide the interpolation if possible
-        if not (self.basis.fpts_in_upts and self.grad_fusion):
+        if not (self.shape.fpts_in_upts and self.grad_fusion):
             kernels['gradcoru_fpts'] = gradcoru_fpts
 
-        if self.fluxaa and self.basis.order > 0:
+        if self.fluxaa and self.shape.order > 0:
             def gradcoru_qpts():
                 nupts, nqpts = self.nupts, self.nqpts
                 vupts, vqpts = self._vect_upts, self._vect_qpts
@@ -116,6 +116,6 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
     @inters_map
     def _get_grad_upts_for_inters(self, eidxs, fidx):
         rmap = self.srtd_face_fpts[fidx][eidxs]
-        fmap = self.basis.fpts_map_upts[rmap]
+        fmap = self.shape.fpts_map_upts[rmap]
         return self._grad_upts.mid, fmap, self.nupts
 

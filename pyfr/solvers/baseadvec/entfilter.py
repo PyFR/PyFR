@@ -74,10 +74,10 @@ class EntropyFilter(BaseShockCapturing):
         form = cfg.get('solver-entropy-filter', 'formulation', 'nonlinear')
         invvdm, vdm_ef = self._build_operators(eles, form)
 
-        if eles.basis.fpts_in_upts:
+        if eles.shape.fpts_in_upts:
             m0 = None
         else:
-            m0 = be.const_matrix(eles.basis.m0)
+            m0 = be.const_matrix(eles.shape.m0)
 
         # Build template arguments
         eftplargs = self._build_tplargs(eles, cfg, nfaces, form)
@@ -106,11 +106,11 @@ class EntropyFilter(BaseShockCapturing):
         if form == 'linearised':
             return None, None
         elif form == 'nonlinear':
-            invvdm = be.const_matrix(eles.basis.ubasis.invvdm.T)
-            vdm = eles.basis.ubasis.vdm.T
+            invvdm = be.const_matrix(eles.shape.ubasis.invvdm.T)
+            vdm = eles.shape.ubasis.vdm.T
 
-            if not eles.basis.fpts_in_upts:
-                vdmf = eles.basis.ubasis.vdm_at(eles.basis.fpts).T
+            if not eles.shape.fpts_in_upts:
+                vdmf = eles.shape.ubasis.vdm_at(eles.shape.fpts).T
                 vdm = np.vstack([vdm, vdmf])
 
             return invvdm, be.const_matrix(vdm)
@@ -118,16 +118,16 @@ class EntropyFilter(BaseShockCapturing):
             raise ValueError('Invalid entropy filter formulation.')
 
     def _build_tplargs(self, eles, cfg, nfaces, form):
-        fpts_in_upts = eles.basis.fpts_in_upts
+        fpts_in_upts = eles.shape.fpts_in_upts
         nefpts = eles.nupts if fpts_in_upts else eles.nupts + eles.nfpts
-        ub = eles.basis.ubasis
+        ub = eles.shape.ubasis
 
         return {
             'ndims': eles.ndims, 'nupts': eles.nupts,
             'nfpts': eles.nfpts, 'nefpts': nefpts,
             'nvars': eles.nvars, 'nfaces': nfaces,
             'c': cfg.items_as('constants', float),
-            'order': eles.basis.order,
+            'order': eles.shape.order,
             'fpts_in_upts': fpts_in_upts,
             'd_min': cfg.getfloat('solver-entropy-filter', 'd-min', 1e-6),
             'p_min': self._p_min,

@@ -89,7 +89,7 @@ class BackendFieldReducer:
         except NoOptionError:
             r = get_quadrule(ename, rname, eles.nupts)
 
-        m0 = eles.basis.ubasis.nodal_basis_at(r.pts)
+        m0 = eles.shape.ubasis.nodal_basis_at(r.pts)
 
         # Skip interpolation if m0 is identity
         if (m0.shape[0] == m0.shape[1] and

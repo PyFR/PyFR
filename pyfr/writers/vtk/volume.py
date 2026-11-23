@@ -2,7 +2,7 @@ import numpy as np
 
 from pyfr.bases import get_basis
 from pyfr.cache import memoize
-from pyfr.shapes import BaseShape, interp_pts
+from pyfr.shapes import BaseShape, apply_op
 from pyfr.subdiv import get_subdiv
 from pyfr.util import subclass_where
 from pyfr.writers.vtk.base import BaseVTKWriter
@@ -68,9 +68,9 @@ class VTKVolumeWriter(BaseVolumeVTKWriter):
         svpts = self._svpts(etype)
 
         # Basis
-        basis = shapecls(len(self.mesh.spts[etype]), cfg)
+        shape = shapecls(len(self.mesh.spts[etype]), cfg)
 
-        soln_op = basis.ubasis.nodal_basis_at(svpts)
+        soln_op = shape.ubasis.nodal_basis_at(svpts)
 
         # Linear basis for vertex data
         linspts = shapecls.std_ele(1)
@@ -91,13 +91,13 @@ class VTKVolumeWriter(BaseVolumeVTKWriter):
         soln_vtu_op, lin_vtu_op = self._opmats(etype, self.cfg)
 
         # Calculate node locations of VTU elements
-        vpts = interp_pts(self._mesh_op(etype), spts)
+        vpts = apply_op(self._mesh_op(etype), spts)
 
         # Pre-process the solution at upts
         soln = self.source.to_pvars(soln, self.soln.groups)
 
         # Interpolate the solution to the vis points
-        vsoln = interp_pts(soln_vtu_op, soln)
+        vsoln = apply_op(soln_vtu_op, soln)
 
         # Run postproc plugins at svpts (views into vsoln/vpts)
         pointf |= self._postproc(vsoln, vpts)
@@ -118,6 +118,6 @@ class VTKVolumeWriter(BaseVolumeVTKWriter):
                 data = np.moveaxis(aux[f.name], 0, 1)
                 # At order 1 nupts == nlpts, so vertices win the tie
                 op = lin_vtu_op if data.shape[0] == nlpts else soln_vtu_op
-                pointf[f.name] = interp_pts(op, data)
+                pointf[f.name] = apply_op(op, data)
 
         return vpts, vsoln, curved, cellf, pointf
