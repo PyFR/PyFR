@@ -62,6 +62,11 @@ class PrescribedMotion(BaseMotion):
     def __init__(self, intg, cfgsect, tol):
         super().__init__(intg, cfgsect, tol)
 
+        self._simp = Simplifier().simplify_fully
+
+        # Derivatives are taken with respect to t
+        self._diff = Differentiator({'t'}, set(), set(), lambda n: f'_d_{n}')
+
         self.kin = self._kinematics()
 
         # The state is evaluated on the host from the expressions themselves
@@ -74,44 +79,45 @@ class PrescribedMotion(BaseMotion):
 
         self.advance(intg.tcurr)
 
-    def _kinematics(self):
-        cfg, cfgsect, ndims = self.cfg, self.cfgsect, self.ndims
+    def _cfgexpr(self, name):
+        cfg, cfgsect = self.cfg, self.cfgsect
 
-        comps = 'xyz'[:ndims]
         csubs = cfg.items('constants') | {'pi': str(math.pi)}
-        simp = Simplifier().simplify_fully
+        expr = parse_expr(cfg.getexpr(cfgsect, name, '0.0', subs=csubs))
 
-        # Differentiate along t with a unit tangent
-        diff = Differentiator({'t'}, set(), set(), lambda n: f'_d_{n}')
-        seed = {'_d_t': Int(1)}
+        # Ensure the expression depends upon t alone
+        for n in walk_expr(expr):
+            if isinstance(n, Var) and n.name != 't':
+                raise ValueError(f'Unknown variable {n.name!r} in option '
+                                 f'{name!r} of [{cfgsect}]')
 
-        def cfgexpr(name):
-            expr = parse_expr(cfg.getexpr(cfgsect, name, '0.0', subs=csubs))
+        return self._simp(expr)
 
-            # Ensure the expression depends upon t alone
-            for n in walk_expr(expr):
-                if isinstance(n, Var) and n.name != 't':
-                    raise ValueError(f'Unknown variable {n.name!r} in option '
-                                     f'{name!r} of [{cfgsect}]')
+    def _ddt(self, expr):
+        dexpr = self._diff.diff(expr)
 
-            return simp(expr)
+        # Seed the tangent of t with one
+        return self._simp(rename_vars(dexpr, {'_d_t': Int(1)}))
 
-        def d(expr):
-            return simp(rename_vars(diff.diff(expr), seed))
-
+    def _translation(self):
         kin = {}
-        for c in comps:
-            kin[f'frame_loc_{c}'] = loc = cfgexpr(f'frame-loc-{c}')
-            kin[f'frame_velo_{c}'] = velo = d(loc)
-            kin[f'frame_accel_{c}'] = d(velo)
+        for c in 'xyz'[:self.ndims]:
+            kin[f'frame_loc_{c}'] = loc = self._cfgexpr(f'frame-loc-{c}')
+            kin[f'frame_velo_{c}'] = velo = self._ddt(loc)
+            kin[f'frame_accel_{c}'] = self._ddt(velo)
+
+        return kin
+
+    def _rotation(self):
+        ndims, simp, d = self.ndims, self._simp, self._ddt
 
         if ndims == 2:
             rot = {'rx': Float(0.0), 'ry': Float(0.0),
-                   'rz': cfgexpr('frame-rot-z')}
+                   'rz': self._cfgexpr('frame-rot-z')}
             omega = ['0.0', '0.0', 'drz']
             rmat = [['cz', '-sz'], ['sz', 'cz']]
         else:
-            rot = {f'r{c}': cfgexpr(f'frame-rot-{c}') for c in 'xyz'}
+            rot = {f'r{c}': self._cfgexpr(f'frame-rot-{c}') for c in 'xyz'}
 
             # Body-frame angular velocity of the ZYX Euler angle sequence
             omega = ['drx - drz*sy', 'dry*cx + drz*sx*cy',
@@ -127,6 +133,7 @@ class PrescribedMotion(BaseMotion):
                 for f in ('sin', 'cos') for c in 'xyz'}
         subs |= {f'd{k}': d(v) for k, v in rot.items()}
 
+        kin = {}
         for c, w in zip('xyz', omega):
             w = simp(_subst(w, subs))
 
@@ -137,15 +144,29 @@ class PrescribedMotion(BaseMotion):
         for i, j in ndrange(ndims, ndims):
             kin[f'frame_rmat_{i}{j}'] = simp(_subst(rmat[i][j], subs))
 
+        return kin
+
+    def _body_accel(self, kin):
+        ndims = self.ndims
+        comps = 'xyz'[:ndims]
+
+        # Linear acceleration and the rotation matrix which resolves it
+        subs = {f'a{j}': kin[f'frame_accel_{c}'] for j, c in enumerate(comps)}
+        subs |= {f'R{i}{j}': kin[f'frame_rmat_{i}{j}']
+                 for i, j in ndrange(ndims, ndims)}
+
         # Linear acceleration resolved in body axes, R^T*a
-        asubs = {f'a{j}': kin[f'frame_accel_{c}'] for j, c in enumerate(comps)}
-        asubs |= {f'R{i}{j}': kin[f'frame_rmat_{i}{j}']
-                  for i, j in ndrange(ndims, ndims)}
+        bkin = {}
         for i, c in enumerate(comps):
             ba = ' + '.join(f'R{j}{i}*a{j}' for j in range(ndims))
-            kin[f'frame_baccel_{c}'] = simp(_subst(ba, asubs))
+            bkin[f'frame_baccel_{c}'] = self._simp(_subst(ba, subs))
 
-        return kin
+        return bkin
+
+    def _kinematics(self):
+        kin = self._translation() | self._rotation()
+
+        return kin | self._body_accel(kin)
 
     def advance(self, t, force=None, moment=None):
         comps = 'xyz'[:self.ndims]
@@ -183,7 +204,7 @@ class FreeMotion(BaseMotion):
             self.inertia = np.array(inertia).reshape(3, 3)
 
         def vec(name):
-            v = cfg.getliteral(cfgsect, name, (0.,)*ndims)
+            v = cfg.getliteral(cfgsect, name, (0,)*ndims)
 
             return np.array(v, dtype=float)
 
@@ -215,9 +236,9 @@ class FreeMotion(BaseMotion):
         cfg, cfgsect = self.cfg, self.cfgsect
 
         if self.ndims == 3:
-            v = cfg.getliteral(cfgsect, name, (0.,)*3)
-        elif np.isscalar(v := cfg.getliteral(cfgsect, name, 0.)):
-            v = [0., 0., v]
+            v = cfg.getliteral(cfgsect, name, (0,)*3)
+        elif np.isscalar(v := cfg.getliteral(cfgsect, name, 0)):
+            v = [0, 0, v]
         else:
             raise ValueError(f'{name} must be a scalar in 2D')
 
@@ -242,15 +263,10 @@ class FreeMotion(BaseMotion):
 
     def _parse_rot0(self):
         cfg, cfgsect = self.cfg, self.cfgsect
-        has_euler = cfg.hasopt(cfgsect, 'frame-rot0-euler')
-        has_quat = cfg.hasopt(cfgsect, 'frame-rot0-quat')
 
-        if has_euler and has_quat:
-            raise ValueError('Specify frame-rot0-euler or frame-rot0-quat, '
-                             'not both')
-        elif has_euler:
+        if cfg.hasopt(cfgsect, 'frame-rot0-euler'):
             return Quaternion.from_euler(*self._rvec('frame-rot0-euler'))
-        elif has_quat:
+        elif cfg.hasopt(cfgsect, 'frame-rot0-quat'):
             q = Quaternion(cfg.getliteral(cfgsect, 'frame-rot0-quat'))
 
             # Only rotations about z exist in 2D
@@ -259,7 +275,7 @@ class FreeMotion(BaseMotion):
 
             return q.normalised()
         else:
-            return Quaternion([1., 0., 0., 0.])
+            return Quaternion([1, 0, 0, 0])
 
     def externs(self):
         ndims = self.ndims
@@ -300,7 +316,7 @@ class FreeMotion(BaseMotion):
         dt = t - self.tode_last
 
         if ndims == 2:
-            falpha = np.array([0., 0., moment[0] / self.inertia])
+            falpha = np.array([0, 0, moment[0] / self.inertia])
             falpha *= self._rot_mask
         else:
             gyro = np.cross(self.fomega, self.inertia @ self.fomega)
@@ -351,10 +367,10 @@ class NIRFPlugin(SeriesWriterMixin, BaseSolverPlugin):
         self._tadv = None
 
         # Time of the last load integration and its result
-        self._loads = None, None
+        self._loads = (None, None)
 
         # Centre of rotation, about which the moments are also taken
-        origin = cfg.getliteral(cfgsect, 'center-of-rot', (0.,)*ndims)
+        origin = cfg.getliteral(cfgsect, 'center-of-rot', (0,)*ndims)
         self.origin = np.array(origin, dtype=float)
 
         motioncls = subclass_where(BaseMotion, name=cfg.get(cfgsect, 'motion'))
@@ -524,7 +540,7 @@ class NIRFPlugin(SeriesWriterMixin, BaseSolverPlugin):
         return fields + [f'f{c}' for c in comps] + [f'm{c}' for c in rcomps]
 
     def _transform_ics(self, intg):
-        ndims, m, system = self.ndims, self.motion, intg.system
+        ndims, m = self.ndims, self.motion
 
         # Frame parameters at the start of the run
         state = {'loc': m.floc, 'velo': m.fvelo, 'omega': m.fomega}
@@ -535,12 +551,7 @@ class NIRFPlugin(SeriesWriterMixin, BaseSolverPlugin):
 
         body_frame = self._body_frame(kin, [Var(c) for c in 'xyz'[:ndims]])
 
-        for eles, eb in zip(system.ele_map.values(), system.ele_banks):
-            cons = eles.set_ics_from_cfg(body_frame)
-
-            # Write the initial conditions to each of the RHS banks
-            for b in eb[:system.nrhs]:
-                b.set(cons)
+        intg.system.rewrite_ic_exprs(body_frame)
 
     def _integrate_loads(self, intg):
         if self._loads[0] != intg.tcurr:
@@ -550,7 +561,7 @@ class NIRFPlugin(SeriesWriterMixin, BaseSolverPlugin):
             fm = self._ff_int(intg).sum(axis=0)
             comm.Allreduce(mpi.IN_PLACE, fm, op=mpi.SUM)
 
-            self._loads = intg.tcurr, (fm[:self.ndims], fm[self.ndims:])
+            self._loads = (intg.tcurr, (fm[:self.ndims], fm[self.ndims:]))
 
         return self._loads[1]
 
@@ -589,10 +600,11 @@ class NIRFPlugin(SeriesWriterMixin, BaseSolverPlugin):
                 m, nr = self.motion, len(moment)
                 euler = m.fquat.to_euler()
 
-                self._write(intg.tcurr, [
-                    *euler[-nr:], *m.fomega[-nr:], *m.falpha[-nr:],
-                    *m.floc, *m.fvelo, *m.faccel, *force, *moment
-                ])
+                # Angular state about each rotational axis, then the rest
+                row = [*euler[-nr:], *m.fomega[-nr:], *m.falpha[-nr:],
+                       *m.floc, *m.fvelo, *m.faccel, *force, *moment]
+
+                self._write(intg.tcurr, row)
 
     def _serialise_data(self, intg):
         # A writer may ask for the state before this plugin has been called
@@ -600,7 +612,8 @@ class NIRFPlugin(SeriesWriterMixin, BaseSolverPlugin):
 
         m, pad = self.motion, (0, 3 - self.ndims)
 
-        return np.void((
-            np.pad(m.floc, pad), np.pad(m.fvelo, pad), np.pad(m.faccel, pad),
-            m.fquat.q, m.fomega, m.falpha, m.tode_last
-        ), dtype=self._sdata_dtype)
+        # Saved state, with the linear vectors padded to three components
+        lin = [np.pad(v, pad) for v in (m.floc, m.fvelo, m.faccel)]
+        sdata = (*lin, m.fquat.q, m.fomega, m.falpha, m.tode_last)
+
+        return np.void(sdata, dtype=self._sdata_dtype)

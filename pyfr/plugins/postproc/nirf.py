@@ -25,7 +25,7 @@ class NIRFPostProc(BasePostProcPlugin):
 
         # Centre of rotation in the body and lab frames
         x0 = soln.config.getliteral('solver-plugin-nirf', 'center-of-rot',
-                                    (0.,)*ndims)
+                                    (0,)*ndims)
         self._x0 = np.array(x0, dtype=float)
         self._x0lab = self._x0.copy()
         if self.cfg.getbool(self.cfgsect, 'apply-translation', False):
