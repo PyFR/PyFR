@@ -1,10 +1,20 @@
 from math import prod
 
 from pyfr.backends.base.generator import BaseKernelGenerator
+from pyfr.backends.openmp.simd import NotVectorisable, SIMDLowering
+from pyfr.dsl.codegen import CodeGenerator
 from pyfr.dsl.nodes import Binary, DSLVar, Index, Int, Program, Var, VarDecl
 
 
+class OpenMPCodeGenerator(CodeGenerator):
+    # Vectorise the lane loops across the items of a SoA group
+    region_markers = {'simd': '#pragma omp simd',
+                      'unroll': '#pragma GCC unroll {0}'}
+
+
 class OpenMPKernelGenerator(BaseKernelGenerator):
+    codegen_cls = OpenMPCodeGenerator
+
     # Math functions we lower to helper functions in all kernels
     lower_fns = BaseKernelGenerator.lower_fns | {'exp', 'log'}
 
@@ -12,9 +22,10 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
     _xidx = '_xi + _xj'
     _aosoa = '(_xi / @soasz*@nv + @v)*@soasz + _xj'
     _bcast = '@c % @ld + (@c / @ld)*@ld*@r'
-    _tile = ('((_ib*BLK_SZ + _xi) / @soasz*@pr*@pc'
-             ' + (@r / @tr)*(@pc / @tc)*@tr*@tc + (@c / @tc)*@tr*@tc'
-             ' + (@r % @tr)*@tc + @c % @tc)*@soasz + _xj')
+    _tilein = ('(@r / @tr)*(@pc / @tc)*@tr*@tc'
+               ' + (@c / @tc)*@tr*@tc + (@r % @tr)*@tc + @c % @tc')
+    _tile = f'((_ib*BLK_SZ + _xi) / @soasz*@pr*@pc + {_tilein})*@soasz + _xj'
+    _tileoff = f'({_tilein})*@soasz'
 
     # Prefix for variables in shared storage, which lives on the stack
     _shared_prfx = None
@@ -22,9 +33,16 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
     # Largest lane-group size
     max_lanes = 1
 
+    # Whether the body is vectorised across the items of a SoA group
+    vectorised = False
+
     def _lane_decls(self):
-        return '\n'.join(f'{d.dtype} {d.name}{d.cdimstr};'
-                         for d in self.lanemodel.decls)
+        decls = self.lanemodel.decls
+
+        # Give each item of the group its own copy of the storage
+        sfx = f'[{self.soasz}]' if self.vectorised else ''
+
+        return '\n'.join(f'{d.dtype} {d.name}{d.cdimstr}{sfx};' for d in decls)
 
     def _render_body_preamble_epilogue(self):
         self._staged_reduces = []
@@ -38,6 +56,16 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
             if va.isreduce and va.isview:
                 self._staged_reduces.append(va)
                 ast = self._stage_reduce(ast, va)
+
+        # Vectorise a cooperative body across the items of a SoA group
+        if self.lanemodel.coop and not self.lanemodel.fenced:
+            ast = self._lower_intrinsics(ast)
+            shared = [d.name for d in self.lanemodel.decls]
+            try:
+                ast = SIMDLowering(self.soasz, shared).lower(ast)
+                self.vectorised = True
+            except NotVectorisable:
+                pass
 
         return ast
 
@@ -173,14 +201,15 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
         body = f'{self._lane_decls()}\n{self.body}'
         simd = '' if self.lanemodel.coop else '#pragma omp simd'
 
-        # Walk the items of a SoA group
-        body = f'''
-            {simd}
-            for (int _xj = 0; _xj < _xjn; _xj++)
-            {{
-                {body}
-            }}
-            {rflush}'''
+        # Walk the lanes of a SoA group unless the body does so itself
+        if not self.vectorised:
+            body = f'''
+                {simd}
+                for (int _xj = 0; _xj < _xjn; _xj++)
+                {{
+                    {body}
+                }}
+                {rflush}'''
 
         def groups(bound, nxj):
             # Walk the SoA groups of a block, row by row for a 2D kernel
@@ -292,7 +321,7 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                 if self.ndim == 2 and not va.isbroadcastc:
                     kargs.append(('ixdtype_t', f'{va.name}_vrstri', None,
                                   None))
-                elif va.ncdim == 2 and va.cdims[0] > 1:
+                elif va.ncdim == 2 and va.cdims[0] > 1 and not va.istiled:
                     kargs.append(('const ixdtype_t*', f'{va.name}_vrstri',
                                   '_ib*BLK_SZ', None))
 

@@ -42,11 +42,17 @@ class CodeGenerator:
             return self._generate_statement(ast)
 
     # Lower a region kind to the text which opens it
-    def gen_region_open(self, kind):
-        return self.region_markers.get(kind)
+    def gen_region_open(self, kind, args=()):
+        marker = self.region_markers.get(kind)
+
+        # Substitute the region arguments, if any, into the marker
+        if marker is not None:
+            marker = marker.format(*(args or [''])).rstrip()
+
+        return marker
 
     def _generate_region(self, node):
-        marker = self.gen_region_open(node.kind)
+        marker = self.gen_region_open(node.kind, node.args)
 
         # Without a lowering, re-emit the pragma so the output re-parses
         if marker is None:
@@ -115,8 +121,14 @@ class CodeGenerator:
     def _generate_sizes(self, sizes):
         return ''.join(f'[{self._generate_expr(s)}]' for s in sizes)
 
+    def _decl_prefix(self, node):
+        # Lead with the qualifiers and the type, which a shared load may omit
+        quals = 'shared '*node.shared + 'const '*node.const
+
+        return quals + (f'{node.vtype} ' if node.vtype else '')
+
     def _generate_var_decl(self, node, semi=True):
-        result = 'const ' * node.const + f'{node.vtype} {node.name}'
+        result = self._decl_prefix(node) + node.name
 
         if node.sizes:
             result += self._generate_sizes(node.sizes)
@@ -127,8 +139,7 @@ class CodeGenerator:
         return result + ';' if semi else result
 
     def _generate_multi_decl(self, node, semi=True):
-        first = node.decls[0]
-        prefix = 'const ' * first.const + first.vtype + ' '
+        prefix = self._decl_prefix(node.decls[0])
 
         parts = []
         for d in node.decls:
@@ -332,9 +343,11 @@ class CodeGenerator:
                 args = [self._generate_expr(a) for a in args]
                 return self.intrinsics[name].format(*args)
             case DSLCall(name, args):
-                raise ValueError(f'Unresolved DSL call: @{name}')
+                astr = ', '.join(self._generate_subexpr(a) for a in args)
+
+                return f'@{name}({astr})'
             case DSLVar(name):
-                raise ValueError(f'Unresolved DSL variable: @{name}')
+                return f'@{name}'
             case _:
                 raise ValueError('Unknown expression type: '
                                  f'{type(expr).__name__}')

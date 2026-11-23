@@ -6,9 +6,11 @@ class OpenCLCodeGenerator(CodeGenerator):
     region_markers = {
         'fp-precise': ('#ifdef __clang__\n'
                        '_Pragma("clang fp reassociate(off) contract(off)")\n'
-                       '#endif')
+                       '#endif'),
+        'unroll': '__attribute__((opencl_unroll_hint({0})))', 'simd': ''
     }
-    intrinsics = {'sync': 'work_group_barrier(CLK_LOCAL_MEM_FENCE)'}
+    intrinsics = {'sync': 'work_group_barrier(CLK_LOCAL_MEM_FENCE)',
+                  'sync_gmem': 'PYFR_SYNC_GMEM_THREADS()'}
 
 
 class OpenCLKernelGenerator(BaseGPUKernelGenerator):

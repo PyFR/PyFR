@@ -38,7 +38,7 @@ class MetalBackend(BaseBackend):
         self.shared_budget = self.dev.maxThreadgroupMemoryLength()
 
         from pyfr.backends.metal import (blasext, compiler, gimmik, mps,
-                                         packing, linalg, provider, types)
+                                         packing, provider, types)
 
         # Create the compiler
         self.compiler = compiler.MetalCompiler(self)
@@ -60,7 +60,6 @@ class MetalBackend(BaseBackend):
 
         # Instantiate the base kernel providers
         kprovs = [blasext.MetalBlasExtKernels,
-                  linalg.MetalLinalgKernels,
                   packing.MetalPackingKernels,
                   gimmik.MetalGiMMiKKernels,
                   mps.MetalMPSKernels]

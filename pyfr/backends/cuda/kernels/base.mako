@@ -1,5 +1,7 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 // Typedefs
+typedef short int16_t;
+typedef unsigned short uint16_t;
 typedef unsigned int uint32_t;
 typedef long long int64_t;
 typedef unsigned long long uint64_t;
@@ -61,14 +63,22 @@ struct bf16 {
 __device__ static inline bf16 f32_to_bf16(float f) { return bf16(f); }
 __device__ static inline float bf16_to_f32(bf16 b) { return (float) b; }
 
-#define PYFR_THREAD_ID threadIdx.x
+// Vector loads, through the read-only cache when the source is const
+__device__ static inline void pyfr_load_vec(void *d, const void *s)
+{
+    uint4 v = __ldg((const uint4*) s);
+    memcpy(d, &v, sizeof(v));
+}
+__device__ static inline void pyfr_load_vec(void *d, void *s)
+{
+    uint4 v = *(const uint4*) s;
+    memcpy(d, &v, sizeof(v));
+}
+#define PYFR_LOAD_VEC(dst, src) pyfr_load_vec(dst, src)
+
 #define PYFR_BLOCK_ID blockIdx.x
 #define PYFR_BLOCK_ID_Y blockIdx.y
-#define PYFR_SYNC_THREADS() __syncthreads()
 #define PYFR_SYNC_GMEM_THREADS() __syncthreads()
-#define PYFR_SHARED __shared__
-#define PYFR_GMEM
-#define PYFR_LMEM
 
 #define TILED_IX(e, r, c, block_sz, tile_sz) \
     ((e) * (block_sz) * (block_sz) + \
@@ -85,51 +95,5 @@ __device__ void atomic_sum_fpdtype(fpdtype_t* addr, fpdtype_t val)
 // Global thread position
 #define PYFR_GLOBAL_ID_X (ixdtype_t(blockIdx.x)*blockDim.x + threadIdx.x)
 #define PYFR_GLOBAL_ID_Y (blockIdx.y*blockDim.y + threadIdx.y)
-
-// Subgroup shuffle primitive
-#define PYFR_SHFL_XOR(v, o) __shfl_xor_sync(0xffffffff, v, o)
-
-<%def name="argmax_storage(ftype)">
-<% nsg = -(-nthreads // sgsize) %>
-    PYFR_SHARED ${ftype} argmaxv[${nsg}];
-    PYFR_SHARED short argmaxi[${nsg}];
-</%def>
-
-<%def name="argmax_reduce(ftype, val, idx, dst)">
-<% nsg = -(-nthreads // sgsize) %>
-    {
-        short amsg = PYFR_THREAD_ID / ${sgsize}, amsl = PYFR_THREAD_ID % ${sgsize};
-        ${ftype} amv = ${val}; int ami = ${idx};
-        for (int amo = ${sgsize} / 2; amo > 0; amo >>= 1) {
-            ${ftype} amov = PYFR_SHFL_XOR(amv, amo);
-            int amoi = PYFR_SHFL_XOR(ami, amo);
-            if (amov > amv || (amov == amv && amoi < ami)) { amv = amov; ami = amoi; }
-        }
-        if (amsl == 0) { argmaxv[amsg] = amv; argmaxi[amsg] = ami; }
-        PYFR_SYNC_THREADS();
-        amv = argmaxv[0]; ami = argmaxi[0];
-        for (int amw = 1; amw < ${nsg}; amw++)
-            if (argmaxv[amw] > amv || (argmaxv[amw] == amv && argmaxi[amw] < ami)) { amv = argmaxv[amw]; ami = argmaxi[amw]; }
-        if (PYFR_THREAD_ID == 0) ${dst} = ami;
-        PYFR_SYNC_THREADS();
-    }
-</%def>
-
-<%def name="_kdecl(name, bounds)">\
-% if bounds:
-__global__ __launch_bounds__(${bounds}) void ${name}\
-% else:
-__global__ void ${name}\
-% endif
-</%def>
-<%def name="_karg(intent, t, n)">\
-% if intent == 'in':
-const ${t}* __restrict__ ${n}\
-% elif intent == 'out':
-${t}* __restrict__ ${n}\
-% else:
-${t} ${n}\
-% endif
-</%def>
 
 ${next.body()}

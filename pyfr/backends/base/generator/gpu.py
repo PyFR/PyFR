@@ -1,3 +1,5 @@
+from math import prod
+
 from pyfr.backends.base.generator.base import BaseKernelGenerator
 from pyfr.backends.base.generator.lanes import StagedRowLanes
 from pyfr.backends.base.generator.reduce import butterfly, gather
@@ -33,14 +35,15 @@ class BaseGPUKernelGenerator(BaseKernelGenerator):
     _xidx = '_x'
     _aosoa = '(_x / @soasz*@nv + @v)*@soasz + _x % @soasz'
     _bcast = '@c'
-    _tile = ('_x*@pr*@pc + (@r / @tr)*(@pc / @tc)*@tr*@tc'
-             ' + (@c / @tc)*@tr*@tc + (@r % @tr)*@tc + @c % @tc')
+    _tileoff = ('(@r / @tr)*(@pc / @tc)*@tr*@tc'
+                ' + (@c / @tc)*@tr*@tc + (@r % @tr)*@tc + @c % @tc')
+    _tile = '_x*@pr*@pc + ' + _tileoff
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # Prologue and loop of the launch shape
-        self._prologue, loop = self._lane_indexing()
+        # Prologue, loop and item of the launch shape
+        self._prologue, loop, self._item = self._lane_indexing()
 
         # Specialise
         self.preamble += loop
@@ -56,7 +59,7 @@ class BaseGPUKernelGenerator(BaseKernelGenerator):
     def block(self):
         # Count the lanes along each of the three axes of a block
         if self.lanemodel.coop:
-            return (self.lanemodel.size, 1, 1)
+            return (self.lanemodel.size*self.lanemodel.groups, 1, 1)
         elif self.ndim == 1:
             return self.block1d
         else:
@@ -77,7 +80,7 @@ class BaseGPUKernelGenerator(BaseKernelGenerator):
 
                 if self.ndim == 2 and not va.isbroadcastc:
                     kargs.append((False, False, 'ixdtype_t', f'{n}_vrstri'))
-                elif va.ncdim == 2 and va.cdims[0] > 1:
+                elif va.ncdim == 2 and va.cdims[0] > 1 and not va.istiled:
                     kargs.append((True, True, 'ixdtype_t', f'{n}_vrstri'))
             # Arrays
             elif self.needs_ldim(va):
@@ -91,6 +94,16 @@ class BaseGPUKernelGenerator(BaseKernelGenerator):
             return self._ptr_arg.format(c='const ' if const else '', t=t, n=n)
         else:
             return f'{t} {n}'
+
+    @property
+    def _launch_bounds(self):
+        nthrds = prod(self.block)
+
+        # Keep 512 lanes of a cooperative kernel resident per multiprocessor
+        if self.lanemodel.coop:
+            return f'__launch_bounds__({nthrds}, {max(1, 512 // nthrds)})'
+        else:
+            return f'__launch_bounds__({nthrds})'
 
     def ldim_size(self, name, factor=1):
         return Var(f'ld{name}')
@@ -185,25 +198,29 @@ class BaseGPUKernelGenerator(BaseKernelGenerator):
         return '\n'.join(f'{prfx} {d.dtype} {d.name}{model.extents(d)};'
                          for d in model.decls)
 
+    def _group_index(self, lsz):
+        return f'_bl / {lsz}'
+
     def _lane_indexing(self):
         # Have the lane-group of the block take an item of the range
         if self.lanemodel.coop:
-            pro, loop = f'ixdtype_t _x = {self._grp};', ''
+            idx = self.lanemodel.indexing
+            pro, loop, item = idx.prologue, '', idx.item
         # Have each lane take an item of the range
         elif self.ndim == 1:
-            pro = f'ixdtype_t _x = {self._gid};'
+            pro, item = f'ixdtype_t _x = {self._gid};', ''
             loop = 'if (_x < _nx)'
         # Have each lane take a share of the rows of an item of the range
         else:
             blk_y, lid_y = self.block2d[1], self._lid[1]
-            pro = f'ixdtype_t _x = {self._gid};'
+            pro, item = f'ixdtype_t _x = {self._gid};', ''
             loop = f'''
                 ixdtype_t _ysize = (_ny + {blk_y - 1}) / {blk_y};
                 ixdtype_t _ystart = {lid_y}*_ysize;
                 ixdtype_t _yend = min(_ny, _ystart + _ysize);
                 for (ixdtype_t _y = _ystart; _x < _nx && _y < _yend; _y++)'''
 
-        return pro, loop
+        return pro, loop, item
 
     def render(self):
         spec = self._render_spec()
@@ -215,6 +232,7 @@ class BaseGPUKernelGenerator(BaseKernelGenerator):
                 {self._prologue}
                 {self.preamble}
                 {{
+                    {self._item}
                     {self.body}
                 }}
                 {self.epilogue}

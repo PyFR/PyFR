@@ -6,9 +6,11 @@ from pyfr.dsl.codegen import CodeGenerator
 
 class MetalCodeGenerator(CodeGenerator):
     region_markers = {
-        'fp-precise': '_Pragma("clang fp reassociate(off) contract(off)")'
+        'fp-precise': '_Pragma("clang fp reassociate(off) contract(off)")',
+        'unroll': '#pragma unroll {0}', 'simd': ''
     }
-    intrinsics = {'sync': 'threadgroup_barrier(mem_flags::mem_threadgroup)'}
+    intrinsics = {'sync': 'threadgroup_barrier(mem_flags::mem_threadgroup)',
+                  'sync_gmem': 'PYFR_SYNC_GMEM_THREADS()'}
 
 
 class MetalKernelGenerator(BaseGPUKernelGenerator):
@@ -39,8 +41,8 @@ class MetalKernelGenerator(BaseGPUKernelGenerator):
                  *(self._karg(*a) for a in kargs if a[0])]
 
         # Finally, the attribute arguments referenced by the kernel
-        src = (f'{self._prologue} {self.preamble} {self.body} '
-               f'{self.epilogue}')
+        src = (f'{self._lane_decls()} {self._prologue} {self._item} '
+               f'{self.preamble} {self.body} {self.epilogue}')
         kargs.append('uint2 _tpig [[thread_position_in_grid]]')
         if re.search(r'\b_tpitg\b', src):
             kargs.append('uint2 _tpitg [[thread_position_in_threadgroup]]')

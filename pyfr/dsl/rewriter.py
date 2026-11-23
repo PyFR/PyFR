@@ -1,6 +1,6 @@
 from pyfr.dsl.lexer import Lexer
 from pyfr.dsl.nodes import (DSLVar, Float, Transformer, Var, VarDecl,
-                            unwrap_index, walk_ast)
+                            unwrap_index)
 from pyfr.dsl.parser import Parser
 
 
@@ -50,14 +50,8 @@ class Rewriter(Transformer):
 
     def transform(self, node, args):
         self.args = args
-        node = self.visit(node)
 
-        # Any argument reference which survives had no applicable rule
-        for n in walk_ast(node):
-            if isinstance(n, Var) and n.name in args:
-                raise ValueError(f'No matching rule for {n.name}')
-
-        return node
+        return self.visit(node)
 
     def visit(self, node):
         # Check the arity is consistent
@@ -66,18 +60,20 @@ class Rewriter(Transformer):
         if n in args and len(ix) > args[n].nidx:
             raise ValueError(f'Too many indices for {n}')
 
-        return super().visit(node)
+        # Pass the rules the complete chain of indices of an argument reference
+        if n in args:
+            ix = [self.visit(i) for i in ix]
 
-    def rewrite(self, node):
-        # Extract the name and indices, then look up a matching arg
-        n, ix = unwrap_index(node)
-        if n in self.args:
-            arg = self.args[n]
+            # Extract the name and indices, then look up a matching arg
+            arg = args[n]
             for r in self.rules:
                 if (result := r(n, ix, arg)) is not None:
                     return result
 
-        return node
+            # Any argument reference which survives had no applicable rule
+            raise ValueError(f'No matching rule for {n}')
+        else:
+            return super().visit(node)
 
 
 class FloatSuffixer(Transformer):

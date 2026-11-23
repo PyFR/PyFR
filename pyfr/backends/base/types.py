@@ -22,6 +22,18 @@ class _MatrixArg:
             case _:
                 return [self]
 
+    def view_disps(self, rmap, cmap, nvcol):
+        # SoA size
+        k, csubsz = self.backend.soasz, self.backend.csubsz
+        blkdisp = (cmap*nvcol // self.leaddim)*self.blocksz
+
+        # Row/column displacements
+        rowdisp = rmap*self.leaddim
+        cmapmod = cmap % csubsz if self.backend.blocks else cmap
+        coldisp = (cmapmod // k)*k*nvcol + cmapmod % k
+
+        return blkdisp + rowdisp + coldisp, self.leaddim
+
 
 class MatrixBase(_MatrixArg, _StorageBase):
     _base_tags = set()
@@ -293,6 +305,9 @@ class TiledMatrix(_StorageBase):
 
         return [self]
 
+    def view_disps(self, rmap, cmap, nvcol):
+        return cmap*self.padr*self.padc, 0
+
     def _tile(self, ary):
         # Scatter each block into its zero-padded grid of row-major tiles
         n, tr, tc = len(ary), self.trows, self.tcols
@@ -326,7 +341,8 @@ class ViewMapping:
         self.refdtype = mats[0].dtype
 
         # Valid matrix types
-        mattypes = (backend.matrix_cls, backend.matrix_slice_cls)
+        mattypes = (backend.matrix_cls, backend.matrix_slice_cls,
+                    backend.tiled_matrix_cls)
 
         # Validate the matrices
         if any(not isinstance(m, mattypes) for m in mats):
@@ -346,27 +362,17 @@ class ViewMapping:
         # Index type
         ixdtype = backend.ixdtype
 
-        # SoA size
-        k, csubsz = backend.soasz, backend.csubsz
-
         # Base offsets and leading dimensions for each point
-        offset = np.empty(self.n, dtype=ixdtype)
+        disps = np.empty(self.n, dtype=ixdtype)
         leaddim = np.empty(self.n, dtype=ixdtype)
-        blkdisp = np.empty(self.n, dtype=ixdtype)
-
-        for m in mats:
-            ix = np.where(matmap == m.mid)
-            offset[ix], leaddim[ix] = m.offset // m.itemsize, m.leaddim
-            blkdisp[ix] = (cmap[ix]*self.nvcol // m.leaddim)*m.blocksz
-
-        # Row/column displacements
-        rowdisp = rmap*leaddim
-        cmapmod = cmap % csubsz if backend.blocks else cmap
-        coldisp = (cmapmod // k)*k*self.nvcol + cmapmod % k
 
         # Compute the displacement of each point
-        disps = offset + blkdisp + rowdisp + coldisp
-        self.disps = disps.astype(ixdtype, copy=False)
+        for m in mats:
+            ix = np.where(matmap == m.mid)
+            mdisps, leaddim[ix] = m.view_disps(rmap[ix], cmap[ix], self.nvcol)
+            disps[ix] = m.offset // m.itemsize + mdisps
+
+        self.disps = disps
         self.cmap = np.asarray(cmap)
 
         # Row strides of each point

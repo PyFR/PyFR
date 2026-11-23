@@ -116,6 +116,8 @@ class MetalPointwiseKernelProvider(MetalKernelProvider,
                                      pack_scalars=True)
 
     def _instantiate_kernel(self, dims, fun, args, meta):
+        from objc import objc_object
+
         # Determine the thread group and grid sizes
         tgrp, n = meta['block'], dims[-1]*meta['lanes']
         grid = (n - n % -tgrp[0], tgrp[1], 1)
@@ -125,6 +127,8 @@ class MetalPointwiseKernelProvider(MetalKernelProvider,
             match k:
                 case int() | float():
                     kargs[i] = k
+                case objc_object():
+                    kargs[i] = (k, 0)
                 case object(data=tuple() as v):
                     kargs[i] = v
                 case object(data=v) | v:

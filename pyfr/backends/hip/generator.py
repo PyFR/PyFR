@@ -1,14 +1,14 @@
-from math import prod
-
 from pyfr.backends.base.generator import BaseGPUKernelGenerator
 from pyfr.dsl.codegen import CodeGenerator
 
 
 class HIPCodeGenerator(CodeGenerator):
     region_markers = {
-        'fp-precise': '_Pragma("clang fp reassociate(off) contract(off)")'
+        'fp-precise': '_Pragma("clang fp reassociate(off) contract(off)")',
+        'unroll': '#pragma unroll {0}', 'simd': ''
     }
-    intrinsics = {'sync': '__syncthreads()'}
+    intrinsics = {'sync': '__syncthreads()',
+                  'sync_gmem': 'PYFR_SYNC_GMEM_THREADS()'}
 
 
 class HIPKernelGenerator(BaseGPUKernelGenerator):
@@ -23,11 +23,13 @@ class HIPKernelGenerator(BaseGPUKernelGenerator):
     _function_qual = '__device__ '
     _ptr_arg = '{c}{t}* __restrict__ {n}'
 
+    def _group_index(self, lsz):
+        return f'(int) __builtin_amdgcn_readfirstlane(_bl / {lsz})'
+
     def _render_spec(self):
         kargs = [self._karg(*a) for a in self._kargs()]
 
         # Determine the launch bounds for the kernel
-        nthrds = prod(self.block)
-        kattrs = f'__global__ __launch_bounds__({nthrds})'
+        kattrs = f'__global__ {self._launch_bounds}'
 
         return '{0} void {1}({2})'.format(kattrs, self.name, ', '.join(kargs))

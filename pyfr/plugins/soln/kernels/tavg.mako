@@ -23,11 +23,12 @@ typedef ${'fpdtype_t' if use_kahan else 'double'} acctype_t;
         fpdtype_t ppc = prev[${i}] + curr;
 % if use_kahan:
         acctype_t nacc;
-        <%pyfr:fp_precise>
+        #pragma pyfr fp-precise
+        {
             fpdtype_t y = wdt*ppc - acc_comp[${i}];
             nacc = acc[${i}] + y;
             acc_comp[${i}] = (nacc - acc[${i}]) - y;
-        </%pyfr:fp_precise>
+        }
 % else:
         acctype_t nacc = acc[${i}] + wdt*ppc;
 % endif

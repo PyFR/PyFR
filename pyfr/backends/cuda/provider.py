@@ -85,7 +85,9 @@ class CUDAPointwiseKernelProvider(CUDAKernelProvider,
         block = meta['block']
         grid = get_grid_for_block(block, dims[-1]*meta['lanes'])
 
-        params = fun.make_params(grid, block)
+        # Have the launch provide the block storage of the kernel
+        fun.set_shared_size(dynm_shared=meta['storage'])
+        params = fun.make_params(grid, block, meta['storage'])
 
         # Set the iteration dimensions
         params.set_args(*dims)

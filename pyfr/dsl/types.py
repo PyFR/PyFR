@@ -89,7 +89,7 @@ class Environment:
     def resolve(self, ctype):
         return self.lookup(ctype) or SCALAR_TYPES.get(ctype, UNKNOWN)
 
-    def define(self, name, ctype, sizes=None):
+    def define(self, name, ctype, sizes):
         self.names[name] = self.resolve(ctype)
         self.decls[name] = (ctype, sizes)
 
@@ -102,7 +102,7 @@ class Environment:
                 for d in decls:
                     self.define(d.name, d.vtype, d.sizes)
             case Typedef(old, new):
-                self.define(new, old)
+                self.define(new, old, [])
 
     def get(self, name):
         return self.lookup(name) or self.default

@@ -210,7 +210,7 @@ class DerivativeGenerator:
             match node:
                 case VarDecl(_, name, sizes, init):
                     if init is not None:
-                        writes.append((name, sizes is not None, init))
+                        writes.append((name, bool(sizes), init))
                 case Assign(lhs, rhs):
                     name, indices = unwrap_index(lhs)
                     if name is not None:
@@ -706,7 +706,7 @@ class DirectionSpecialiser:
         match stmt:
             # Tangent declarations, with their non-zero initial entries
             case VarDecl(_, name, sizes, init):
-                if sizes is None:
+                if not sizes:
                     entries = [((), init)]
                 elif isinstance(init, ArrayInit):
                     entries = _init_entries(sizes, init)

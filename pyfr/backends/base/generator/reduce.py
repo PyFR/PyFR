@@ -19,6 +19,10 @@ class ScratchSlots:
 
         return names
 
+    @property
+    def names(self):
+        return [d.name for d in self.decls(1)]
+
     def decls(self, n):
         # Declare each slot with an entry per lane of the group
         return [VarDecl(t, f'_rs_{t}_{j}', [Int(n)], shared=True)

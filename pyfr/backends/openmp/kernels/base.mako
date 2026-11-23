@@ -42,13 +42,8 @@ static inline float bf16_to_f32(bf16 b)
 
 
 // Thread/block helpers (no-op for OpenMP)
-#define PYFR_THREAD_ID 0
 #define PYFR_BLOCK_ID 0
 #define PYFR_BLOCK_ID_Y 0
-#define PYFR_SYNC_THREADS()
-#define PYFR_SHARED
-#define PYFR_GMEM
-#define PYFR_LMEM
 
 // Tiled layout indexing for block-diagonal matrices
 #define TILED_IX(e, r, c, block_sz, tile_sz) \

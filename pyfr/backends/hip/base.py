@@ -61,7 +61,7 @@ class HIPBackend(BaseBackend):
         self.subgrpsz = self.props['warp_size']
 
         # Bytes of storage the warps of a block may share
-        self.shared_budget = self.props['shared_mem_per_block']
+        self.shared_budget = self.props['shared_mem_per_block'] // 2
 
         # Determine the number of compute dies
         self.ndies = self.hip.device_xcc_count(devid)
@@ -71,8 +71,8 @@ class HIPBackend(BaseBackend):
         if self.mpitype not in {'standard', 'hip-aware'}:
             raise ValueError('Invalid HIP backend MPI type')
 
-        from pyfr.backends.hip import (blasext, gimmik, packing, linalg,
-                                       provider, rocblas, types)
+        from pyfr.backends.hip import (blasext, gimmik, packing, provider,
+                                       rocblas, types)
 
         # Register our data types and meta kernels
         self.const_matrix_cls = types.HIPConstMatrix
@@ -91,7 +91,6 @@ class HIPBackend(BaseBackend):
 
         # Instantiate the base kernel providers
         kprovs = [blasext.HIPBlasExtKernels,
-                  linalg.HIPLinalgKernels,
                   packing.HIPPackingKernels,
                   gimmik.HIPGiMMiKKernels,
                   rocblas.HIPRocBLASKernels]

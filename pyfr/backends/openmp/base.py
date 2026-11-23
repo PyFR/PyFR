@@ -41,8 +41,8 @@ class OpenMPBackend(BaseBackend):
         # C source compiler
         self.compiler = OpenMPCompiler(cfg)
 
-        from pyfr.backends.openmp import (blasext, packing, linalg,
-                                          provider, types, xsmm)
+        from pyfr.backends.openmp import (blasext, packing, provider, types,
+                                          xsmm)
 
         # Register our data types and meta kernels
         self.const_matrix_cls = types.OpenMPConstMatrix
@@ -61,7 +61,6 @@ class OpenMPBackend(BaseBackend):
 
         # Instantiate mandatory kernel provider classes
         kprovcls = [blasext.OpenMPBlasExtKernels,
-                    linalg.OpenMPLinalgKernels,
                     packing.OpenMPPackingKernels,
                     xsmm.OpenMPXSMMKernels]
         self._providers = [self.pointwise, *[k(self) for k in kprovcls]]

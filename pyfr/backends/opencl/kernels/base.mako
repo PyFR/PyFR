@@ -1,5 +1,7 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 // Typedefs
+typedef short int16_t;
+typedef ushort uint16_t;
 typedef unsigned int uint32_t;
 typedef long int64_t;
 typedef ${pyfr.npdtype_to_ctype(fpdtype)} fpdtype_t;
@@ -57,14 +59,13 @@ void atomic_sum_fpdtype(${aspace} fpdtype_t *addr, fpdtype_t val)
 
 #pragma OPENCL EXTENSION cl_khr_fp16 : enable
 
-#define PYFR_THREAD_ID get_local_id(0)
+// Vector loads
+#define PYFR_LOAD_VEC(dst, src) \
+    vstore4(vload4(0, (__global const uint*) (src)), 0, (uint*) (dst))
+
 #define PYFR_BLOCK_ID get_group_id(0)
 #define PYFR_BLOCK_ID_Y get_group_id(1)
-#define PYFR_SYNC_THREADS() work_group_barrier(CLK_LOCAL_MEM_FENCE)
 #define PYFR_SYNC_GMEM_THREADS() work_group_barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE)
-#define PYFR_SHARED __local
-#define PYFR_GMEM __global
-#define PYFR_LMEM __local
 
 #define TILED_IX(e, r, c, block_sz, tile_sz) \
     ((e) * (block_sz) * (block_sz) + \
@@ -76,33 +77,5 @@ void atomic_sum_fpdtype(${aspace} fpdtype_t *addr, fpdtype_t val)
 // Global thread position
 #define PYFR_GLOBAL_ID_X get_global_id(0)
 #define PYFR_GLOBAL_ID_Y get_global_id(1)
-
-<%def name="argmax_storage(ftype)"></%def>
-
-<%def name="argmax_reduce(ftype, val, idx, dst)">
-    {
-        ${ftype} amv = work_group_reduce_max(${val});
-        int ami = work_group_reduce_min((${val} == amv) ? ${idx} : 0x7fffffff);
-        if (PYFR_THREAD_ID == 0) ${dst} = ami;
-        PYFR_SYNC_THREADS();
-    }
-</%def>
-
-<%def name="_kdecl(name, bounds)">\
-% if bounds:
-__kernel __attribute__((reqd_work_group_size(${bounds}, 1, 1))) void ${name}\
-% else:
-__kernel void ${name}\
-% endif
-</%def>
-<%def name="_karg(intent, t, n)">\
-% if intent == 'in':
-__global const ${t}* restrict ${n}\
-% elif intent == 'out':
-__global ${t}* restrict ${n}\
-% else:
-${t} ${n}\
-% endif
-</%def>
 
 ${next.body()}

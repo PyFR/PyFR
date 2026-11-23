@@ -1,8 +1,5 @@
-import contextlib
 import ctypes as ct
 import functools as ft
-from pathlib import Path
-import sys
 
 import numpy as np
 
@@ -236,72 +233,6 @@ def npdtype_to_ctypestype(dtype):
         return None
 
     return _ctypestype_map[np.dtype(dtype).type]
-
-
-class BLASThreadCtrl:
-    _instance = None
-
-    def __init__(self):
-        self._set_single = lambda: None
-        self._restore = lambda token: None
-
-        try:
-            blas = np.show_config(mode='dicts')['Build Dependencies']['blas']
-            name = blas['name'].lower()
-            if 'openblas' in name:
-                self._init_openblas()
-            elif name == 'accelerate':
-                self._init_accelerate()
-        except (AttributeError, KeyError, OSError, StopIteration):
-            pass
-
-    def _init_openblas(self):
-        nploc = Path(np.__file__).parent
-        if sys.platform == 'darwin':
-            libdir, ext = nploc / '.dylibs', 'dylib*'
-        elif sys.platform == 'win32':
-            libdir, ext = nploc.parent / 'numpy.libs', 'dll'
-        else:
-            libdir, ext = nploc.parent / 'numpy.libs', 'so*'
-
-        path = next(libdir.glob(f'libscipy_openblas*.{ext}'))
-        set_fn = ct.CDLL(str(path)).openblas_set_num_threads_local
-        set_fn.argtypes = [ct.c_int]
-
-        self._set_single = lambda: set_fn(1)
-        self._restore = set_fn
-
-    def _init_accelerate(self):
-        lib = ct.CDLL('/System/Library/Frameworks/Accelerate.framework/'
-                      'Accelerate')
-        set_fn, get_fn = lib.BLASSetThreading, lib.BLASGetThreading
-        set_fn.argtypes = [ct.c_uint]
-        get_fn.argtypes, get_fn.restype = [], ct.c_uint
-
-        def set_single():
-            prev = get_fn()
-            set_fn(1)
-            return prev
-
-        self._set_single = set_single
-        self._restore = set_fn
-
-    @classmethod
-    def instance(cls):
-        if cls._instance is None:
-            cls._instance = cls()
-
-        return cls._instance
-
-    @classmethod
-    @contextlib.contextmanager
-    def serial(cls):
-        self = cls.instance()
-        nth = self._set_single()
-        try:
-            yield
-        finally:
-            self._restore(nth)
 
 
 class GPOptimiser:

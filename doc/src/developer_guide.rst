@@ -162,6 +162,23 @@ arguments are read, those of ``out`` and ``inout`` arguments written,
 and every output must be mapped.  Mapped arguments must be floating
 point and the kernel may have no reduction arguments.
 
+Directives
+^^^^^^^^^^
+
+A ``#pragma pyfr`` directive applies to the block or single statement
+which follows it:
+
+.. code-block:: none
+
+    #pragma pyfr unroll(${nvars})
+    for (int i = 0; i < ${nvars}; i++)
+        f[i] = u[i]*${factor};
+
+``unroll(n)`` and ``simd`` are hints which each backend lowers to the
+equivalent of its compiler or drops.  ``fp-precise`` has its block
+evaluated as written, free of reassociation and contraction.  Any
+other directive is emitted as written.
+
 Cooperative Kernels
 ^^^^^^^^^^^^^^^^^^^
 
@@ -191,21 +208,92 @@ the top level with the ``shared`` qualifier:
     </%pyfr:kernel>
 
 Shared storage is limited to the ``shared_budget`` of the backend.  On
-the OpenMP backend a group is a single lane.  Broadcast arguments may
+the OpenMP backend a cooperative body whose control flow does not
+depend on the item, and which writes no broadcast argument, is
+vectorised across the items of a SoA group.  Broadcast arguments may
 have a single dimension, in which case they are indexed directly and
 the matrix must have a single row.
+
+``coop='fit'`` has the backend place as many lane-groups in a block as
+fit the budget, one item each.  Loads and ``@sync();`` are then carried
+out by the whole block, so a barrier or reduction can not sit in a
+conditional.  The OpenMP backend ignores the grouping.
 
 Shared storage may instead be loaded from an ``in`` or ``inout``
 per-item, broadcast or tiled array argument with
 ``shared s = @load(a);``, which takes the extents and, unless written
-``shared T s = @load(a);``, the type of ``a``.  Loaded storage is used
-only after the ``@sync();`` which follows it, so the staging loop
-above is ``shared s_u = @load(u);``.
+``shared T s = @load(a);``, the type of ``a``.  The load may also be
+an expression of several arguments, ``shared s = @load(a*(x0 + x1));``,
+evaluated entry by entry with NumPy broadcasting and of type
+``fpdtype_t`` unless given.  Loaded storage is used only after the
+``@sync();`` which follows it, so the staging loop above is
+``shared s_u = @load(u);``.
+
+``@store(y, expr);`` likewise has the block write an ``out`` or
+``inout`` per-item array argument, ``expr`` being an expression of
+shared arrays and arguments which may include ``y`` itself, as in
+``@store(y, b*y + osc*ys);``.  The storage a store reads may not be
+written between the ``@sync();`` before the store and the one after it.
+Only a top-level ``@sync();`` counts as the barrier a load or store
+requires; one nested in a loop or conditional does not.
+
+A block of one lane, or one whose copies of this storage exceed the
+budget, works on the arguments in place of it where it can.  A block of
+several lanes does so for the storage it stores first, and for the
+storage it loads only if its copies still exceed the budget.  Storage
+which is loaded once and only read is read through the expression it
+loads, and storage which is stored once, to an argument of its extents
+and type which the body does not otherwise name, is that argument.  An
+argument a kernel stores to must therefore not be bound to the same
+matrix as one whose entries it loads.
 
 A two dimensional kernel may stage a ``broadcast-col`` array argument
 in storage shared by its block with the same load; the block fills the
 storage, with a barrier of its own, before walking its rows and the
 body reads it in place of the argument.
+
+``@dot`` initialises a declaration with the dot product of row ``r``
+of a two dimensional argument or shared array ``m`` and a vector
+``v``, accumulated in the declared type ``T``:
+
+``T a = @dot(m[r], v);``
+    The product of the row with ``v``.
+
+``T a[n] = @dot(m[r], v);``
+    The products of the row with the ``n`` vectors interleaved in
+    ``v`` as ``v[k*n + j]`` or ``v[k][j]``.
+
+``T a[n] = @dot(w*m[r], v);``
+    Either of the above with the row scaled entry by entry by the
+    weights ``w``, of extent ``[ncol]``.
+
+``T a[p][n] = @dot(w*m[r], v);``
+    The same for each row in turn of weights of extents ``[p][ncol]``.
+
+Operands of type ``bf16`` are converted entry by entry; ``T`` cannot
+be ``bf16``.  The row of a tiled argument is walked tile by tile, which
+is quickest for dot products that open the body of a loop from
+``@lidx`` in steps of ``@lsz``.  Together these constructs apply a
+matrix per item, staging
+the output so the block writes its items together:
+
+.. code-block:: none
+
+    <%pyfr:kernel name='kernel_name' ndim='1' coop='fit'
+                  x='in fpdtype_t[${str(npts)}][${str(nvars)}]'
+                  minv='in tiled fpdtype_t[${str(n)}][${str(n)}]'
+                  y='out fpdtype_t[${str(npts)}][${str(nvars)}]'>
+        shared xs = @load(x);
+        shared fpdtype_t ys[${npts}][${nvars}];
+        @sync();
+        for (int r = @lidx; r < ${n}; r += @lsz)
+        {
+            fpdtype_t yr = @dot(minv[r], xs);
+            ys[r / ${nvars}][r % ${nvars}] = yr;
+        }
+        @sync();
+        @store(y, ys);
+    </%pyfr:kernel>
 
 Values held by each lane of a group are combined across the group with
 a ``#pragma pyfr allreduce(a, b, ...)`` block, where ``a, b, ...`` are

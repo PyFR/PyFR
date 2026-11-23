@@ -139,7 +139,13 @@ class Parser:
         # Split any parenthesised region arguments on commas
         args = tuple(a.strip() for a in m[2].split(',')) if m[2] else ()
 
-        return Region(m[1], self.block().body, args)
+        # Scope the region to the block or single statement which follows
+        if self.tok.kind == '{':
+            body = self.block().body
+        else:
+            body = [self.statement()]
+
+        return Region(m[1], body, args)
 
     def declaration(self):
         decl = self._decl_list()
@@ -189,7 +195,7 @@ class Parser:
         if vtype is None and (sizes or not isload):
             raise SyntaxError(f'Shared {name!r} needs a type or a load')
 
-        return VarDecl(vtype, name, sizes or None, init, const=is_const,
+        return VarDecl(vtype, name, sizes, init, const=is_const,
                        shared=is_shared)
 
     def _check_initialiser(self, name, sizes, init):

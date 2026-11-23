@@ -64,7 +64,7 @@ class CUDABackend(BaseBackend):
         self.subgrpsz = 32
 
         # Bytes of storage the warps of a block may share
-        self.shared_budget = 48*1024
+        self.shared_budget = self.cuda.smem_info() // 2
 
         # Get the MPI runtime type
         self.mpitype = cfg.get('backend-cuda', 'mpi-type', 'standard')
@@ -72,7 +72,7 @@ class CUDABackend(BaseBackend):
             raise ValueError('Invalid CUDA backend MPI type')
 
         from pyfr.backends.cuda import (blasext, cublaslt, gimmik, packing,
-                                        linalg, provider, types)
+                                        provider, types)
 
         # Register our data types and meta kernels
         self.const_matrix_cls = types.CUDAConstMatrix
@@ -93,8 +93,7 @@ class CUDABackend(BaseBackend):
         kprovs = [blasext.CUDABlasExtKernels,
                   packing.CUDAPackingKernels,
                   gimmik.CUDAGiMMiKKernels,
-                  cublaslt.CUDACUBLASLtKernels,
-                  linalg.CUDALinalgKernels]
+                  cublaslt.CUDACUBLASLtKernels]
         self._providers = [self.pointwise, *[k(self) for k in kprovs]]
 
         # Create a stream to run kernels on

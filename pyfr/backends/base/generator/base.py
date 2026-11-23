@@ -3,6 +3,7 @@ from math import prod
 import numpy as np
 
 from pyfr.backends.base.generator.args import Arg
+from pyfr.backends.base.generator.dot import DotLowering
 from pyfr.backends.base.generator.lanes import RowLanes, make_lanemodel
 from pyfr.backends.base.mathfns import MathFnLowering
 from pyfr.dsl.ad import ADLowering
@@ -29,6 +30,9 @@ def _rule(tpl, **preconds):
 
 
 class BaseKernelGenerator:
+    # Bytes of an argument a lane keeps in flight
+    bytes_inflight = 64
+
     # Code generator class used to render the AST
     codegen_cls = CodeGenerator
 
@@ -55,12 +59,14 @@ class BaseKernelGenerator:
     _aosoa = None
     _bcast = None
     _tile = None
+    _tileoff = None
 
     # Parameters of the @-intrinsics lowered through the string templates
     _intrinsic_params = {
         'aosoa': ('v', 'nv'),
         'bcast': ('r', 'c', 'ld'),
         'tile': ('r', 'c', 'tr', 'tc', 'pr', 'pc'),
+        'tileoff': ('r', 'c', 'tr', 'tc', 'pr', 'pc'),
     }
 
     _rules_1d = [
@@ -68,7 +74,7 @@ class BaseKernelGenerator:
         _rule('@N_v[@N_vix[@xidx]]', isview=True),
         _rule('@N_v[@N_vix[@xidx] + @soasz*@I0]', isview=True),
         _rule('@N_v[@N_vix[@xidx] + @N_vrstri[@xidx]*@I0 + @soasz*@I1]',
-              isview=True),
+              isview=True, istiled=False),
         # Multi-indexed views (viewstride > 1)
         _rule('@N_v[@N_vix[@xidx*@VS + @I0]]', isview=True),
         # Arrays
@@ -81,7 +87,10 @@ class BaseKernelGenerator:
         _rule('@N_v[@S*@I0 + @bcast(@V0, @I1, @S)]',
               isview=False, isbroadcast=True),
         # Tiled
-        _rule('@N_v[@tile(@I0, @I1, @TR, @TC, @PR, @PC)]', istiled=True),
+        _rule('@N_v[@tile(@I0, @I1, @TR, @TC, @PR, @PC)]',
+              isview=False, istiled=True),
+        _rule('@N_v[@N_vix[@xidx] + @tileoff(@I0, @I1, @TR, @TC, @PR, @PC)]',
+              isview=True, istiled=True),
         # Stacked
         _rule('@N_v[@S*@I0 + @xidx]', isview=False, ismpi=False),
         # Doubly stacked
@@ -130,6 +139,7 @@ class BaseKernelGenerator:
         self.fpdtype = backend.fpdtype
         self.ixdtype = backend.ixdtype
         self.soasz = backend.soasz
+        self.lane_load_bytes = backend.lane_load_bytes
         self.fpdtype_max = float(np.finfo(self.fpdtype).max)
 
         # NumPy data types of the DSL scalar types
@@ -167,6 +177,9 @@ class BaseKernelGenerator:
         self.scalargs = [v for v in sargs if v.isscalar]
         self.vectargs = vargs = [v for v in sargs if v.isvector]
 
+        # Check the shared storage fits a block and fence its barriers
+        self._ast = self.lanemodel.check_storage(self._ast)
+
         # Math helper functions required by the kernel
         self._helper_calls = {}
 
@@ -191,7 +204,7 @@ class BaseKernelGenerator:
         # Define the types of the arguments as seen by the body
         env = Environment()
         for v in sargs:
-            env.define(v.name, v.dtype, [Int(d) for d in v.cdims] or None)
+            env.define(v.name, v.dtype, [Int(d) for d in v.cdims])
 
         # Differentiate the tangent and Jacobian regions of the body
         ast = ADLowering(env).visit(ast)
@@ -199,6 +212,9 @@ class BaseKernelGenerator:
         # Hoist the shared storage declarations out of the body
         args = {v.name: v for v in sargs}
         ast = self.lanemodel.hoist_shared(ast, args)
+
+        # Lower the dot products of the body to loops over the columns
+        ast = DotLowering(self, args).visit(ast)
 
         # Lower the lane intrinsics, barriers and reductions of the body
         return self.lanemodel.lower(ast, env)
@@ -240,7 +256,7 @@ class BaseKernelGenerator:
                         argt.append(('v', [np.uintp]*2))
                     case 2, _:
                         argt.append(('vs', [np.uintp]*2 + [self.ixdtype]))
-                    case _, 2 if va.cdims[0] > 1:
+                    case _, 2 if va.cdims[0] > 1 and not va.istiled:
                         argt.append(('va', [np.uintp]*3))
                     case _:
                         argt.append(('v', [np.uintp]*2))
@@ -396,6 +412,10 @@ class BaseKernelGenerator:
                     params = self._intrinsic_params[fn]
                     subs = dict(zip(params, map(lower, args)), soasz=soasz)
                     return rename_vars(tpl, subs)
+                case DSLCall(fn) if fn not in self.codegen_cls.intrinsics:
+                    raise ValueError(f'Unresolved DSL call: @{fn}')
+                case DSLVar(name):
+                    raise ValueError(f'Unresolved DSL variable: @{name}')
                 case _:
                     return node.map(lower)
 

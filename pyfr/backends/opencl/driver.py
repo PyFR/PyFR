@@ -148,8 +148,6 @@ class OpenCLWrappers(LibWrapper):
         (c_int, 'clGetProgramBuildInfo', c_void_p, c_void_p, c_uint, c_size_t,
          c_void_p, POINTER(c_size_t)),
         (c_void_p, 'clCreateKernel', c_void_p, c_char_p, POINTER(c_int)),
-        (c_int, 'clGetKernelWorkGroupInfo', c_void_p, c_void_p, c_uint,
-         c_size_t, c_void_p, POINTER(c_size_t)),
         (c_void_p, 'clCloneKernel', c_void_p, c_int),
         (c_int, 'clReleaseKernel', c_void_p),
         (c_int, 'clEnqueueNDRangeKernel', c_void_p, c_void_p, c_uint,
@@ -263,9 +261,6 @@ class OpenCLDevice(_OpenCLBase):
         self.global_mem_size = self._query_type(c_ulong, 'global_mem_size')
         self.local_mem_size = self._query_type(c_ulong, 'local_mem_size')
         self.mem_align = self._query_type(c_uint, 'mem_base_addr_align') // 8
-        self.max_compute_units = self._query_type(c_uint, 'max_compute_units')
-        self.max_work_group_size = self._query_type(c_size_t,
-                                                    'max_work_group_size')
 
         self.driver_version = self._query_str('version', prefix='driver')
 
@@ -276,20 +271,6 @@ class OpenCLDevice(_OpenCLBase):
             self.uuid = UUID(bytes=self._query_type(c_char*16, 'uuid'))
         else:
             self.uuid = None
-
-    def threads_per_cu(self, sgw):
-        if 'cl_nv_device_attribute_query' in self.extensions:
-            return 64*self._query_type(c_uint, 'warp_size_nv')
-        elif 'cl_amd_device_attribute_query' in self.extensions:
-            wave = self._query_type(c_uint, 'wavefront_width_amd')
-            simd = self._query_type(c_uint, 'simd_per_compute_unit_amd')
-            return 10*wave*simd
-        elif 'cl_intel_device_attribute_query' in self.extensions:
-            eus = self._query_type(c_uint, 'num_eus_per_sub_slice_intel')
-            thr = self._query_type(c_uint, 'num_threads_per_eu_intel')
-            return eus*thr*sgw
-        else:
-            return self.max_work_group_size
 
     def subdevices(self):
         lib = self.lib
@@ -442,7 +423,6 @@ class OpenCLProgram(_OpenCLBase):
     _destroyfn = 'clReleaseProgram'
 
     def __init__(self, lib, ctx, dev, src, flags):
-        self.dev = dev
         devptr = c_void_p(dev._as_parameter_)
 
         match src:
@@ -478,7 +458,7 @@ class OpenCLProgram(_OpenCLBase):
 
     def get_kernel(self, name, argtypes):
         ptr = self.lib.clCreateKernel(self, name.encode())
-        return OpenCLKernel(self.lib, ptr, argtypes, self.dev)
+        return OpenCLKernel(self.lib, ptr, argtypes)
 
     def get_binary(self):
         nbytes = c_size_t()
@@ -499,40 +479,17 @@ class OpenCLKernel(_OpenCLWaitFor, _OpenCLBase):
     typemap = [c_double, c_float, c_int32, c_int64, c_uint64]
     typemap = {k: (k(), sizeof(k)) for k in typemap}
 
-    def __init__(self, lib, ptr, argtypes, dev):
+    def __init__(self, lib, ptr, argtypes):
         super().__init__(lib, ptr)
 
         self.argtypes = argtypes
-        self.dev = dev
 
         # For each argument type fetch the corresponding ctypes instance
         self._argsz = [self.typemap[atype] for atype in argtypes]
 
     def clone(self):
         ptr = self.lib.clCloneKernel(self)
-        return OpenCLKernel(self.lib, ptr, self.argtypes, self.dev)
-
-    def resident_workgroups(self, nthreads):
-        d = self.dev
-
-        v = c_ulong()
-        self.lib.clGetKernelWorkGroupInfo(
-            self, d, self.lib.KERNEL_LOCAL_MEM_SIZE, sizeof(v), byref(v), None
-        )
-
-        if v.value > 0:
-            wg = max(1, d.local_mem_size // v.value)
-        else:
-            wg = 64
-
-        s = c_size_t()
-        self.lib.clGetKernelWorkGroupInfo(
-            self, d, self.lib.KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE,
-            sizeof(s), byref(s), None
-        )
-
-        wg = min(wg, max(1, d.threads_per_cu(s.value) // nthreads))
-        return max(1, wg*d.max_compute_units)
+        return OpenCLKernel(self.lib, ptr, self.argtypes)
 
     def set_arg(self, i, v):
         arg, sz = self._argsz[i]

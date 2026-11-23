@@ -4,6 +4,7 @@ import time
 import numpy as np
 
 from pyfr.cache import memoize
+from pyfr.integrators.implicit.luinv import LUInverse
 from pyfr.mpiutil import get_comm_rank_root, mpi, scal_coll
 from pyfr.nputil import npdtype_to_ctype
 from pyfr.progress import NullProgressBar
@@ -32,22 +33,15 @@ class _ElementPrecond:
                        for c in np.unique(colours)}
         self.nemax = max(map(len, self.ceidxs.values()))
 
-        # Upload the per-colour element index vectors
-        self.eidxs = {c: backend.const_matrix(e[None, :], tags={'align'},
-                                              dtype=backend.ixdtype)
-                      for c, e in self.ceidxs.items()}
-
         # Allocate the per-element inverse and Jacobian staging matrices
         self.inv = backend.tiled_matrix(block_shape=(n, n), nmats=self.neles,
                                         dtype=pcdtype)
         self.jstage = backend.matrix((n, n, self.nemax), dtype=wdtype,
                                      extent=extent, tags={'align'})
 
-    def init_ikern(self):
-        # Build the inversion kernel at staging capacity
-        self.ikern = self.backend.kernel('batched_inv_tiled', m=self.jstage,
-                                         out=self.inv,
-                                         eidxs=first(self.eidxs.values()))
+        # Allocate the workspace of the inversion beside the staging matrix
+        self.luinv = LUInverse(backend, self.jstage, self.inv, self.ceidxs,
+                               extent)
 
     def _gather_view(self, mat, eidxs):
         # Pad the gather map to capacity by replicating its final entry
@@ -91,6 +85,23 @@ class _ElementPrecond:
             jac=self.jstage, f=v, f0=v
         )
 
+    def apply_kern(self, x, y, in_scale, out_scale):
+        tplargs = {'nupts': self.nupts, 'nvars': self.nvars, 'n': self.n,
+                   'pcdtype': npdtype_to_ctype(self.inv.dtype),
+                   'in_scale': bool(in_scale), 'out_scale': bool(out_scale)}
+
+        # Upload the scale factors of the variables which are given
+        scales = {}
+        for name, scale in [('isc', in_scale), ('osc', out_scale)]:
+            if scale:
+                sc = np.array([scale], dtype=x.dtype)
+                scales[name] = self.backend.const_matrix(sc)
+
+        return self.backend.kernel(
+            'precondapply', tplargs=tplargs, dims=[self.neles],
+            minv=self.inv, x=x, y=y, **scales
+        )
+
     def prepare(self, u_reg, up_reg, f0_reg, ptmp, eps, escales):
         banks = self.system.ele_banks[self.etidx]
         self.prev = (-1, -1)
@@ -122,9 +133,7 @@ class _ElementPrecond:
         return self.ekern
 
     def invert(self, colour, scale):
-        self.ikern.bind(scale=scale, eidxs=self.eidxs[colour])
-
-        return self.ikern
+        self.luinv.invert(colour, scale)
 
 
 class Preconditioner:
@@ -183,6 +192,9 @@ class BlockJacobiPreconditioner(Preconditioner):
         backend.pointwise.register(
             'pyfr.integrators.implicit.kernels.precondextract'
         )
+        backend.pointwise.register(
+            'pyfr.integrators.implicit.kernels.precondapply'
+        )
 
         # Build the preconditioner state for each element type
         extent = ext.struct()
@@ -200,10 +212,6 @@ class BlockJacobiPreconditioner(Preconditioner):
         )
 
     def init_kernels(self):
-        # Build the inversion kernel for each element type
-        for e in self._eles:
-            e.init_ikern()
-
         # Which element types contain each colour
         self._centries = [[e for e in self._eles if c in e.ceidxs]
                           for c in range(self.ncolours)]
@@ -275,15 +283,12 @@ class BlockJacobiPreconditioner(Preconditioner):
                     task.advance()
 
                 # Scale and invert this colour's contribution
-                ikerns = [e.invert(colour, gamma_dt) for e in ents]
-                self.backend.run_kernels(ikerns)
+                for e in ents:
+                    e.invert(colour, gamma_dt)
 
     def apply_kernel(self, emats, etidx, in_reg, out_reg, in_scale=(),
                      out_scale=()):
         e = self._eles[etidx]
 
-        return self.backend.kernel(
-            'batched_tiled_matvec', x=emats[in_reg], minv=e.inv,
-            y=emats[out_reg], nupts=e.nupts, nvars=self.nvars,
-            in_scale=in_scale, out_scale=out_scale
-        )
+        return e.apply_kern(emats[in_reg], emats[out_reg], in_scale,
+                            out_scale)

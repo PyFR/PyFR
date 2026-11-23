@@ -10,7 +10,7 @@ def node(cls):
     cls = dataclass(cls, slots=True, frozen=True)
 
     # Note the fields set at construction which hold a child or a list of them
-    kinds = {object: False, list: True, list | None: True}
+    kinds = {object: False, list: True}
     fs = (f for f in fields(cls) if f.init and f.type in kinds)
     cls._child_fields = tuple((f.name, kinds[f.type]) for f in fs)
 
@@ -69,7 +69,7 @@ class Program(Node):
 class VarDecl(Stmt):
     vtype: str
     name: str
-    sizes: list | None = None
+    sizes: list = field(default_factory=list)
     init: object = None
     const: bool = field(default=False, kw_only=True)
     shared: bool = field(default=False, kw_only=True)

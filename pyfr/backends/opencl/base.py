@@ -70,7 +70,7 @@ class OpenCLBackend(BaseBackend):
         self.shared_budget = device.local_mem_size
 
         from pyfr.backends.opencl import (blasext, clblast, gimmik, packing,
-                                          linalg, provider, tinytc, types)
+                                          provider, tinytc, types)
 
         # Register our data types and meta kernels
         self.const_matrix_cls = types.OpenCLConstMatrix
@@ -89,7 +89,6 @@ class OpenCLBackend(BaseBackend):
 
         # Instantiate the base kernel providers
         kprovs = [blasext.OpenCLBlasExtKernels,
-                  linalg.OpenCLLinalgKernels,
                   packing.OpenCLPackingKernels,
                   gimmik.OpenCLGiMMiKKernels]
         self._providers = [self.pointwise, *[k(self) for k in kprovs]]

@@ -118,6 +118,12 @@ class OpenMPTiledMatrix(base.TiledMatrix):
         # Remove
         del self._initval
 
+    def view_disps(self, rmap, cmap, nvcol):
+        g, k = divmod(cmap, self.soasz)
+
+        # Take the items of a view as the lanes of whole matrices
+        return g*self.padr*self.padc*self.soasz + k, 0
+
     def _set(self, ary):
         tiles = self._tile(ary).reshape(len(ary), *self.data.shape[1:-1])
 

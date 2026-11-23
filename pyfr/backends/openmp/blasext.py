@@ -34,8 +34,12 @@ class OpenMPBlasExtKernels(BaseBlasExtKernels, OpenMPKernelProvider):
         # Render the kernel template
         ksrc = self.backend.lookup.get_template('par-memop').render(op='zero')
 
-        dbbytes = m.blocksz*m.itemsize
-        bnbytes = m.nrow*m.leaddim*m.itemsize
+        # Find the bytes of each block and the stride between blocks
+        if 'tiled' in m.tags:
+            dbbytes = bnbytes = m.block_words*m.itemsize
+        else:
+            dbbytes = m.blocksz*m.itemsize
+            bnbytes = m.nrow*m.leaddim*m.itemsize
         nblocks = m.nblocks
 
         # Build the kernel
