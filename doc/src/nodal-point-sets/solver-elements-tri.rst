@@ -29,6 +29,11 @@ Parameterises the triangular elements, with
 
     ``williams-shunn`` | ``witherden-vincent``
 
+#. ``operators`` --- space in which a curved triangular element is
+   discretised:
+
+    ``transformed`` | ``physical``
+
 Example:
 
 .. code-block:: ini

@@ -7,7 +7,7 @@ Parameterises the pyramidal elements, with
 #. ``soln-pts`` --- location of the solution points in a pyramidal
    element:
 
-    ``gauss-legendre`` | ``gauss-legendre-lobatto``
+    ``alpha-opt`` | ``gauss-legendre`` | ``gauss-legendre-lobatto``
 
 #. ``anti-alias`` --- whether to anti-alias the flux in a pyramidal
    element with the quadrature rule below:
@@ -27,7 +27,12 @@ Parameterises the pyramidal elements, with
 #. ``quad-pts`` --- name of quadrature rule for anti-aliasing in a
    pyramidal element:
 
-    ``witherden`` | ``witherden-vincent``
+    ``gauss-legendre~gauss-jacobi``
+
+#. ``operators`` --- space in which a pyramidal element is
+   discretised:
+
+    ``physical``
 
 Example:
 
@@ -35,5 +40,5 @@ Example:
 
     [solver-elements-pyr]
     soln-pts = gauss-legendre
-    quad-deg = 10
-    quad-pts = witherden-vincent
+    quad-deg = 8
+    quad-pts = gauss-legendre~gauss-jacobi

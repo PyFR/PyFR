@@ -161,6 +161,10 @@ class OpenMPGraph(base.Graph):
         self.kins[len(self.klist)].append(kra)
 
     def _group_splits(self, kerns, kranges):
+        # Require a kernel which runs over every block of the group
+        if all(k.compound for k in kerns):
+            raise RuntimeError('Graph group needs a kernel which is not split')
+
         nblocks = self._get_nblocks([ix for k in kerns for ix in kranges[k]])
         blocksz = self.backend.csubsz
         gkerns, splits = {}, set()

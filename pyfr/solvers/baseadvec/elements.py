@@ -1,8 +1,11 @@
 from pyfr.solvers.base import BaseElements
+from pyfr.solvers.baseadvec.operators import BaseAdvectionOperators
 from pyfr.solvers.baseadvec.shockcapturing import ShockCapturingMixin
 
 
 class BaseAdvectionElements(ShockCapturingMixin, BaseElements):
+    operatorscls = BaseAdvectionOperators
+
     def __init__(self, *kargs, **kwargs):
         super().__init__(*kargs, **kwargs)
 
@@ -79,21 +82,16 @@ class BaseAdvectionElements(ShockCapturingMixin, BaseElements):
             )
 
         # First flux correction kernel
-        if self.fluxaa and self.shape.order > 0:
-            kernels['divpcorf'] = lambda uin, fout: self._be.kernel(
-                'mul', self.opmat('(M1 - M3*M2)*M9'), self._vect_qpts,
-                out=self._div_upts(uin, fout)
-            )
-        elif self.shape.order > 0:
-            kernels['divpcorf'] = lambda uin, fout: self._be.kernel(
-                'mul', self.opmat('M1 - M3*M2'), self._vect_upts,
-                out=self._div_upts(uin, fout)
+        if self.shape.order > 0:
+            kernels['divpcorf'] = lambda uin, fout: self.divpcorf(
+                self._vect_qpts if self.fluxaa else self._vect_upts,
+                self._div_upts(uin, fout)
             )
 
         # Second flux correction kernel
-        kernels['divconf'] = lambda uin, fout: self._be.kernel(
-            'mul', self.opmat('M3'), self._scal_fpts,
-            out=self._div_upts(uin, fout), beta=float(self.shape.order > 0)
+        kernels['divconf'] = lambda uin, fout: self.divconf(
+            self._scal_fpts, self._div_upts(uin, fout),
+            add=self.shape.order > 0
         )
 
         # Transformed to physical divergence kernel + source term
@@ -121,13 +119,15 @@ class BaseAdvectionElements(ShockCapturingMixin, BaseElements):
     def _negdivconf(self, uin, fout):
         preserve = self._preserve_soln(uin, fout)
 
+        # Kernel type and metric terms which scale the divergence
+        ktype, kw = self.div_metrics()
+        tplargs = {'preserve_soln': preserve, 'ktype': ktype}
+
         return self._be.kernel(
-            'negdivconf',
-            tplargs=self._srctplargs | {'preserve_soln': preserve},
+            'negdivconf', tplargs=self._srctplargs | tplargs,
             dims=[self.nupts, self.neles], extrns=self._external_args,
             divconf=self._div_upts(uin, fout),
-            rcpdjac=self.rcpdjac_at('upts'),
             ploc=self.ploc_at('upts') if self._ploc_in_src_macros else None,
             u=self.scal_upts[uin] if self._soln_in_src_macros else None,
-            **self._external_vals
+            **kw, **self._external_vals
         )

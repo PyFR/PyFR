@@ -45,6 +45,9 @@ def get_basis(name, order, pts=[]):
 class ElementBasis:
     name = None
 
+    # Kind of functions which span the basis
+    type = 'polynomial'
+
     def __init__(self, order, pts):
         self.order = order
         self.pts = pts
@@ -331,6 +334,7 @@ class PriBasis(ElementBasis):
 
 class PyrBasis(ElementBasis):
     name = 'pyr'
+    type = 'rational'
 
     def _ortho_basis_at(self, p, q, r):
         with np.errstate(divide='ignore', invalid='ignore'):
@@ -338,21 +342,23 @@ class PyrBasis(ElementBasis):
             b = np.where(r != 1, 2*q/(1 - r), 0)
             c = r
 
-        sk = [2**(-k - 0.25)*(k + 0.5)**0.5 for k in range(self.order + 1)]
+        w = (1 - c)/2
+
+        sk = [(k + 0.5)**0.5 for k in range(self.order + 1)]
         pa = [s*jp for s, jp in zip(sk, jacobi(self.order, 0, 0, a))]
         pb = [s*jp for s, jp in zip(sk, jacobi(self.order, 0, 0, b))]
 
         ob = []
         for i, pi in enumerate(pa):
             for j, pj in enumerate(pb):
-                cij = (1 - c)**(i + j)
-                pij = pi*pj
+                m = max(i, j)
+                pij = w**m*pi*pj
 
-                pc = jacobi(self.order - max(i, j), 2*(i + j + 1), 0, c)
+                pc = jacobi(self.order - m, 2*m + 2, 0, c)
                 for k, pk in enumerate(pc):
-                    ck = (2*(k + j + i) + 3)**0.5
+                    ck = (k + m + 1.5)**0.5
 
-                    ob.append(cij*ck*pij*pk)
+                    ob.append(ck*pij*pk)
 
         return ob
 
@@ -362,7 +368,9 @@ class PyrBasis(ElementBasis):
             b = np.where(r != 1, 2*q/(1 - r), 0)
             c = r
 
-        sk = [2**(-k - 0.25)*(k + 0.5)**0.5 for k in range(self.order + 1)]
+        w = (1 - c)/2
+
+        sk = [(k + 0.5)**0.5 for k in range(self.order + 1)]
         fc = [s*jp for s, jp in zip(sk, jacobi(self.order, 0, 0, a))]
         gc = [s*jp for s, jp in zip(sk, jacobi(self.order, 0, 0, b))]
 
@@ -372,20 +380,20 @@ class PyrBasis(ElementBasis):
         ob = []
         for i, (fi, dfi) in enumerate(zip(fc, dfc)):
             for j, (gj, dgj) in enumerate(zip(gc, dgc)):
-                h = jacobi(self.order - max(i, j), 2*(i + j + 1), 0, c)
-                dh = jacobi_diff(
-                    self.order - max(i, j), 2*(i + j + 1), 0, c
-                )
+                m = max(i, j)
+
+                h = jacobi(self.order - m, 2*m + 2, 0, c)
+                dh = jacobi_diff(self.order - m, 2*m + 2, 0, c)
+
+                tmp = w**(m - 1) if m > 0 else 0
 
                 for k, (hk, dhk) in enumerate(zip(h, dh)):
-                    ck = (2*(k + j + i) + 3)**0.5
+                    ck = (k + m + 1.5)**0.5
 
-                    tmp = (1 - c)**(i + j - 1) if i + j > 0 else 1
-
-                    pijk = 2*tmp*dfi*gj*hk
-                    qijk = 2*tmp*fi*dgj*hk
-                    rijk = (tmp*(a*dfi*gj + b*fi*dgj - (i + j)*fi*gj)*hk
-                            + (1 - c)**(i + j)*fi*gj*dhk)
+                    pijk = tmp*dfi*gj*hk
+                    qijk = tmp*fi*dgj*hk
+                    rijk = (tmp*(a*dfi*gj + b*fi*dgj - m*fi*gj)*hk/2
+                            + w**m*fi*gj*dhk)
 
                     ob.append([ck*pijk, ck*qijk, ck*rijk])
 

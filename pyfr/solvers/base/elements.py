@@ -9,6 +9,7 @@ from pyfr.metrics import MeshMetrics
 from pyfr.nputil import fuzzysort
 from pyfr.quadrules import get_quadrule
 from pyfr.shapes import apply_op, l2_proj_op
+from pyfr.util import subclass_where
 
 
 @dataclass
@@ -39,6 +40,9 @@ class BaseElements:
     # If the solver computes corrected gradients of the solution
     has_grad_soln = False
 
+    # Root of the operators which can be mixed into the elements
+    operatorscls = None
+
     @staticmethod
     def stats_tables(cfg):
         return []
@@ -52,19 +56,34 @@ class BaseElements:
         # Absent an equation of state every state is admissible
         return np.ones(np.shape(cons[0]), dtype=bool)
 
-    def __init__(self, shapecls, eles, cfg, curved):
+    def __new__(cls, shape, eles, cfg, curved):
+        etype, btype = shape.name, shape.ubasis.type
+
+        # Obtain the formulation of the operators for the shape
+        default = 'transformed' if btype == 'polynomial' else 'physical'
+        name = cfg.get(f'solver-elements-{etype}', 'operators', default)
+
+        # Resolve the associated class
+        opscls = subclass_where(cls.operatorscls, operators_name=name)
+
+        # Refuse operators which can not act on the basis of the element type
+        if btype not in opscls.basis_types:
+            raise ValueError(f'{etype} can not use {name} operators')
+
+        # Mix the operators into the class of the elements
+        return super().__new__(type(cls.__name__, (opscls, cls), {}))
+
+    def __init__(self, shape, eles, cfg, curved):
         self._be = None
 
         self.eles = eles
         self.cfg = cfg
 
-        self.nspts = nspts = eles.shape[0]
-        self.neles = eles.shape[1]
-        self.ndims = ndims = eles.shape[2]
+        self.nspts, self.neles, self.ndims = eles.shape
 
         # Field variables
-        self.convars = self.convars(ndims, cfg)
-        self.privars = self.privars(ndims, cfg)
+        self.convars = self.convars(self.ndims, cfg)
+        self.privars = self.privars(self.ndims, cfg)
 
         # Kernels we provide
         self.kernels = {}
@@ -73,14 +92,14 @@ class BaseElements:
         self.export_fields = []
 
         # Check the dimensionality of the problem
-        if ndims != shapecls.ndims:
+        if self.ndims != shape.ndims:
             raise ValueError('Invalid element matrix dimensions')
 
         # Determine the number of dynamical variables
         self.nvars = len(self.convars)
 
-        # Instantiate the basis class
-        self.shape = shape = shapecls(nspts, cfg)
+        # Shape of the element type
+        self.shape = shape
         self.name = shape.name
 
         # See what kind of projection the basis is using
@@ -314,9 +333,13 @@ class BaseElements:
     def rcpdjac_at(self, name):
         return self._be.const_matrix(self.rcpdjac_at_np(name), tags={'align'})
 
+    def mean_wts_np(self):
+        invvdm = self.shape.ubasis.invvdm
+        return invvdm[:, 0, None] / self.rcpdjac_at_np('upts')
+
     @cached_property
     def mean_wts(self):
-        wts = self.shape.ubasis.invvdm[:, 0, None]/self.rcpdjac_at_np('upts')
+        wts = self.mean_wts_np()
         wts /= np.sum(wts, axis=0)
 
         return self._be.const_matrix(wts, tags={'align'})
@@ -352,10 +375,9 @@ class BaseElements:
     def qpts(self):
         return self._be.const_matrix(self.shape.qpts)
 
-    @cached_property
+    @property
     def _pnorm_fpts(self):
-        return np.vstack([self.pnorm_at(self.shape.fpts[fp], fidx)
-                          for fidx, fp in enumerate(self.shape.facefpts)])
+        return self.metrics.pnorm_fpts
 
     def pnorm_at(self, name, fidx):
         return self.metrics.pnorm_at(name, fidx)

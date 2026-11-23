@@ -155,19 +155,6 @@ class NodalMeshAssembler:
         self._pfaces = pfaces
         self._etype_map, self._petype_fnmap, self._nodemaps = maps
 
-    def _check_pyr_parallelogram(self, foeles):
-        # Find PyFR node map for the quad face
-        fnmap = self._petype_fnmap['pyr']['quad'][0]
-        pfnmap = [self._nodemaps['quad', 4][i] for i in fnmap]
-
-        # Face nodes
-        fpts = self._nodepts[foeles[:, pfnmap]].swapaxes(0, 1)
-
-        # Check if parallelogram or not
-        if np.any(np.abs(fpts[0] - fpts[1] - fpts[2] + fpts[3]) > 1e-10):
-            raise ValueError('Pyramids with non-parallelogram bases are '
-                             'currently unsupported')
-
     def _to_first_order(self, elemap):
         foelemap = {}
         for (etype, epent), eles in elemap.items():
@@ -178,10 +165,6 @@ class NodalMeshAssembler:
             focount = self._petype_focount[petype]
 
             foelemap[petype, epent] = eles[:, :focount]
-
-            # Check if pyramids have a parallelogram base or not
-            if petype == 'pyr':
-                self._check_pyr_parallelogram(foelemap[petype, epent])
 
         return foelemap
 

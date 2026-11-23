@@ -223,12 +223,7 @@ class EulerElements(BaseFluidElements, BaseAdvectionElements):
                 continue
 
             # Region-specific geometry kwargs
-            kw = {}
-            if rgn == 'curved':
-                kw['smats'] = self.curved_smat_at(pts)
-            else:
-                kw['verts'] = self.centred_ploc_at('linspts', 'linear')
-                kw['upts'] = getattr(self, pts)
+            fkt, kw = self.flux_metrics(rgn, pts)
 
             if has_uin:
                 kw['f'] = s(self._vect_upts, rgn)
@@ -236,28 +231,28 @@ class EulerElements(BaseFluidElements, BaseAdvectionElements):
                 kw['u'] = s(self._scal_qpts, rgn)
                 kw['f'] = s(self._vect_qpts, rgn)
 
-            disf.append((r[rgn], rgn, kw))
+            disf.append((r[rgn], rgn, fkt, kw))
 
         if has_uin:
             def disf_k(uin):
                 sc = self.shock_capturing
                 return self._make_sliced_kernel(
                     self._be.kernel(
-                        'tflux', tplargs=tplargs | sc.tplargs | {'ktype': rgn},
+                        'tflux', tplargs=tplargs | sc.tplargs | {'ktype': fkt},
                         dims=[npts, n], u=s(self.scal_upts[uin], rgn),
                         **kw, **sc.flux_args(self, rgn, pts)
                     )
-                    for n, rgn, kw in disf
+                    for n, rgn, fkt, kw in disf
                 )
         else:
             def disf_k():
                 sc = self.shock_capturing
                 return self._make_sliced_kernel(
                     self._be.kernel(
-                        'tflux', tplargs=tplargs | sc.tplargs | {'ktype': rgn},
+                        'tflux', tplargs=tplargs | sc.tplargs | {'ktype': fkt},
                         dims=[npts, n], **kw, **sc.flux_args(self, rgn, pts)
                     )
-                    for n, rgn, kw in disf
+                    for n, rgn, fkt, kw in disf
                 )
 
         self.kernels['disf'] = disf_k

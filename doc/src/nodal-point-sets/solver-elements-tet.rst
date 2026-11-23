@@ -29,6 +29,11 @@ Parameterises the tetrahedral elements, with
 
     ``shunn-ham`` | ``witherden`` | ``witherden-vincent``
 
+#. ``operators`` --- space in which a curved tetrahedral element is
+   discretised:
+
+    ``transformed`` | ``physical``
+
 Example:
 
 .. code-block:: ini

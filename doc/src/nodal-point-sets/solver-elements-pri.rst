@@ -30,7 +30,13 @@ Parameterises the prismatic elements, with
    prismatic element:
 
     ``williams-shunn~gauss-legendre`` |
-    ``williams-shunn~gauss-legendre-lobatto`` | ``witherden-vincent``
+    ``williams-shunn~gauss-legendre-lobatto`` |
+    ``witherden-vincent~gauss-legendre``
+
+#. ``operators`` --- space in which a curved prismatic element is
+   discretised:
+
+    ``transformed`` | ``physical``
 
 Example:
 

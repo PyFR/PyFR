@@ -2,9 +2,31 @@ from functools import cached_property
 
 import numpy as np
 
+from pyfr.bases import get_basis
 from pyfr.cache import memoize
-from pyfr.shapes import apply_op
-from pyfr.util import ndrange
+from pyfr.quadrules import get_quadrule
+from pyfr.shapes import BaseShape, apply_op, l2_proj_op, proj_pts
+from pyfr.util import ndrange, subclass_where
+
+
+def cross_smats_djacs(jac):
+    # We note that J = [x0; x1; x2]
+    x0 = jac[0]
+
+    if len(jac) == 2:
+        (a, b), (c, d) = jac
+
+        smats = np.array([[d, -c], [-b, a]])
+    else:
+        smats = np.empty_like(jac)
+
+        for i, c in ndrange(3, 3):
+            j, k = (i + 1) % 3, (i + 2) % 3
+            a, b = (c + 1) % 3, (c + 2) % 3
+            smats[i, c] = jac[j, a]*jac[k, b] - jac[j, b]*jac[k, a]
+
+    # Exploit the fact that det(J) = x0 · (x1 ^ x2)
+    return smats, sum(x0*smats[0])
 
 
 class MeshMetrics:
@@ -16,7 +38,7 @@ class MeshMetrics:
         self.nmpts = shape.nmpts
 
         # Treat all elements up to the last curved one as curved
-        if shape.order >= 2:
+        if shape.order >= 2 and shape.jac_exprs:
             self.ncurved = int(np.max(*np.nonzero(curved), initial=-1)) + 1
         else:
             self.ncurved = self.neles
@@ -35,9 +57,19 @@ class MeshMetrics:
         # Metric basis with grid point (q<=p) or pseudo grid points (q>p)
         mbasis = self.shape.mbasis
 
-        # Jacobian operator at these points
-        jacop = np.rollaxis(mbasis.jac_nodal_basis_at(pt), 2)
-        return jacop.reshape(-1, self.nmpts)
+        # If the basis is polynomial obtain the Jacobian operator directly
+        if mbasis.type == 'polynomial':
+            jacop = mbasis.jac_nodal_basis_at(pt)
+        # Otherwise, we need to project the derivative modes onto the basis
+        else:
+            qr = get_quadrule(self.shape.name, qdeg=2*mbasis.order)
+            pjac = np.einsum('ij,klj->kli', l2_proj_op(qr, mbasis),
+                             mbasis.jac_nodal_basis_at(qr.pts))
+
+            # Evaluate the projected derivatives at these points
+            jacop = np.einsum('ij,klj->kli', mbasis.nodal_basis_at(pt), pjac)
+
+        return np.rollaxis(jacop, 2).reshape(-1, self.nmpts)
 
     @memoize
     def jac_at(self, name):
@@ -97,9 +129,16 @@ class MeshMetrics:
         norm = self.shape.faces[fidx][2]
 
         # We need to compute |J|*[(J^{-1})^{T}.N] where J is the
-        # Jacobian and N is the normal for each point. Using
-        # J^{-1} = S/|J| where S are the smats, we have S^{T}.N.
-        pnorm = np.einsum('i,ijkl->jlk', norm, self.smat_at(name))
+        # Jacobian and N is the normal for each point. When the metric
+        # basis is polynomial we can use J^{-1} = S/|J|, where S are
+        # the smats, to obtain S^{T}.N.
+        if self.shape.mbasis.type == 'polynomial':
+            pnorm = np.einsum('i,ijkl->jlk', norm, self.smat_at(name))
+        # Otherwise the smats on a face depend on the interior of the
+        # element, so reconstruct the polynomial mapping on the face
+        # and form the normals from it
+        else:
+            pnorm = self._face_pnorm_at(name, fidx)
 
         # Compute the magnitudes of these flux point normals
         mag_pnorm = np.einsum('...i,...i', pnorm, pnorm)
@@ -111,9 +150,43 @@ class MeshMetrics:
         return pnorm
 
     @cached_property
+    def pnorm_fpts(self):
+        return np.vstack([self.pnorm_at(self.shape.fpts[fp], fidx)
+                          for fidx, fp in enumerate(self.shape.facefpts)])
+
+    def _face_pnorm_at(self, name, fidx):
+        kind, proj, norm = self.shape.faces[fidx]
+        order = self.shape.mbasis.order
+
+        # Find the face nodes of the metric basis and their reference locations
+        fnodes = subclass_where(BaseShape, name=kind).std_ele(order)
+        rnodes = proj_pts(proj, fnodes)
+
+        # Invert the affine map from the face to the reference element
+        p0, tang = self.shape.facemaps[fidx]
+        st = (self._pts(name) - p0) @ np.linalg.pinv(tang)
+
+        # Compute the physical locations of the face nodes
+        op = self.shape.sbasis.nodal_basis_at(rnodes)
+        x = apply_op(op, self.centred_spts)
+
+        # Form the derivative operators at the face nodes and requested points
+        fbasis = get_basis(kind, order, fnodes)
+        dfn = fbasis.jac_nodal_basis_at(fnodes)
+        dop = fbasis.jac_nodal_basis_at(st)
+
+        # Form the normal in invariant curl form; JSC 26(3), 301-327, Eq. (37)
+        w = np.cross(x, [apply_op(d.T, x) for d in dfn])
+        pnorm = 0.5*(apply_op(dop[0].T, w[1]) - apply_op(dop[1].T, w[0]))
+
+        # Scale to the magnitude and orientation of the reference normal
+        rt = np.cross(*tang)
+        return pnorm*(rt @ norm / (rt @ rt))
+
+    @cached_property
     def _smats_djacs_mpts(self):
-        # Dimensions, number of elements and number of mpts
-        ndims, neles, nmpts = self.ndims, self.neles, self.nmpts
+        # Dimensions and number of mpts
+        ndims, nmpts = self.ndims, self.nmpts
 
         # Physical locations of the pseudo grid points
         x = self.centred_ploc_at('mpts')
@@ -124,18 +197,12 @@ class MeshMetrics:
         # Transpose to get (ndims, ndims, nmpts, neles)
         jac = self.jac_at('mpts').transpose(2, 3, 0, 1)
 
-        smats = np.empty((ndims, nmpts, ndims, neles))
+        # Cross product form of smats for linear elements
+        smats, djacs = cross_smats_djacs(jac)
+        smats = smats.swapaxes(1, 2)
 
-        if ndims == 2:
-            a, b, c, d = jac[0, 0], jac[1, 0], jac[0, 1], jac[1, 1]
-
-            smats[0, :, 0], smats[0, :, 1] = d, -b
-            smats[1, :, 0], smats[1, :, 1] = -c, a
-
-            djacs = a*d - b*c
-        else:
-            # Handle the curved elements first using the curl form of smats
-            nc = self.ncurved
+        if ndims == 3 and (nc := self.ncurved):
+            # Handle the curved elements using the curl form of smats
             tt = np.empty((nmpts, ndims, nc))
             dtt = []
 
@@ -155,21 +222,5 @@ class MeshMetrics:
             smats[0, ..., :nc] = 0.5*(dtt[2][1] - dtt[1][2])
             smats[1, ..., :nc] = 0.5*(dtt[0][2] - dtt[2][0])
             smats[2, ..., :nc] = 0.5*(dtt[1][0] - dtt[0][1])
-
-            # Cross product form of smats for linear elements
-            jl = jac[..., nc:]
-            for i, c in ndrange(3, 3):
-                j, k = (i + 1) % 3, (i + 2) % 3
-                a, b = (c + 1) % 3, (c + 2) % 3
-                smats[i, :, c, nc:] = jl[j, a]*jl[k, b] - jl[j, b]*jl[k, a]
-
-            # We note that J = [x0; x1; x2]
-            x0, x1, x2 = jac
-
-            # Exploit the fact that det(J) = x0 · (x1 ^ x2)
-            djacs = 0
-            for i in range(3):
-                j, k = (i + 1) % 3, (i + 2) % 3
-                djacs += x0[i]*(x1[j]*x2[k] - x1[k]*x2[j])
 
         return smats.reshape(ndims, nmpts, -1), djacs

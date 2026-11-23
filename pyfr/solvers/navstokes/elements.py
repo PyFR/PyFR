@@ -75,24 +75,17 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
             if rgn not in r:
                 continue
 
-            ktype = f'{rgn}-fused' if fused else rgn
-
             # Region-specific geometry kwargs
-            kw = {}
-            if rgn == 'curved':
-                kw['smats'] = self.curved_smat_at(pts)
-                if fused:
-                    kw['rcpdjac'] = self.rcpdjac_at('upts', 'curved')
-            else:
-                kw['verts'] = self.centred_ploc_at('linspts', 'linear')
-
-            # Reference point coordinates for the linear smats
-            kw['upts'] = getattr(self, pts)
+            fkt, kw = self.flux_metrics(rgn, pts)
+            ktype = f'{fkt}-fused' if fused else fkt
 
             if has_uin:
                 kw['f'] = s(self._vect_upts, rgn)
                 if fused:
                     kw['gradu'] = s(self._grad_upts, rgn)
+
+                    # Take the gradients to physical space within the kernel
+                    kw |= self.grad_metrics(rgn)[1]
             else:
                 kw['u'] = s(self._scal_qpts, rgn)
                 kw['f'] = s(self._vect_qpts, rgn)

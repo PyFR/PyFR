@@ -55,6 +55,17 @@ appropriate base class and follow an existing neighbouring implementation.
 Configuration keys and user-visible behaviour must be documented in the
 corresponding user-guide section.
 
+Operators
+=========
+
+The operators of an element type are a class which
+``BaseElements.__new__`` mixes into its elements: the subclass of their
+``operatorscls`` whose ``operators_name`` is the value of the
+``operators`` key.  They build the divergence and gradient kernels, with
+the constant operator matrices of the reference element when
+``transformed`` and with operators assembled for each curved element
+when ``physical``.
+
 Kernel Templates
 ================
 

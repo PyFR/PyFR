@@ -78,7 +78,8 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
 
         # Interpolate these gradients to the flux points
         for l in k['eles/gradcoru_fpts']:
-            ldeps = deps(l, 'eles/disf_fused', 'eles/gradcoru_phys_upts')
+            ldeps = deps(l, 'eles/disf_fused', 'eles/gradcoru_phys_upts',
+                         'eles/gradcoru_upts')
             g_grad_flux.add(l, deps=ldeps)
 
         # Set dependencies for interface flux interpolation
@@ -99,7 +100,7 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
 
         # Interpolate the gradients to the quadrature points
         for l in k['eles/gradcoru_qpts']:
-            ldeps = deps(l, 'eles/gradcoru_phys_upts')
+            ldeps = deps(l, 'eles/gradcoru_phys_upts', 'eles/gradcoru_upts')
             g_grad_flux.add(l, deps=ldeps,
                             pdeps=k['mpiint/vect_fpts_pack'])
 
@@ -113,7 +114,8 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
             elif deps(l, 'eles/gradcoru_fpts'):
                 ldeps = deps(l, 'eles/gradcoru_fpts')
             else:
-                ldeps = deps(l, 'eles/gradcoru_phys_upts')
+                ldeps = deps(l, 'eles/gradcoru_phys_upts',
+                             'eles/gradcoru_upts')
             g_grad_flux.add(l, deps=ldeps + k['eles/avfill'])
 
         # Compute the transformed divergence of the partially corrected flux

@@ -189,8 +189,12 @@ class BaseSystem:
     def _load_eles(self, mesh, initsoln, nonce):
         shapemap = {b.name: b for b in subclasses(BaseShape, just_leaf=True)}
 
+        # Instantiate the shape classes
+        shapes = {etype: shapemap[etype](len(spts), self.cfg)
+                  for etype, spts in mesh.spts.items()}
+
         # Load the elements
-        elemap = {etype: self.elementscls(shapemap[etype], spts, self.cfg,
+        elemap = {etype: self.elementscls(shapes[etype], spts, self.cfg,
                                           mesh.spts_curved[etype])
                   for etype, spts in mesh.spts.items()}
 

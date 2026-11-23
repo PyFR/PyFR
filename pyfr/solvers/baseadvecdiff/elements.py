@@ -1,9 +1,11 @@
 from pyfr.solvers.base.elements import inters_map
 from pyfr.solvers.baseadvec import BaseAdvectionElements
+from pyfr.solvers.baseadvecdiff import operators
 
 
 class BaseAdvectionDiffusionElements(BaseAdvectionElements):
     has_grad_soln = True
+    operatorscls = operators.BaseAdvectionDiffusionOperators
 
     @property
     def _scratch_bufs(self):
@@ -31,53 +33,23 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
 
         kernel, kernels = self._be.kernel, self.kernels
         kprefix = 'pyfr.solvers.baseadvecdiff.kernels'
-        slicem, slicedk = self._slice_mat, self._make_sliced_kernel
 
         # Register our pointwise kernels
         self._be.pointwise.register(f'{kprefix}.gradcoru_phys')
 
-        # Mesh regions
-        regions = self.mesh_regions
-
         # Uncorrected gradient at the solution points
         if self.shape.order > 0:
-            kernels['gradpcoru_upts'] = lambda uin: kernel(
-                'mul', self.opmat('M4'), self.scal_upts[uin],
-                out=self._grad_upts
+            kernels['gradpcoru_upts'] = lambda uin: self.gradpcoru(
+                self.scal_upts[uin], self._grad_upts
             )
 
         # Correct using the common solution jumps at the flux points
-        kernels['gradcoru_upts'] = lambda: kernel(
-            'mul', self.opmat('M6'), self._comm_fpts,
-            out=self._grad_upts, beta=float(self.shape.order > 0)
+        kernels['gradcoru_upts'] = lambda: self.gradcoru(
+            self._comm_fpts, self._grad_upts, add=self.shape.order > 0
         )
 
-        # Template arguments for the physical gradient kernel
-        tplargs = {
-            'ndims': self.ndims,
-            'nvars': self.nvars,
-            'nverts': len(self.shape.linspts),
-            'jac_exprs': self.shape.jac_exprs
-        }
-
-        gradcoru_phys = []
-        if 'curved' in regions:
-            gradcoru_phys.append(lambda: kernel(
-                'gradcoru_phys', tplargs=tplargs | {'ktype': 'curved'},
-                dims=[self.nupts, regions['curved']],
-                gradu=slicem(self._grad_upts, 'curved'),
-                smats=self.curved_smat_at('upts'),
-                rcpdjac=self.rcpdjac_at('upts', 'curved')
-            ))
-        if 'linear' in regions:
-            gradcoru_phys.append(lambda: kernel(
-                'gradcoru_phys', tplargs=tplargs | {'ktype': 'linear'},
-                dims=[self.nupts, regions['linear']],
-                gradu=slicem(self._grad_upts, 'linear'),
-                upts=self.upts, verts=self.centred_ploc_at('linspts', 'linear')
-            ))
-
-        kernels['gradcoru_phys'] = lambda: slicedk(k() for k in gradcoru_phys)
+        # Take the corrected gradients to physical space
+        kernels['gradcoru_phys'] = lambda: self.gradcoru_phys(self._grad_upts)
 
         if not self.grad_fusion or self.shape.order == 0:
             kernels['gradcoru_phys_upts'] = kernels['gradcoru_phys']

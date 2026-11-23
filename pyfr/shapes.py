@@ -34,6 +34,9 @@ class BaseShape:
     npts_coeffs = None
     npts_cdenom = None
 
+    # Jacobian expressions for a linear element
+    jac_exprs = None
+
     npts_for_face = {
         'line': lambda order: order + 1,
         'tri': lambda order: (order + 1)*(order + 2) // 2,
@@ -190,19 +193,7 @@ class BaseShape:
 
         # If nothing has been provided then pick a sensible default
         if not {'rule', 'qdeg', 'npts'}.intersection(kwargs):
-            match kind:
-                case 'quad':
-                    kwargs['rule'] = 'gauss-legendre'
-                    kwargs['npts'] = (self.order + 2)**2
-                case 'hex':
-                    kwargs['rule'] = 'gauss-legendre'
-                    kwargs['npts'] = (self.order + 2)**3
-                case 'tet':
-                    kwargs['qdeg'] = 2*self.order + 1
-                case 'line' | 'pyr' | 'tri':
-                    kwargs['qdeg'] = 2*(self.order + 1)
-                case 'pri':
-                    kwargs['qdeg'] = 2*(self.order + 2)
+            kwargs['qdeg'] = 2*self.order + (1 if kind == 'tet' else 2)
 
         return get_quadrule(kind, **kwargs)
 
@@ -259,18 +250,11 @@ class BaseShape:
     def gbasis_coeffs(self):
         coeffs = []
 
-        # Suitable quadrature rules for various face types
-        qrule_map = {
-            'line': ('gauss-legendre', self.order + 1),
-            'quad': ('gauss-legendre', (self.order + 1)**2),
-            'tri': ('williams-shunn', 36)
-        }
-
         for kind, proj, norm in self.faces:
             # Obtain a quadrature rule for integrating on the reference face
             # and evaluate this rule at the nodal basis defined by the flux
             # points
-            qr = get_quadrule(kind, *qrule_map[kind])
+            qr = get_quadrule(kind, qdeg=max(2*self.order, 1))
             L = self.facebases[kind].nodal_basis_at(qr.pts)
 
             # Do the quadrature
@@ -288,6 +272,18 @@ class BaseShape:
     @property
     def facenorms(self):
         return [norm for kind, proj, norm in self.faces]
+
+    @cached_property
+    def facemaps(self):
+        fmaps = []
+
+        for kind, proj, norm in self.faces:
+            # Sample the face at its origin and a unit step along each axis
+            p0, *ps = proj_pts(proj, np.eye(self.ndims, self.ndims - 1, k=-1))
+
+            fmaps.append((p0, np.array(ps) - p0))
+
+        return fmaps
 
     @cached_property
     def norm_fpts(self):
@@ -592,25 +588,6 @@ class PyrShape(BaseShape):
         ('tri', lambda s, t: ((1 - t)/2, -s - (t + 1)/2, t), (1, 0, 0.5)),
         ('tri', lambda s, t: (-s - (t + 1)/2, (1 - t)/2, t), (0, 1, 0.5)),
         ('tri', lambda s, t: ((t - 1)/2, s + (t + 1)/2, t), (-1, 0, 0.5)),
-    ]
-
-    # Jacobian expressions for a linear element
-    jac_exprs = [
-        ['((1 - x[1])*V[1][0] + (-x[1] - 1)*V[2][0] +'
-         ' (x[1] - 1)*V[0][0] + (x[1] + 1)*V[3][0])/4',
-         '((1 - x[1])*V[1][1] + (-x[1] - 1)*V[2][1] +'
-         '(x[1] - 1)*V[0][1] + (x[1] + 1)*V[3][1])/4',
-         '((1 - x[1])*V[1][2] + (-x[1] - 1)*V[2][2] +'
-         ' (x[1] - 1)*V[0][2] + (x[1] + 1)*V[3][2])/4'],
-        ['((1 - x[0])*V[2][0] + (-x[0] - 1)*V[1][0] +'
-         ' (x[0] - 1)*V[0][0] + (x[0] + 1)*V[3][0])/4',
-         '((1 - x[0])*V[2][1] + (-x[0] - 1)*V[1][1] +'
-         ' (x[0] - 1)*V[0][1] + (x[0] + 1)*V[3][1])/4',
-         '((1 - x[0])*V[2][2] + (-x[0] - 1)*V[1][2] +'
-         '(x[0] - 1)*V[0][2] + (x[0] + 1)*V[3][2])/4'],
-        ['(-V[0][0] - V[1][0] - V[2][0] - V[3][0] + 4*V[4][0])/8',
-         '(-V[0][1] - V[1][1] - V[2][1] - V[3][1] + 4*V[4][1])/8',
-         '(-V[0][2] - V[1][2] - V[2][2] - V[3][2] + 4*V[4][2])/8']
     ]
 
     @classmethod

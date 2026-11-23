@@ -8,6 +8,7 @@
 <% gradu = 'gradu' if 'fused' in ktype else 'f' %>
 <% smats = 'smats_l' if 'linear' in ktype else 'smats' %>
 <% rcpdjac = 'rcpdjac_l' if 'linear' in ktype else 'rcpdjac' %>
+<% phys = 'physical' in ktype %>
 
 <%pyfr:kernel name='tflux' ndim='2'
               u='in fpdtype_t[${str(nvars)}]'
@@ -27,7 +28,7 @@
     fpdtype_t ${rcpdjac} = 1 / djac;
 % endif
 
-% if 'fused' in ktype:
+% if 'fused' in ktype and not phys:
     // Transform the corrected gradient
     ${pyfr.expand('transform_grad', gradu, smats, rcpdjac)};
 % endif
@@ -41,9 +42,16 @@
     ${pyfr.expand('artificial_viscosity_add', gradu, 'ftemp', 'artvisc')};
 % endif
 
+% if phys:
+    // Output the physical fluxes
+% for i, j in pyfr.ndrange(ndims, nvars):
+    f[${i}][${j}] = ftemp[${i}][${j}];
+% endfor
+% else:
     // Transform the fluxes
 % for i, j in pyfr.ndrange(ndims, nvars):
     f[${i}][${j}] = ${' + '.join(f'{smats}[{i}][{k}]*ftemp[{k}][{j}]'
                                  for k in range(ndims))};
 % endfor
+% endif
 </%pyfr:kernel>

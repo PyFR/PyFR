@@ -27,8 +27,12 @@ Parameterises the hexahedral elements, with
 #. ``quad-pts`` --- name of quadrature rule for anti-aliasing in a
    hexahedral element:
 
-    ``gauss-legendre`` | ``gauss-legendre-lobatto`` |
-    ``witherden-vincent``
+    ``gauss-legendre`` | ``gauss-legendre-lobatto``
+
+#. ``operators`` --- space in which a curved hexahedral element is
+   discretised:
+
+    ``transformed`` | ``physical``
 
 Example:
 

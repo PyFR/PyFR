@@ -7,17 +7,18 @@
 <%
     # Write over the solution when the divergence was formed in the scratch
     if preserve_soln:
-        kargs = {'divconf': f'in fpdtype_t[{nvars}]',
-                 'u': f'inout fpdtype_t[{nvars}]'}
-        out = 'u'
+        dio, uio, out = 'in', 'inout', 'u'
     else:
-        kargs = {'divconf': f'inout fpdtype_t[{nvars}]',
-                 'u': f'in fpdtype_t[{nvars}]'}
-        out = 'divconf'
+        dio, uio, out = 'inout', 'in', 'divconf'
+
+    # Scale the divergence where it is left transformed
+    scale = 'rcpdjac*' if ktype == 'transformed' else ''
 %>
 
-<%pyfr:kernel name='negdivconf' ndim='2' kargs='${kargs}'
+<%pyfr:kernel name='negdivconf' ndim='2'
               t='scalar fpdtype_t'
+              divconf='${dio} fpdtype_t[${str(nvars)}]'
+              u='${uio} fpdtype_t[${str(nvars)}]'
               ploc='in fpdtype_t[${str(ndims)}]'
               rcpdjac='in fpdtype_t'>
 fpdtype_t src[${nvars}] = {};
@@ -27,6 +28,6 @@ fpdtype_t src[${nvars}] = {};
 % endfor
 
 % for i in range(nvars):
-    ${out}[${i}] = -rcpdjac*divconf[${i}] + src[${i}];
+    ${out}[${i}] = -${scale}divconf[${i}] + src[${i}];
 % endfor
 </%pyfr:kernel>

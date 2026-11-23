@@ -22,9 +22,16 @@
     fpdtype_t ftemp[${ndims}][${nvars}];
     ${pyfr.expand('flux', 'u', 'ftemp')};
 
+% if 'physical' in ktype:
+    // Output the physical fluxes
+% for i, j in pyfr.ndrange(ndims, nvars):
+    f[${i}][${j}] = ftemp[${i}][${j}];
+% endfor
+% else:
     // Transform the fluxes
 % for i, j in pyfr.ndrange(ndims, nvars):
     f[${i}][${j}] = ${' + '.join(f'{smats}[{i}][{k}]*ftemp[{k}][{j}]'
                                  for k in range(ndims))};
 % endfor
+% endif
 </%pyfr:kernel>

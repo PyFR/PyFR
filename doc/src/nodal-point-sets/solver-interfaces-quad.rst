@@ -28,8 +28,7 @@ Parameterises the quadrilateral interfaces, with
 #. ``quad-pts`` --- name of quadrature rule for anti-aliasing on a
    quadrilateral interface:
 
-    ``gauss-legendre`` | ``gauss-legendre-lobatto`` |
-    ``witherden-vincent``
+    ``gauss-legendre`` | ``gauss-legendre-lobatto``
 
 Example:
 
