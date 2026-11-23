@@ -38,9 +38,8 @@ class _ElementPrecond:
                       for c, e in self.ceidxs.items()}
 
         # Allocate the per-element inverse and Jacobian staging matrices
-        tile = backend.optimal_tile_shape(n, pcdtype)
-        self.inv = backend.tiled_matrix(block_size=n, nmats=self.neles,
-                                        tile_shape=tile, dtype=pcdtype)
+        self.inv = backend.tiled_matrix(block_shape=(n, n), nmats=self.neles,
+                                        dtype=pcdtype)
         self.jstage = backend.matrix((n, n, self.nemax), dtype=wdtype,
                                      extent=extent, tags={'align'})
 

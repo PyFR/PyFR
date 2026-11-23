@@ -10,6 +10,8 @@ class CUDABackend(BaseBackend):
     name = 'cuda'
     blocks = False
 
+    lane_load_bytes = 16
+
     def __init__(self, cfg):
         super().__init__(cfg)
 
@@ -84,17 +86,16 @@ class CUDABackend(BaseBackend):
         self.ordered_meta_kernel_cls = provider.CUDAOrderedMetaKernel
         self.unordered_meta_kernel_cls = provider.CUDAUnorderedMetaKernel
 
+        # Pointwise kernels
+        self.pointwise = provider.CUDAPointwiseKernelProvider(self)
+
         # Instantiate the base kernel providers
-        kprovs = [provider.CUDAPointwiseKernelProvider,
-                  blasext.CUDABlasExtKernels,
+        kprovs = [blasext.CUDABlasExtKernels,
                   packing.CUDAPackingKernels,
                   gimmik.CUDAGiMMiKKernels,
                   cublaslt.CUDACUBLASLtKernels,
                   linalg.CUDALinalgKernels]
-        self._providers = [k(self) for k in kprovs]
-
-        # Pointwise kernels
-        self.pointwise = self._providers[0]
+        self._providers = [self.pointwise, *[k(self) for k in kprovs]]
 
         # Create a stream to run kernels on
         self._stream = self.cuda.create_stream()
@@ -115,12 +116,6 @@ class CUDABackend(BaseBackend):
 
         # Return a view of the correct shape and dtype
         return self._xfer_buf[:nbytes].view(dtype).reshape(shape)
-
-    def optimal_tile_shape(self, block_size, dtype):
-        if block_size >= 256:
-            return (32, 64 // np.dtype(dtype).itemsize)
-        else:
-            return super().optimal_tile_shape(block_size, dtype)
 
     @property
     def platform_id(self):

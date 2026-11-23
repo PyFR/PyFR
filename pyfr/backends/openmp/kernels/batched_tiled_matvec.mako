@@ -28,7 +28,7 @@ void batched_tiled_matvec(const struct batched_tiled_matvec_kargs *restrict args
 % endif
 
     #define ROW_PTR(buf, upt, var) ((buf) + (upt)*${x_leaddim} + (s*${nvars} + (var))*${soasz})
-    #define TILE_PTR(tr, tc, lr) (minv + (tr)*${ntiles_c*tcols**2*csubsz} + (tc)*${tcols**2*csubsz} + (lr)*${tcols*csubsz} + s*${tcols*soasz})
+    #define TILE_PTR(tr, tc, lr) (minv + s*${ntiles_c**2*tcols**2*soasz} + (tr)*${ntiles_c*tcols**2*soasz} + (tc)*${tcols**2*soasz} + (lr)*${tcols*soasz})
 
     #pragma omp parallel for ${schedule}
     for (ixdtype_t ib = 0; ib < (neles + BLK_SZ - 1) / BLK_SZ; ib++)

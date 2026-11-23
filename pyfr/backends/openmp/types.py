@@ -62,7 +62,7 @@ class OpenMPView(base.View): pass
 
 
 class OpenMPTiledMatrix(base.TiledMatrix):
-    def __init__(self, backend, dtype, block_size, nmats, tile_shape, extent,
+    def __init__(self, backend, dtype, block_shape, nmats, initval, extent,
                  tags):
         self.backend = backend
         self.tags = self._base_tags | tags
@@ -70,23 +70,33 @@ class OpenMPTiledMatrix(base.TiledMatrix):
         self.dtype = dtype
         self.itemsize = np.dtype(dtype).itemsize
 
-        self.block_size = block_size
+        self.nrow, self.ncol = block_shape
         self.nmats = nmats
 
-        trows, tcols = tile_shape
-        if trows != tcols:
-            raise ValueError('OpenMP tiled matrices must be square')
+        tcols = backend.optimal_tile_shape(dtype)[1]
         self.trows = self.tcols = self.tsize = tcols
-        self.ntiles_r = self.ntiles_c = self.ntiles = -(-block_size // tcols)
+        self.ntiles_r = -(-self.nrow // tcols)
+        self.ntiles_c = -(-self.ncol // tcols)
+        self.padr = self.ntiles_r*tcols
+        self.padc = self.ntiles_c*tcols
 
         self.soasz = backend.soasz
         self.csubsz = backend.csubsz
-        self.nsoa = self.csubsz // self.soasz
         self.nblocks = -(-nmats // self.csubsz)
 
-        self.padded_size = self.ntiles*self.tsize
-        self.block_words = self.padded_size*self.padded_size*self.csubsz
+        self.block_words = self.padr*self.padc*self.csubsz
         self.nbytes = self.nblocks*self.block_words*self.itemsize
+        self.traits = (nmats, self.nrow, self.ncol, self.trows, self.tcols,
+                       dtype)
+
+        # Process the initial value
+        if initval is not None:
+            if initval.shape != (nmats, self.nrow, self.ncol):
+                raise ValueError('Invalid initial value')
+
+            self._initval = np.asanyarray(initval, dtype=self.dtype)
+        else:
+            self._initval = None
 
         backend.malloc(self, extent)
 
@@ -96,10 +106,24 @@ class OpenMPTiledMatrix(base.TiledMatrix):
 
         self.data = basedata[offset:offset + self.nbytes]
         self.data = self.data.view(self.dtype)
-        self.data = self.data.reshape(self.nblocks, self.ntiles, self.ntiles,
-                                      self.tsize, self.nsoa, self.tsize, -1)
+        self.data = self.data.reshape(-1, self.ntiles_r, self.ntiles_c,
+                                      self.tsize, self.tsize, self.soasz)
 
         self._as_parameter_ = self.data.ctypes.data
+
+        # Process any initial value
+        if self._initval is not None:
+            self._set(self._initval)
+
+        # Remove
+        del self._initval
+
+    def _set(self, ary):
+        tiles = self._tile(ary).reshape(len(ary), *self.data.shape[1:-1])
+
+        # Scatter each matrix onto its lane of the SoA tile layout
+        g, k = divmod(np.arange(len(ary)), self.soasz)
+        self.data[g, ..., k] = tiles
 
 
 class OpenMPGraph(base.Graph):
@@ -145,7 +169,7 @@ class OpenMPGraph(base.Graph):
                 ksplits = [0] + [s // blocksz for s in k.splits] + [nblocks]
                 splits.update(ksplits[1:-1])
 
-                for i, (j, ra) in enumerate(runargs.items()):
+                for i, (j, ra) in zip(k.splitidx, runargs.items()):
                     gkerns[j] = (*ksplits[i:i + 2], ra.kernels[0])
             else:
                 for i, (j, ra) in enumerate(runargs.items()):

@@ -7,6 +7,8 @@ from pyfr.backends.metal.util import call_
 class MetalBackend(BaseBackend):
     name = 'metal'
     blocks = False
+
+    lane_load_bytes = 16
     has_double = False
 
     def __init__(self, cfg):
@@ -53,17 +55,16 @@ class MetalBackend(BaseBackend):
         self.ordered_meta_kernel_cls = provider.MetalOrderedMetaKernel
         self.unordered_meta_kernel_cls = provider.MetalUnorderedMetaKernel
 
+        # Pointwise kernels
+        self.pointwise = provider.MetalPointwiseKernelProvider(self)
+
         # Instantiate the base kernel providers
-        kprovs = [provider.MetalPointwiseKernelProvider,
-                  blasext.MetalBlasExtKernels,
+        kprovs = [blasext.MetalBlasExtKernels,
                   linalg.MetalLinalgKernels,
                   packing.MetalPackingKernels,
                   gimmik.MetalGiMMiKKernels,
                   mps.MetalMPSKernels]
-        self._providers = [k(self) for k in kprovs]
-
-        # Pointwise kernels
-        self.pointwise = self._providers[0]
+        self._providers = [self.pointwise, *[k(self) for k in kprovs]]
 
         # Create a command queue and buffer descriptor
         self.queue = self.dev.newCommandQueue()
@@ -92,12 +93,6 @@ class MetalBackend(BaseBackend):
             i += 1
 
         return i or None
-
-    def optimal_tile_shape(self, block_size, dtype):
-        if np.dtype(dtype).itemsize == 2:
-            return (16, 16)
-        else:
-            return super().optimal_tile_shape(block_size, dtype)
 
     def new_command_buffer(self):
         return self.queue.commandBufferWithDescriptor_(self._cbuf_desc)

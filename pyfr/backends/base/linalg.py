@@ -20,7 +20,7 @@ class BaseLinalgKernels:
     @staticmethod
     def apply_tiled_tplargs(minv, *, nupts, nvars, in_scale, out_scale):
         return {
-            'nupts': nupts, 'nvars': nvars, 'block_size': minv.block_size,
+            'nupts': nupts, 'nvars': nvars, 'block_size': minv.nrow,
             'trows': minv.trows, 'tcols': minv.tcols,
             'ntiles_c': minv.ntiles_c,
             'in_scale': in_scale, 'out_scale': out_scale,
@@ -34,7 +34,7 @@ class BaseGPULinalgKernels(BaseLinalgKernels):
 
     def batched_inv_tiled(self, m, out, *, eidxs):
         if (not self.batched_inv_ok_dtypes(m.dtype, out.dtype) or
-            m.ioshape[0] != out.block_size):
+            m.ioshape[0] != out.nrow):
             raise NotSuitableError('Incompatible tiled inverse output')
 
         return self._batched_inv(m, out, eidxs=eidxs)
@@ -52,7 +52,7 @@ class BaseGPULinalgKernels(BaseLinalgKernels):
 
     def _base_tplargs(self, out, mdtype):
         return {
-            'n': out.block_size, 'trows': out.trows, 'tcols': out.tcols,
+            'n': out.nrow, 'trows': out.trows, 'tcols': out.tcols,
             'padr': out.padr, 'padc': out.padc, 'sgsize': self._sgsize,
             'ftype': npdtype_to_ctype(self._compute_dtype(mdtype)),
             'stype': npdtype_to_ctype(mdtype),
@@ -75,7 +75,7 @@ class BaseGPULinalgKernels(BaseLinalgKernels):
             return 2, 2, 2, 2
 
     def _inv_tplargs(self, out, mdtype):
-        n = out.block_size
+        n = out.nrow
         cdtype = self._compute_dtype(mdtype)
         stm, stn, ftm, ftn = self._inv_tiles(cdtype)
         extra = {'sc': self._inv_sc(n, cdtype), 'stm': stm, 'stn': stn,

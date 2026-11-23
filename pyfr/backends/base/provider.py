@@ -73,7 +73,8 @@ class BaseMetaKernel(Kernel):
     def __init__(self, kernels):
         super().__init__()
 
-        self.kernels = list(kernels)
+        # Prune any NullKernels
+        self.kernels = [k for k in kernels if not isinstance(k, NullKernel)]
 
     @property
     def leaves(self):
@@ -90,14 +91,19 @@ class BaseOrderedMetaKernel(BaseMetaKernel):
 
 class BaseUnorderedMetaKernel(BaseMetaKernel):
     def __init__(self, kernels, splits):
+        kernels = list(kernels)
+
         super().__init__(kernels)
 
         if splits is not None:
             self.splits = list(splits)
             self.compound = True
 
-            if len(self.splits) != len(self.kernels) - 1:
+            if len(self.splits) != len(kernels) - 1:
                 raise ValueError('Invalid split points')
+
+            # Account for NullKernel elision
+            self.splitidx = [kernels.index(k) for k in self.kernels]
 
 
 class BaseKernelProvider:
@@ -152,8 +158,8 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
         tplargs = dict(tplargs)
 
         # Backend-specfic generator classes
-        tplargs['_kernel_generator'] = ft.partial(self.kernel_generator_cls,
-                                                  self.backend)
+        kgen = ft.partial(self.kernel_generator_cls, self.backend)
+        tplargs['_kernel_generator'] = kgen
 
         # Arguments the body of the named kernel is differentiated along
         tplargs['_tangent'] = {name: tangent}

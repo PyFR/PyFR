@@ -1,5 +1,5 @@
 from ctypes import (POINTER, Structure, Union, addressof, byref, c_int,
-                    c_void_p, cast, pointer, sizeof)
+                    c_int64, c_void_p, cast, pointer, sizeof)
 from functools import cached_property
 
 from pyfr.backends.base import (BaseKernelProvider, BaseOrderedMetaKernel,
@@ -56,7 +56,7 @@ class OpenMPRegularRunArgs(Structure):
 class OpenMPBlockKernelArgs(Structure):
     _fields_ = [('fun', c_void_p),
                 ('args', c_void_p),
-                ('argmask', c_int),
+                ('argmask', c_int64),
                 ('argsz', c_int),
                 ('offset', c_int)]
 

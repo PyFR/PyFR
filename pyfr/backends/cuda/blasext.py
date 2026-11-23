@@ -1,13 +1,8 @@
-import numpy as np
-
 from pyfr.backends.base.blasext import BaseBlasExtKernels
-from pyfr.backends.cuda.provider import (CUDAKernel, CUDAKernelProvider,
-                                         get_grid_for_block)
+from pyfr.backends.cuda.provider import CUDAKernel, CUDAKernelProvider
 
 
 class CUDABlasExtKernels(BaseBlasExtKernels, CUDAKernelProvider):
-    pvar_idx = 'VARIDX'
-
     def copy(self, dst, src):
         cuda = self.backend.cuda
 
@@ -34,63 +29,3 @@ class CUDABlasExtKernels(BaseBlasExtKernels, CUDAKernelProvider):
                 cuda.memset(m, 0, m.nbytes, stream)
 
         return ZeroKernel(mats=[m])
-
-    def _reduction(self, fvvar, vvars, svars, tplargs):
-        cuda = self.backend.cuda
-        ixdtype = self.backend.ixdtype
-        nrow, _, ldim, fpdtype = fvvar.traits[1:]
-        ncola, ncolb = fvvar.ioshape[-2:]
-        nexprs = tplargs['nexprs']
-
-        # Reduction block dimensions (use more blocks for atomic approach)
-        block = (256, 1, 1)
-        grid = get_grid_for_block(block, ncolb, ncola)
-
-        # Result buffer on device (nexprs*ncola, not nexprs*ncola*nblocks)
-        reduced_dev = cuda.mem_alloc(nexprs*ncola*fvvar.itemsize)
-
-        # Result buffer on host
-        reduced_host = cuda.pagelocked_empty((nexprs, ncola), fpdtype)
-
-        # Initialisation buffer (0 for sum, -fpdtype_max for max)
-        init_host = cuda.pagelocked_empty((nexprs, ncola), fpdtype)
-        init_host.fill(tplargs['init_val'])
-
-        # Add backend-specific template arguments
-        tplargs['ncola'] = ncola
-
-        # Get the kernel template
-        src = self.backend.lookup.get_template('reduction').render(**tplargs)
-
-        # Argument types for the reduction kernel
-        argt = [ixdtype]*3 + [np.uintp]*(1 + len(vvars)) + [fpdtype]*len(svars)
-
-        # Build the reduction kernel
-        rkern = self._build_kernel('reduction', src, argt)
-
-        # Set the parameters
-        params = rkern.make_params(grid, block)
-        params.set_args(nrow, ncolb, ldim, reduced_dev, *vvars.values())
-
-        # Runtime argument offset
-        coff = 4 + len(vvars)
-
-        # Host-side reduction over ncola dimension
-        reducer = np.max if tplargs['rop'] == 'max' else np.sum
-
-        class ReductionKernel(CUDAKernel):
-            @property
-            def retval(self):
-                return reducer(reduced_host, axis=1)
-
-            if svars:
-                def bind(self, *consts):
-                    params.set_args(*consts, start=coff)
-
-            def run(self, stream):
-                cuda.memcpy(reduced_dev, init_host, reduced_dev.nbytes, stream)
-                rkern.exec_async(stream, params)
-                cuda.memcpy(reduced_host, reduced_dev, reduced_dev.nbytes,
-                            stream)
-
-        return ReductionKernel(mats=vvars.values())

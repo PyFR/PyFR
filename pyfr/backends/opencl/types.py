@@ -76,6 +76,22 @@ class OpenCLTiledMatrix(_OpenCLMatrixCommon, base.TiledMatrix):
         else:
             self.data = basedata
 
+        # Process any initial value
+        if self._initval is not None:
+            self._set(self._initval)
+
+        # Remove
+        del self._initval
+
+    def _set(self, ary):
+        # Tile into a pinned bounce buffer and copy to device
+        tiled = self._tile(ary)
+        buf = self.backend.xfer_buf(tiled.shape, self.dtype)
+        buf[:] = tiled
+        self.backend.queue.barrier()
+        self.backend.cl.memcpy(self.backend.queue, self.data, buf, buf.nbytes,
+                               blocking=True)
+
 
 class OpenCLXchgMatrix(OpenCLMatrix, base.XchgMatrix):
     def __init__(self, backend, dtype, ioshape, initval, extent, tags):

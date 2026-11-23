@@ -5,7 +5,8 @@ from pyfr.backends.openmp.provider import OpenMPKernel, OpenMPKernelProvider
 
 
 class OpenMPBlasExtKernels(BaseBlasExtKernels, OpenMPKernelProvider):
-    pvar_idx = '_k'
+    # Reduce with a two dimensional kernel
+    reduction_ndim = 2
 
     def copy(self, dst, src):
         ixdtype = self.backend.ixdtype
@@ -43,40 +44,3 @@ class OpenMPBlasExtKernels(BaseBlasExtKernels, OpenMPKernelProvider):
         kern.set_args(m, dbbytes, bnbytes, nblocks)
 
         return OpenMPKernel(mats=[m], kernel=kern)
-
-    def _reduction(self, fvvar, vvars, svars, tplargs):
-        ixdtype = self.backend.ixdtype
-        nblocks, nrow, *_, fpdtype = fvvar.traits
-        narr = fvvar.ioshape[-1]
-        ncola = fvvar.ioshape[-2] if len(fvvar.ioshape) >= 3 else 1
-
-        # Add backend-specific template arguments
-        tplargs['ncola'] = ncola
-
-        # Render the reduction kernel template
-        src = self.backend.lookup.get_template('reduction').render(**tplargs)
-
-        # Array for the reduced data
-        reduced = np.zeros(tplargs['nexprs'], dtype=fpdtype)
-
-        # Argument types: ints, pointers (vvars), scalars (svars)
-        argt = [ixdtype]*3 + [np.uintp]*(1 + len(vvars)) + [fpdtype]*len(svars)
-
-        # Build and set arguments
-        rkern = self._build_kernel('reduction', src, argt)
-        args = [nrow, nblocks, narr, reduced.ctypes.data, *vvars.values()]
-        rkern.set_args(*args)
-
-        # Runtime argument offset for svars
-        facoff = len(args)
-
-        class ReductionKernel(OpenMPKernel):
-            @property
-            def retval(self):
-                return reduced
-
-            if svars:
-                def bind(self, *consts):
-                    self.kernel.set_args(*consts, start=facoff)
-
-        return ReductionKernel(mats=vvars.values(), kernel=rkern)

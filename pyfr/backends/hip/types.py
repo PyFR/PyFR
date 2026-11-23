@@ -61,6 +61,20 @@ class HIPTiledMatrix(_HIPMatrixCommon, base.TiledMatrix):
         self.data = int(self.basedata) + offset
         self.offset = offset
 
+        # Process any initial value
+        if self._initval is not None:
+            self._set(self._initval)
+
+        # Remove
+        del self._initval
+
+    def _set(self, ary):
+        # Tile into a pinned bounce buffer and copy to device
+        tiled = self._tile(ary)
+        buf = self.backend.xfer_buf(tiled.shape, self.dtype)
+        buf[:] = tiled
+        self.backend.hip.memcpy(self.data, buf, buf.nbytes)
+
 
 class HIPXchgMatrix(HIPMatrix, base.XchgMatrix):
     def __init__(self, backend, dtype, ioshape, initval, extent, tags):

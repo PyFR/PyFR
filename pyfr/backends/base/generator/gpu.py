@@ -1,7 +1,8 @@
 from pyfr.backends.base.generator.base import BaseKernelGenerator
 from pyfr.backends.base.generator.lanes import StagedRowLanes
-from pyfr.dsl.nodes import Assign, ExprStmt, Float, Index, Program, Var
-from pyfr.dsl.rewriter import Rewriter
+from pyfr.backends.base.generator.reduce import butterfly, gather
+from pyfr.dsl.nodes import Assign, ExprStmt, Float, Program, Var
+from pyfr.dsl.rewriter import Rewriter, rename_vars
 
 
 class BaseGPUKernelGenerator(BaseKernelGenerator):
@@ -32,6 +33,8 @@ class BaseGPUKernelGenerator(BaseKernelGenerator):
     _xidx = '_x'
     _aosoa = '(_x / @soasz*@nv + @v)*@soasz + _x % @soasz'
     _bcast = '@c'
+    _tile = ('_x*@pr*@pc + (@r / @tr)*(@pc / @tc)*@tr*@tc'
+             ' + (@c / @tc)*@tr*@tc + (@r % @tr)*@tc + @c % @tc')
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -93,7 +96,7 @@ class BaseGPUKernelGenerator(BaseKernelGenerator):
         return Var(f'ld{name}')
 
     def needs_ldim(self, arg):
-        if arg.isbroadcast and arg.ncdim == 1:
+        if (arg.isbroadcast and arg.ncdim == 1) or arg.istiled:
             return False
         else:
             return self.ndim == 2 or (arg.ncdim > 0 and not arg.ismpi)
@@ -116,18 +119,15 @@ class BaseGPUKernelGenerator(BaseKernelGenerator):
         # Render the body
         body = self._render_body(ast, codegen)
 
-        # 2D reduction: accumulator decls + shared-memory epilogue
-        rpre, epilogue = self._render_reduce_2d(codegen)
-        preamble += '\n' + rpre
+        # Reductions: accumulator decls + shared-memory epilogue
+        rpre, epilogue = self._render_reduce_epilogue(codegen)
+        preamble += f'\n{rpre}\n'
 
         return body, preamble, epilogue
 
-    def _render_reduce_2d(self, codegen):
+    def _render_reduce_epilogue(self, codegen):
         if not self._reduce_args:
             return '', ''
-
-        bx = self.block2d[0]
-        lx, ly = self._lid
 
         # Preamble: register accumulators initialised to identity
         stmts = []
@@ -137,25 +137,47 @@ class BaseGPUKernelGenerator(BaseKernelGenerator):
             stmts += [ExprStmt(Assign(acc, iexpr)) for acc, _ in pairs]
         preamble = self._generate(codegen, Program(stmts))
 
-        # Epilogue: shared-memory reduce across y-threads, then
-        # write result to global (single shared array, reused)
-        rs = Index(Var('_rs'), Var(str(lx)))
-        sync = codegen.intrinsics['sync']
-        epilogue = f'{self._shared_prfx} fpdtype_t _rs[{bx}];'
-        for _, pairs, ident, reduceop in self._reduce_args:
-            for src, dst in pairs:
-                atom = self._generate(codegen,
-                                      self._atomic_stmt(reduceop, rs, src))
-                wb = self._generate(codegen, ExprStmt(Assign(dst, rs)))
-                epilogue += f'''
-                    if ({ly} == 0) _rs[{lx}] = {ident};
-                    {sync};
-                    if (_x < _nx) {atom}
-                    {sync};
-                    if ({ly} == 0 && _x < _nx) {wb}
-                '''
+        # Epilogue: combine each accumulator across the lanes which share it
+        bx, by = self.block[:2]
+        epilogue = f'{self._shared_prfx} fpdtype_t _rs[{bx*by}];'
+        for _, pairs, _, va in self._reduce_args:
+            for acc, dst in pairs:
+                epilogue += self._render_reduce_arg(codegen, va, acc, dst)
 
         return preamble, epilogue
+
+    def _render_reduce_arg(self, codegen, va, acc, dst):
+        bx, by = self.block[:2]
+        lx, ly = self._lid
+        lid = f'((int) {lx} + {bx}*(int) {ly})' if by > 1 else f'(int) {lx}'
+        op, rv, prv = va.reduceop, Var('_rv'), Var('_p__rv')
+
+        # Exchange across the block for a range reduction, a row for a column
+        if va.isbroadcast:
+            size, stride, xchg = bx*by, 1, butterfly
+        else:
+            size, stride, xchg = by, bx, gather
+
+        # Fold the partner values into the accumulator at each exchange
+        combine = [self._accum_stmt(op, rv, prv)]
+        code = xchg(['_rv'], ['fpdtype_t'], ['_rs'], size, combine, stride)
+        code = rename_vars(Program(code), {'lidx': Var(lid)})
+        code = self._generate(codegen, code)
+
+        # Have the first lane of the exchange pass the result on
+        if va.isbroadcast:
+            tail = self._generate(codegen, self._atomic_stmt(op, dst, rv))
+            tail = f'if ({lid} == 0) {tail}'
+        else:
+            tail = self._generate(codegen, ExprStmt(Assign(dst, rv)))
+            tail = f'if ({ly} == 0 && _x < _nx) {tail}'
+
+        return f'''
+            {{
+                fpdtype_t _rv = {self._generate(codegen, acc)};
+                {code}
+                {tail}
+            }}'''
 
     def _lane_decls(self):
         prfx, model = self._shared_prfx, self.lanemodel

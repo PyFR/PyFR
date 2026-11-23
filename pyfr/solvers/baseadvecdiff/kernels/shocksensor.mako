@@ -5,7 +5,7 @@
 ## Klockner-Warburton-Hesthaven decay-fit sensor
 <%pyfr:kernel name='shocksensor' ndim='1'
               u='in fpdtype_t[${str(nupts)}][${str(nvars)}]'
-              vtx='out view(${str(nverts)}) reduce(max) fpdtype_t'>
+              vtx='inout view(${str(nverts)}) reduce(max) fpdtype_t'>
     fpdtype_t tmp;
 
     // Compute energy per degree level
@@ -54,7 +54,7 @@
 
 <%pyfr:kernel name='shocksensor' ndim='1'
               u='in fpdtype_t[${str(nupts)}][${str(nvars)}]'
-              vtx='out view(${str(nverts)}) reduce(max) fpdtype_t'>
+              vtx='inout view(${str(nverts)}) reduce(max) fpdtype_t'>
     // Smoothness indicator
     fpdtype_t totEn = 0.0, pnEn = 1e-15, tmp;
 

@@ -41,7 +41,7 @@ class OpenMPLinalgKernels(OpenMPKernelProvider, BaseLinalgKernels):
 
     def batched_inv_tiled(self, m, out, *, eidxs):
         if (not self.batched_inv_ok_dtypes(m.dtype, out.dtype) or
-            out.block_size != m.nrow):
+            out.nrow != m.nrow):
             raise ValueError('Invalid tiled output matrix')
 
         check_inv_eidxs = self.check_inv_eidxs
@@ -49,7 +49,7 @@ class OpenMPLinalgKernels(OpenMPKernelProvider, BaseLinalgKernels):
         nrow, csubsz, nb = m.nrow, m.backend.csubsz, m.datashape[0]
         nworkers = min(self._omp_num_threads(), nb)
         executor = self._inv_executor if nworkers > 1 else None
-        tile_ij = list(ndrange(out.ntiles, out.ntiles))
+        tile_ij = list(ndrange(out.ntiles_r, out.ntiles_c))
         ts = out.tsize
         ibf16, obf16 = is_bf16(m.dtype), is_bf16(out.dtype)
         eye = np.eye(nrow, dtype=np.float32 if ibf16 else m.dtype)
@@ -67,13 +67,12 @@ class OpenMPLinalgKernels(OpenMPKernelProvider, BaseLinalgKernels):
             def _set_eidxs(self, eidxs):
                 self._ecurr = eidxs
                 self._earr = earr = eidxs.get().ravel()
-                self._blocks, rem = divmod(earr, out.csubsz)
-                self._soas, self._inners = divmod(rem, out.soasz)
+                self._groups, self._inners = divmod(earr, out.soasz)
 
             def run(self):
                 data = m.data.reshape(m.datashape)
                 earr = self._earr
-                blocks, soas, inners = self._blocks, self._soas, self._inners
+                groups, inners = self._groups, self._inners
                 n = -(-len(earr) // csubsz)
                 chunk = max(-(-n // nworkers), 1)
 
@@ -88,7 +87,7 @@ class OpenMPLinalgKernels(OpenMPKernelProvider, BaseLinalgKernels):
                     inv = np.linalg.inv(eye - self._scale*jac)
 
                     sl = slice(start, end)
-                    b, s, n = blocks[sl], soas[sl], inners[sl]
+                    g, n = groups[sl], inners[sl]
 
                     for i, j in tile_ij:
                         r0, r1 = i*ts, min((i + 1)*ts, nrow)
@@ -96,7 +95,7 @@ class OpenMPLinalgKernels(OpenMPKernelProvider, BaseLinalgKernels):
                         blk = inv[:, r0:r1, c0:c1]
                         if obf16:
                             blk = f32_to_bf16(blk)
-                        out.data[b, i, j, :r1 - r0, s, :c1 - c0, n] = blk
+                        out.data[g, i, j, :r1 - r0, :c1 - c0, n] = blk
 
                 if executor:
                     with BLASThreadCtrl.serial():

@@ -39,7 +39,8 @@ class MetalKernelGenerator(BaseGPUKernelGenerator):
                  *(self._karg(*a) for a in kargs if a[0])]
 
         # Finally, the attribute arguments referenced by the kernel
-        src = f'{self._prologue} {self.preamble} {self.body}'
+        src = (f'{self._prologue} {self.preamble} {self.body} '
+               f'{self.epilogue}')
         kargs.append('uint2 _tpig [[thread_position_in_grid]]')
         if re.search(r'\b_tpitg\b', src):
             kargs.append('uint2 _tpitg [[thread_position_in_threadgroup]]')

@@ -8,6 +8,8 @@ class OpenCLBackend(BaseBackend):
     name = 'opencl'
     blocks = False
 
+    lane_load_bytes = 16
+
     def __init__(self, cfg):
         super().__init__(cfg)
 
@@ -82,13 +84,15 @@ class OpenCLBackend(BaseBackend):
         self.ordered_meta_kernel_cls = provider.OpenCLOrderedMetaKernel
         self.unordered_meta_kernel_cls = provider.OpenCLUnorderedMetaKernel
 
+        # Pointwise kernels
+        self.pointwise = provider.OpenCLPointwiseKernelProvider(self)
+
         # Instantiate the base kernel providers
-        kprovs = [provider.OpenCLPointwiseKernelProvider,
-                  blasext.OpenCLBlasExtKernels,
+        kprovs = [blasext.OpenCLBlasExtKernels,
                   linalg.OpenCLLinalgKernels,
                   packing.OpenCLPackingKernels,
                   gimmik.OpenCLGiMMiKKernels]
-        self._providers = [k(self) for k in kprovs]
+        self._providers = [self.pointwise, *[k(self) for k in kprovs]]
 
         # Load CLBlast if available
         try:
@@ -101,9 +105,6 @@ class OpenCLBackend(BaseBackend):
             self._providers.append(tinytc.OpenCLTinyTCKernels(self))
         except OSError:
             pass
-
-        # Pointwise kernels
-        self.pointwise = self._providers[0]
 
         # Queues (out of order if possible, in order as fallback)
         try:

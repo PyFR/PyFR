@@ -38,6 +38,7 @@ static inline float bf16_to_f32(bf16 b)
 // Atomic helpers
 #define atomic_min_fpdtype(addr, val) _Pragma("omp atomic compare") if ((val) < *(addr)) { *(addr) = (val); }
 #define atomic_max_fpdtype(addr, val) _Pragma("omp atomic compare") if ((val) > *(addr)) { *(addr) = (val); }
+#define atomic_sum_fpdtype(addr, val) _Pragma("omp atomic update") *(addr) += (val)
 
 
 // Thread/block helpers (no-op for OpenMP)

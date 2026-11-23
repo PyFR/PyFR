@@ -12,6 +12,9 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
     _xidx = '_xi + _xj'
     _aosoa = '(_xi / @soasz*@nv + @v)*@soasz + _xj'
     _bcast = '@c % @ld + (@c / @ld)*@ld*@r'
+    _tile = ('((_ib*BLK_SZ + _xi) / @soasz*@pr*@pc'
+             ' + (@r / @tr)*(@pc / @tc)*@tr*@tc + (@c / @tc)*@tr*@tc'
+             ' + (@r % @tr)*@tc + @c % @tc)*@soasz + _xj')
 
     # Prefix for variables in shared storage, which lives on the stack
     _shared_prfx = None
@@ -26,12 +29,13 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
     def _render_body_preamble_epilogue(self):
         self._staged_reduces = []
         self._bcol_reduces = []
+        self._bcast_reduces = []
         return super()._render_body_preamble_epilogue()
 
     def _finalise_ast(self, ast):
         # Redirect 1D view reductions through their staging arrays
         for va in self.vectargs:
-            if va.isreduce and not va.isbroadcastc:
+            if va.isreduce and va.isview:
                 self._staged_reduces.append(va)
                 ast = self._stage_reduce(ast, va)
 
@@ -55,31 +59,55 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
         return stage(ast)
 
     def _render_reduce(self, va, body, codegen):
+        decl, locs = self._reduce_locals(va.name, prod(va.cdims), va.ncdim)
+        op, ra = va.reduceop, Var(f'_ra_{va.name}')
+
         # 2D broadcast-col: per-iteration local + direct accumulation
         if va.isbroadcastc:
             self._bcol_reduces.append(va)
-            n = prod(va.cdims) if va.cdims else 1
-
-            if va.ncdim:
-                # Declare a local accumulator fpdtype_t name[n]
-                decl = VarDecl('fpdtype_t', va.name, [Int(n)])
-                # Emit name_v[...] = op(name_v[...], name[j]) per element
-                accum = [self._accum_stmt(va.reduceop, self._deref_arg(va, j),
-                                          Index(Var(va.name), Int(j)))
-                         for j in range(n)]
-            else:
-                # Declare a local accumulator fpdtype_t name
-                decl = VarDecl('fpdtype_t', va.name)
-                # Emit name_v[...] = op(name_v[...], name)
-                accum = [self._accum_stmt(va.reduceop, self._deref_arg(va),
-                                          Var(va.name))]
-
-            dstr = self._generate(codegen, decl)
-            astr = self._generate(codegen, Program(accum))
-            return f'{dstr}\n{body}\n{astr}'
+            accum = [self._accum_stmt(op, self._reduce_target(va, j), l)
+                     for j, l in enumerate(locs)]
+        # Range reduction: per-item local + accumulator per lane of the block
+        elif va.isbroadcast:
+            self._bcast_reduces.append(va)
+            accum = [self._accum_stmt(op, Index(Index(ra, Int(j)), Var('_xj')),
+                                      l)
+                     for j, l in enumerate(locs)]
         # 1D view reductions have already been staged by _finalise_ast
         else:
             return body
+
+        dstr = self._generate(codegen, decl)
+        astr = self._generate(codegen, Program(accum))
+        return f'{dstr}\n{body}\n{astr}'
+
+    def _render_bcast_reduce(self):
+        # Declare and flush the block's accumulators of each range reduction
+        codegen, soasz = self.codegen_cls(), self.soasz
+        decls, flush = [], []
+
+        for va in self._bcast_reduces:
+            n = prod(va.cdims)
+            ident, rv = self._reduce_ident(va.reduceop), f'_ra_{va.name}'
+            decls.append(f'fpdtype_t {rv}[{n}][{soasz}];')
+            decls.append(f'for (int _i = 0; _i < {n*soasz}; _i++) '
+                         f'(&{rv}[0][0])[_i] = {ident};')
+
+            # Combine the lanes of the block and pass the result on
+            for j in range(n):
+                src = Index(Index(Var(rv), Int(j)), Var('_xj'))
+                accum = self._accum_stmt(va.reduceop, Var('_rv'), src)
+                dst = Index(Var(f'{va.name}_v'), Int(j))
+                atom = self._atomic_stmt(va.reduceop, dst, Var('_rv'))
+                flush.append(f'''
+                    {{
+                        fpdtype_t _rv = {ident};
+                        for (int _xj = 0; _xj < {soasz}; _xj++)
+                            {self._generate(codegen, accum)}
+                        {self._generate(codegen, atom)}
+                    }}''')
+
+        return '\n'.join(decls), '\n'.join(flush)
 
     def _render_staging(self):
         # Generate staging array declarations and atomic writeback code
@@ -131,6 +159,7 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
     def render(self):
         kargdefn, kargassn = self._render_args('args')
         rdecls, rflush = self._render_staging()
+        kdecls, kflush = self._render_bcast_reduce()
         soasz = self.soasz
 
         # View reduce: atomic flush after each SIMD chunk
@@ -182,10 +211,11 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
             struct {self.name}_kargs {{ {kargdefn}; }};
             void {self.name}(ixdtype_t _ib,
                              const struct {self.name}_kargs *args,
-                             int _disp_mask)
+                             int64_t _disp_mask)
             {{
                 {kargassn};
                 {rdecls}
+                {kdecls}
                 if (_nx - _ib*BLK_SZ >= BLK_SZ)
                 {{
                     {core}
@@ -194,6 +224,7 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                 {{
                     {clean}
                 }}
+                {kflush}
             }}'''
 
         return result
@@ -208,7 +239,7 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
         return False
 
     def needs_blocksz(self, arg):
-        if arg.isview or arg.ismpi:
+        if arg.isview or arg.istiled or arg.ismpi:
             return False
         # 2D broadcast vector
         elif self.ndim == 1:
@@ -235,8 +266,8 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
         kargs.extend((sa.dtype, sa.name, None, None) for sa in self.scalargs)
 
         # The displacement mask carries one bit per array argument
-        if len(self.vectargs) > 31:
-            raise ValueError('Kernels are limited to 31 array arguments')
+        if len(self.vectargs) > 63:
+            raise ValueError('Kernels are limited to 63 array arguments')
 
         # Finally, add the vector arguments
         for vidx, va in enumerate(self.vectargs):

@@ -11,6 +11,8 @@ class HIPBackend(BaseBackend):
     name = 'hip'
     blocks = False
 
+    lane_load_bytes = 16
+
     def __init__(self, cfg):
         super().__init__(cfg)
 
@@ -84,17 +86,16 @@ class HIPBackend(BaseBackend):
         self.ordered_meta_kernel_cls = provider.HIPOrderedMetaKernel
         self.unordered_meta_kernel_cls = provider.HIPUnorderedMetaKernel
 
+        # Pointwise kernels
+        self.pointwise = provider.HIPPointwiseKernelProvider(self)
+
         # Instantiate the base kernel providers
-        kprovs = [provider.HIPPointwiseKernelProvider,
-                  blasext.HIPBlasExtKernels,
+        kprovs = [blasext.HIPBlasExtKernels,
                   linalg.HIPLinalgKernels,
                   packing.HIPPackingKernels,
                   gimmik.HIPGiMMiKKernels,
                   rocblas.HIPRocBLASKernels]
-        self._providers = [k(self) for k in kprovs]
-
-        # Pointwise kernels
-        self.pointwise = self._providers[0]
+        self._providers = [self.pointwise, *[k(self) for k in kprovs]]
 
         # Create a stream to run kernels on
         self._stream = self.hip.create_stream()
@@ -157,12 +158,3 @@ class HIPBackend(BaseBackend):
         self.hip.memset(data, 0, nbytes)
 
         return data
-
-    def optimal_tile_shape(self, block_size, dtype):
-        tcols = 16 if np.dtype(dtype).itemsize == 2 else 8
-
-        # large blocks: wavefront-tall tile coalesces apply reads; else square
-        if block_size >= 256:
-            return (self.props['warp_size'], tcols)
-        else:
-            return (tcols, tcols)

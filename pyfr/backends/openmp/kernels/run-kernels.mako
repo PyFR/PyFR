@@ -15,9 +15,10 @@ typedef struct
     int *argsubs;
     struct
     {
-        void (*fun)(int, void *, int);
+        void (*fun)(int, void *, int64_t);
         void *args;
-        int argmask, argsz, offset;
+        int64_t argmask;
+        int argsz, offset;
     } *kernels;
 } block_group_t;
 

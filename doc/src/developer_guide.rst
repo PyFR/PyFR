@@ -80,9 +80,19 @@ Each argument specification has the form
 ``[intent] [attribute] [reduce(op)] data-type[dimensions]``.  The
 supported intents are ``in``, ``inout``, and ``out``.  Attributes
 include ``broadcast``, ``broadcast-row``, ``broadcast-col``, ``mpi``,
-``scalar``, and ``view``.  Reductions support ``min``, ``max``, and
-``sum``.  The implementation in
+``scalar``, ``tiled``, and ``view``.  Reductions support ``min``,
+``max``, and ``sum``.  The implementation in
 :mod:`pyfr.backends.base.generator` defines the exact constraints.
+
+A ``reduce(op)`` argument is assigned to like any output and the
+contributions of the items are combined with ``op``: a ``view`` into
+the entries it refers to, a ``broadcast-col`` into one value per
+column, and a ``broadcast`` into a single vector.  The caller
+initialises an ``inout`` reduction with the identity of ``op``.
+
+A ``tiled`` argument is a matrix per item of a one dimensional kernel,
+indexed as ``m[r][c]`` and bound to a matrix from ``tiled_matrix``;
+the backend chooses how the tiles are laid out.
 
 Kernels whose argument list depends on template parameters can build a
 dictionary of specifications in a Mako code block and pass it via the
@@ -185,12 +195,52 @@ the OpenMP backend a group is a single lane.  Broadcast arguments may
 have a single dimension, in which case they are indexed directly and
 the matrix must have a single row.
 
+Shared storage may instead be loaded from an ``in`` or ``inout``
+per-item, broadcast or tiled array argument with
+``shared s = @load(a);``, which takes the extents and, unless written
+``shared T s = @load(a);``, the type of ``a``.  Loaded storage is used
+only after the ``@sync();`` which follows it, so the staging loop
+above is ``shared s_u = @load(u);``.
+
 A two dimensional kernel may stage a ``broadcast-col`` array argument
-in storage shared by its block with ``shared vs = @load(verts);`` at
-the top of the body; the block fills the storage before walking its
-rows and the body reads it in place of the argument, with the same
-indices.  The storage counts against the budget once per column of the
-block.  On the OpenMP backend it is the argument itself.
+in storage shared by its block with the same load; the block fills the
+storage, with a barrier of its own, before walking its rows and the
+body reads it in place of the argument.
+
+Values held by each lane of a group are combined across the group with
+a ``#pragma pyfr allreduce(a, b, ...)`` block, where ``a, b, ...`` are
+scalar variables declared in the body and, within the block,
+``@partner(a)`` is the value of ``a`` held by the partner lane; the
+block folds the partner values into ``a`` and ``b``, and afterwards
+every lane holds the combined value of each variable.  A sum is
+``a += @partner(a);`` and a minimum ``a = fmin(a, @partner(a));``, and
+several variables are combined together when one decides the others:
+
+.. code-block:: none
+
+    fpdtype_t g = ${fpdtype_max};
+    int imin = ${npts};
+    for (int i = @lidx; i < ${npts}; i += @lsz)
+        if (u[i][0] < g)
+        {
+            g = u[i][0];
+            imin = i;
+        }
+    #pragma pyfr allreduce(g, imin)
+    {
+        fpdtype_t g_o = @partner(g);
+        int imin_o = @partner(imin);
+        if (g_o < g)
+        {
+            g = g_o;
+            imin = imin_o;
+        }
+    }
+
+Like ``@sync();`` a reduction must be reached by every lane of the
+group.  The exchange is a butterfly between the lanes through shared
+storage, counted against the budget, with a barrier either side of
+each exchange.
 
 Within a ``tangent`` or ``jacobian`` region, and so in a kernel
 requested with ``tangent``, shared storage can not depend on the inputs
@@ -202,8 +252,8 @@ The lanes of an item are modelled by
 dimensional kernel, :class:`~pyfr.backends.base.generator.lanes.RowLanes`
 or the :class:`~pyfr.backends.base.generator.lanes.StagedRowLanes` of
 the GPU backends, which size the group, hoist the shared declarations
-and lower the lane intrinsics; the kernel generators render what the
-lanes supply.
+and lower the lane intrinsics, loads and reductions; the kernel
+generators render what the lanes supply.
 
 PyFR-Mako Macros
 ----------------

@@ -9,7 +9,7 @@ class OpenCLLinalgKernels(BaseGPULinalgKernels, OpenCLKernelProvider):
     _mv_nthreads = 128
 
     def _batched_inv(self, m, out, *, eidxs):
-        n, nemax = out.block_size, m.ioshape[2]
+        n, nemax = out.nrow, m.ioshape[2]
         cdtype = self._compute_dtype(m.dtype)
         itemsz = np.dtype(cdtype).itemsize
 

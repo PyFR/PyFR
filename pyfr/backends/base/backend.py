@@ -35,6 +35,7 @@ def recordmat(fn):
 class BaseBackend:
     name = None
     has_double = True
+    lane_load_bytes = None
     _annotator = None
 
     def __init__(self, cfg):
@@ -189,16 +190,16 @@ class BaseBackend:
         return self.xchg_matrix((view.nvrow, view.nvcol*view.n), tags=tags)
 
     @recordmat
-    def tiled_matrix(self, block_size, nmats, tile_shape, dtype=None,
+    def tiled_matrix(self, block_shape, nmats, initval=None, dtype=None,
                      extent=None, tags=set()):
         dtype = dtype or self.fpdtype
-        return self.tiled_matrix_cls(self, dtype, block_size, nmats,
-                                     tile_shape, extent, tags)
+        return self.tiled_matrix_cls(self, dtype, block_shape, nmats, initval,
+                                     extent, tags)
 
-    def optimal_tile_shape(self, block_size, dtype):
-        # Square 64-byte-wide tile; wide-wavefront backends override this
-        s = 64 // np.dtype(dtype).itemsize
-        return (s, s)
+    def optimal_tile_shape(self, dtype):
+        # Use tiles of 128 bytes whose rows are each one vector load
+        itemsize = np.dtype(dtype).itemsize
+        return (128 // self.lane_load_bytes, self.lane_load_bytes // itemsize)
 
     def view_mapping(self, matmap, rmap, cmap, rstridemap=1, vshape=()):
         return ViewMapping(self, matmap, rmap, cmap, rstridemap, vshape)

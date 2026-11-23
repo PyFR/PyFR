@@ -11,7 +11,7 @@ struct kargs
     ixdtype_t cblocksz;
 };
 
-void batch_gemm(ixdtype_t ib, const struct kargs *args, int _disp_mask)
+void batch_gemm(ixdtype_t ib, const struct kargs *args, int64_t _disp_mask)
 {
     args->exec((_disp_mask & 2) ? args->blockk : args->blockk_nt,
                args->b + ((_disp_mask & 1) ? 0 : ib*args->bblocksz),

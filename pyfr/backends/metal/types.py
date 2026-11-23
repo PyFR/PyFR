@@ -57,6 +57,24 @@ class MetalTiledMatrix(base.TiledMatrix):
         self.offset = offset
         self.data = (self.basedata, self.offset)
 
+        # Map the buffer
+        buf = basedata.contents().as_buffer(offset + self.nbytes)
+        self.hdata = np.frombuffer(buf, dtype=self.dtype, offset=self.offset)
+
+        # Process any initial value
+        if self._initval is not None:
+            self._set(self._initval)
+
+        # Remove
+        del self._initval
+
+    def _set(self, ary):
+        # Wait for any outstanding work to finish
+        self.backend.wait()
+
+        # Tile directly into the host mapping
+        self.hdata[:] = self._tile(ary).flat
+
 
 class MetalGraph(base.Graph):
     def __init__(self, backend):

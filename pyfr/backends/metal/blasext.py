@@ -1,13 +1,9 @@
-import numpy as np
-
 from pyfr.backends.base.blasext import BaseBlasExtKernels
 from pyfr.backends.metal.provider import MetalKernel, MetalKernelProvider
 from pyfr.backends.metal.util import call_
 
 
 class MetalBlasExtKernels(BaseBlasExtKernels, MetalKernelProvider):
-    pvar_idx = 'VARIDX'
-
     def copy(self, dst, src):
         if dst.traits != src.traits:
             raise ValueError('Incompatible matrix types')
@@ -34,66 +30,3 @@ class MetalBlasExtKernels(BaseBlasExtKernels, MetalKernelProvider):
                 blit.endEncoding()
 
         return ZeroKernel(mats=[m])
-
-    def _reduction(self, fvvar, vvars, svars, tplargs):
-        from Metal import MTLResourceStorageModeShared
-
-        ixdtype = self.backend.ixdtype
-        nrow, _, ldim, fpdtype = fvvar.traits[1:]
-        ncola, ncolb = fvvar.ioshape[-2:]
-        nexprs = tplargs['nexprs']
-
-        # Reduction threadgroup and grid dimensions
-        blocksz = 128
-        tgrp = (blocksz, 1, 1)
-        grid = (ncolb - ncolb % -tgrp[0], ncola, 1)
-
-        # Result buffer (nexprs*ncola with atomic reduction)
-        bufsz = fvvar.itemsize*nexprs*ncola
-
-        # Allocate the result buffer and map it on the host
-        reduced_dev = call_(self.backend.dev, 'newBufferWith', length=bufsz,
-                            options=MTLResourceStorageModeShared)
-        reduced_host = reduced_dev.contents().as_buffer(bufsz)
-        reduced_host = np.frombuffer(reduced_host, dtype=fpdtype)
-        reduced_host = reduced_host.reshape(nexprs, ncola)
-
-        # Add backend-specific template arguments
-        tplargs['ncola'] = ncola
-        tplargs['blocksz'] = blocksz
-
-        # Get the kernel template
-        src = self.backend.lookup.get_template('reduction').render(**tplargs)
-
-        # Argument types for the reduction kernel
-        argt = [ixdtype]*3 + [np.uintp]*(1 + len(vvars)) + [fpdtype]*len(svars)
-
-        # Build the reduction kernel
-        rkern = self._build_kernel('reduction', src, argt)
-
-        # Constant scalar argument offset and count
-        coff, nconsts = 4 + len(vvars), len(svars)
-
-        # Kernel arguments
-        kargs = [nrow, ncolb, ldim, (reduced_dev, 0)]
-        kargs.extend(v.data for v in vvars.values())
-        kargs.extend([None]*len(svars))
-
-        # Reduction type and initialisation value
-        reducer = np.max if tplargs['rop'] == 'max' else np.sum
-        init_val = tplargs['init_val']
-
-        class ReductionKernel(MetalKernel):
-            @property
-            def retval(self):
-                return reducer(reduced_host, axis=1)
-
-            if svars:
-                def bind(self, *consts):
-                    kargs[coff:coff + nconsts] = consts
-
-            def run(self, cbuf):
-                reduced_host.fill(init_val)
-                rkern(cbuf, grid, tgrp, *kargs)
-
-        return ReductionKernel(mats=vvars.values())

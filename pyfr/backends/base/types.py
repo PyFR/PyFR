@@ -17,6 +17,8 @@ class _MatrixArg:
                 return [self, self.leaddim]
             case 'mb':
                 return [self, self.blocksz]
+            case 't':
+                raise ValueError('Kernel requires a tiled matrix')
             case _:
                 return [self]
 
@@ -247,7 +249,7 @@ class ConstMatrix(MatrixBase):
 class TiledMatrix(_StorageBase):
     _base_tags = {'tiled'}
 
-    def __init__(self, backend, dtype, block_size, nmats, tile_shape, extent,
+    def __init__(self, backend, dtype, block_shape, nmats, initval, extent,
                  tags):
         self.backend = backend
         self.tags = self._base_tags | tags
@@ -255,17 +257,28 @@ class TiledMatrix(_StorageBase):
         self.dtype = dtype
         self.itemsize = np.dtype(dtype).itemsize
 
-        self.block_size = block_size
+        self.nrow, self.ncol = block_shape
         self.nmats = nmats
 
-        self.trows, self.tcols = tile_shape
-        self.ntiles_r = -(-block_size // self.trows)
-        self.ntiles_c = -(-block_size // self.tcols)
+        self.trows, self.tcols = backend.optimal_tile_shape(dtype)
+        self.ntiles_r = -(-self.nrow // self.trows)
+        self.ntiles_c = -(-self.ncol // self.tcols)
         self.padr = self.ntiles_r*self.trows
         self.padc = self.ntiles_c*self.tcols
 
         self.elem_size = self.padr*self.padc
         self.nbytes = nmats*self.elem_size*self.itemsize
+        self.traits = (nmats, self.nrow, self.ncol, self.trows, self.tcols,
+                       dtype)
+
+        # Process the initial value
+        if initval is not None:
+            if initval.shape != (nmats, self.nrow, self.ncol):
+                raise ValueError('Invalid initial value')
+
+            self._initval = np.asanyarray(initval, dtype=self.dtype)
+        else:
+            self._initval = None
 
         backend.malloc(self, extent)
 
@@ -273,6 +286,23 @@ class TiledMatrix(_StorageBase):
         self.basedata = data
         self.data = data
         self.offset = offset
+
+    def kargs(self, form):
+        if form != 't':
+            raise ValueError('Kernel requires an untiled matrix')
+
+        return [self]
+
+    def _tile(self, ary):
+        # Scatter each block into its zero-padded grid of row-major tiles
+        n, tr, tc = len(ary), self.trows, self.tcols
+        out = np.zeros((n, self.ntiles_r, tr, self.ntiles_c, tc), self.dtype)
+        out.reshape(n, self.padr, self.padc)[:, :self.nrow, :self.ncol] = ary
+
+        return out.transpose(0, 1, 3, 2, 4).reshape(n, -1)
+
+    def _set(self, ary):
+        pass
 
 
 class XchgMatrix(Matrix):

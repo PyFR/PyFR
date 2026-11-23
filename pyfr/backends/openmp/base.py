@@ -56,16 +56,15 @@ class OpenMPBackend(BaseBackend):
         self.ordered_meta_kernel_cls = provider.OpenMPOrderedMetaKernel
         self.unordered_meta_kernel_cls = provider.OpenMPUnorderedMetaKernel
 
+        # Pointwise kernels
+        self.pointwise = provider.OpenMPPointwiseKernelProvider(self)
+
         # Instantiate mandatory kernel provider classes
-        kprovcls = [provider.OpenMPPointwiseKernelProvider,
-                    blasext.OpenMPBlasExtKernels,
+        kprovcls = [blasext.OpenMPBlasExtKernels,
                     linalg.OpenMPLinalgKernels,
                     packing.OpenMPPackingKernels,
                     xsmm.OpenMPXSMMKernels]
-        self._providers = [k(self) for k in kprovcls]
-
-        # Pointwise kernels
-        self.pointwise = self._providers[0]
+        self._providers = [self.pointwise, *[k(self) for k in kprovcls]]
 
         if cfg.getbool('backend', 'annotate', False):
             raise ValueError('Annotation is not supported by the '
@@ -103,3 +102,8 @@ class OpenMPBackend(BaseBackend):
         offset = -data.ctypes.data % self.alignb
 
         return data[offset:nbytes + offset]
+
+    def optimal_tile_shape(self, dtype):
+        # Use square 64 byte wide tiles, laid out SoA over the items
+        s = 64 // np.dtype(dtype).itemsize
+        return (s, s)

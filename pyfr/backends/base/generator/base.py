@@ -13,6 +13,7 @@ from pyfr.dsl.nodes import (Assign, Binary, Call, DSLCall, DSLVar, ExprStmt,
 from pyfr.dsl.rewriter import (FloatSuffixer, Rewriter, parse_expr,
                                parse_program, rename_vars)
 from pyfr.dsl.types import Environment
+from pyfr.nputil import bfloat16
 
 
 def _rule(tpl, **preconds):
@@ -46,13 +47,21 @@ class BaseKernelGenerator:
         'uint16_t': np.uint16, 'int': np.int32, 'int32_t': np.int32,
         'uint32_t': np.uint32, 'int64_t': np.int64, 'uint64_t': np.uint64,
         'ssize_t': np.intp, 'size_t': np.uintp, 'float': np.float32,
-        'double': np.float64
+        'double': np.float64, 'half': np.float16, 'bf16': bfloat16
     }
 
     # Lowerings for the @-intrinsics produced by the dereference rules
     _xidx = None
     _aosoa = None
     _bcast = None
+    _tile = None
+
+    # Parameters of the @-intrinsics lowered through the string templates
+    _intrinsic_params = {
+        'aosoa': ('v', 'nv'),
+        'bcast': ('r', 'c', 'ld'),
+        'tile': ('r', 'c', 'tr', 'tc', 'pr', 'pc'),
+    }
 
     _rules_1d = [
         # Views
@@ -71,11 +80,13 @@ class BaseKernelGenerator:
         _rule('@N_v[@I0]', isview=False, isbroadcast=True),
         _rule('@N_v[@S*@I0 + @bcast(@V0, @I1, @S)]',
               isview=False, isbroadcast=True),
+        # Tiled
+        _rule('@N_v[@tile(@I0, @I1, @TR, @TC, @PR, @PC)]', istiled=True),
         # Stacked
         _rule('@N_v[@S*@I0 + @xidx]', isview=False, ismpi=False),
         # Doubly stacked
         _rule('@N_v[@S1*@I0 + @aosoa(@I1, @V1)]',
-              isview=False, isbroadcast=False, ismpi=False),
+              isview=False, isbroadcast=False, ismpi=False, istiled=False),
     ]
 
     _rules_2d = [
@@ -132,20 +143,11 @@ class BaseKernelGenerator:
         # Lanes assigned to each item of the iteration range
         self.lanemodel = make_lanemodel(self, coop)
 
-        # Argument data types may be typedefs defined outside the body
-        atypes = {v.dtype for v in sargs}
+        # Validate the arguments against our dimensionality and lanes
+        self._validate_args([v for v in sargs if v.isvector])
 
-        # Parse the body of our kernel into an AST
-        self._ast = parse_program(body, types=atypes)
-
-        # Define the types of the arguments as seen by the body
-        env = Environment()
-        for v in sargs:
-            env.define(v.name, v.dtype, [Int(d) for d in v.cdims] or None)
-
-        # Lower the regions and intrinsics of the body
-        argmap = {v.name: v for v in sargs}
-        self._ast = self._lower(self._ast, argmap, env)
+        # Parse and lower the body of our kernel into an AST
+        self._ast = self._parse_body(body, sargs)
 
         # Note the variables present in the body
         nodes = list(walk_ast(self._ast))
@@ -165,19 +167,6 @@ class BaseKernelGenerator:
         self.scalargs = [v for v in sargs if v.isscalar]
         self.vectargs = vargs = [v for v in sargs if v.isvector]
 
-        # Validate 2D argument constraints
-        if ndim == 2:
-            if any(v.isview and v.intent != 'in' for v in vargs):
-                raise ValueError('2D view args must be input-only')
-            if any(v.ismpi for v in vargs):
-                raise ValueError('2D kernels do not support MPI matrices')
-
-        # Validate the argument constraints of our lanes
-        self.lanemodel.validate_args(vargs)
-
-        # Check the shared declarations fit the storage of a lane-group
-        self.lanemodel.check_storage()
-
         # Math helper functions required by the kernel
         self._helper_calls = {}
 
@@ -192,15 +181,40 @@ class BaseKernelGenerator:
         # Determine the dimensions to be iterated over
         self._dims = ['_nx'] if ndim == 1 else ['_ny', '_nx']
 
-    def _lower(self, ast, args, env):
+    def _parse_body(self, body, sargs):
+        # Argument data types may be typedefs defined outside the body
+        atypes = {v.dtype for v in sargs}
+
+        # Parse the body of our kernel into an AST
+        ast = parse_program(body, types=atypes)
+
+        # Define the types of the arguments as seen by the body
+        env = Environment()
+        for v in sargs:
+            env.define(v.name, v.dtype, [Int(d) for d in v.cdims] or None)
+
         # Differentiate the tangent and Jacobian regions of the body
         ast = ADLowering(env).visit(ast)
 
         # Hoist the shared storage declarations out of the body
+        args = {v.name: v for v in sargs}
         ast = self.lanemodel.hoist_shared(ast, args)
 
-        # Lower the lane intrinsics and barriers of the body
-        return self.lanemodel.lower(ast)
+        # Lower the lane intrinsics, barriers and reductions of the body
+        return self.lanemodel.lower(ast, env)
+
+    def _validate_args(self, vargs):
+        # Validate 2D argument constraints
+        if self.ndim == 2:
+            if any(v.isview and v.intent != 'in' for v in vargs):
+                raise ValueError('2D view args must be input-only')
+            if any(v.ismpi for v in vargs):
+                raise ValueError('2D kernels do not support MPI matrices')
+            if any(v.istiled for v in vargs):
+                raise ValueError('2D kernels do not support tiled matrices')
+
+        # Validate the argument constraints of our lanes
+        self.lanemodel.validate_args(vargs)
 
     def argspec(self):
         # Argument names plus their form and types
@@ -230,6 +244,8 @@ class BaseKernelGenerator:
                         argt.append(('va', [np.uintp]*3))
                     case _:
                         argt.append(('v', [np.uintp]*2))
+            elif va.istiled:
+                argt.append(('t', [np.uintp]))
             elif self.needs_ldim(va):
                 argt.append(('ml', [np.uintp, self.ixdtype]))
             elif self.needs_blocksz(va):
@@ -244,6 +260,13 @@ class BaseKernelGenerator:
     def meta(self):
         # Metadata with which the provider builds and launches the kernel
         return {'regions': self.regions}
+
+    def tiling(self, arg):
+        # Find the tile shape of the argument and its extents in whole tiles
+        tr, tc = self.backend.optimal_tile_shape(self.npdtype(arg.dtype))
+        padr, padc = -(-arg.cdims[0] // tr)*tr, -(-arg.cdims[1] // tc)*tc
+
+        return tr, tc, padr, padc
 
     def npdtype(self, ctype):
         return np.dtype(self._npdtypes[ctype])
@@ -274,6 +297,11 @@ class BaseKernelGenerator:
                 for i, cd in enumerate(arg.cdims):
                     subs[f'V{i}'] = Int(cd)
                     subs[f'S{i}'] = self.ldim_size(n, cd)
+
+                # Bind the tile shape and padded extents of a tiled argument
+                if arg.istiled:
+                    tiling = zip(('TR', 'TC', 'PR', 'PC'), self.tiling(arg))
+                    subs |= {k: Int(v) for k, v in tiling}
 
                 return rename_vars(proto, subs)
             else:
@@ -309,53 +337,47 @@ class BaseKernelGenerator:
         fn = Var(f'atomic_{reduceop}_fpdtype')
         return ExprStmt(Call(fn, [Unary('&', dst), src]))
 
+    def _reduce_target(self, va, j):
+        # Find the entry of the output an accumulated value is combined into
+        if va.ncdim:
+            return self._deref_arg(va, j)
+        else:
+            return self._deref_arg(va)
+
+    def _reduce_locals(self, name, n, isarray):
+        # Declare the local accumulator of a reduction and list its entries
+        if isarray:
+            decl = VarDecl('fpdtype_t', name, [Int(n)])
+            return decl, [Index(Var(name), Int(j)) for j in range(n)]
+        else:
+            return VarDecl('fpdtype_t', name), [Var(name)]
+
     def _render_reduce(self, va, body, codegen):
-        n = prod(va.cdims) if va.cdims else 1
+        op, n = va.reduceop, prod(va.cdims)
 
-        # 2D broadcast-col: per-iteration local + register accumulator
-        if va.isbroadcastc:
-            rname = f'_ra_{va.name}'
-            ident = self._reduce_ident(va.reduceop)
+        # Column and range reductions: per-item local + register accumulator
+        if va.isbroadcastc or va.isbroadcast:
+            rdecl, regs = self._reduce_locals(f'_ra_{va.name}', n, va.ncdim)
+            pairs = [(r, self._reduce_target(va, j))
+                     for j, r in enumerate(regs)]
+            self._reduce_args.append((rdecl, pairs, self._reduce_ident(op),
+                                      va))
 
-            if va.ncdim:
-                pairs = [(Index(Var(rname), Int(j)), self._deref_arg(va, j))
-                         for j in range(n)]
-
-                rdecl = VarDecl('fpdtype_t', rname, [Int(n)])
-                decl = VarDecl('fpdtype_t', va.name, [Int(n)])
-                accum = [self._accum_stmt(va.reduceop, dst,
-                                          Index(Var(va.name), Int(j)))
-                         for j, (dst, _) in enumerate(pairs)]
-            else:
-                pairs = [(Var(rname), self._deref_arg(va))]
-
-                rdecl = VarDecl('fpdtype_t', rname)
-                decl = VarDecl('fpdtype_t', va.name)
-                accum = [self._accum_stmt(va.reduceop, pairs[0][0],
-                                          Var(va.name))]
-
-            self._reduce_args.append((rdecl, pairs, ident, va.reduceop))
-
-            dstr = self._generate(codegen, decl)
-            astr = self._generate(codegen, Program(accum))
-            return f'{dstr}\n{body}\n{astr}'
-        # 1D: local variable + immediate atomic writeback
+            decl, locs = self._reduce_locals(va.name, n, va.ncdim)
+            accum = [self._accum_stmt(op, r, l) for r, l in zip(regs, locs)]
+        # Views: local variable + immediate atomic writeback
         else:
             vs = va.viewstride
-
+            decl, locs = self._reduce_locals(va.name, vs, vs > 1)
             if vs > 1:
-                decl = VarDecl('fpdtype_t', va.name, [Int(vs)])
-                atoms = [self._atomic_stmt(va.reduceop, self._deref_arg(va, i),
-                                           Index(Var(va.name), Int(i)))
-                         for i in range(vs)]
+                dsts = [self._deref_arg(va, i) for i in range(vs)]
             else:
-                decl = VarDecl('fpdtype_t', va.name)
-                atoms = [self._atomic_stmt(va.reduceop, self._deref_arg(va),
-                                           Var(va.name))]
+                dsts = [self._deref_arg(va)]
+            accum = [self._atomic_stmt(op, d, l) for d, l in zip(dsts, locs)]
 
-            dstr = self._generate(codegen, decl)
-            astr = self._generate(codegen, Program(atoms))
-            return f'{dstr}\n{body}\n{astr}'
+        dstr = self._generate(codegen, decl)
+        astr = self._generate(codegen, Program(accum))
+        return f'{dstr}\n{body}\n{astr}'
 
     def _finalise_ast(self, ast):
         return ast
@@ -369,12 +391,11 @@ class BaseKernelGenerator:
                     return xidx
                 case DSLVar('soasz'):
                     return soasz
-                case DSLCall('aosoa', [v, nv]):
-                    subs = {'v': lower(v), 'nv': lower(nv), 'soasz': soasz}
-                    return rename_vars(parse_expr(self._aosoa), subs)
-                case DSLCall('bcast', [r, c, ld]):
-                    subs = {'r': lower(r), 'c': lower(c), 'ld': lower(ld)}
-                    return rename_vars(parse_expr(self._bcast), subs)
+                case DSLCall(fn, args) if fn in self._intrinsic_params:
+                    tpl = parse_expr(getattr(self, f'_{fn}'))
+                    params = self._intrinsic_params[fn]
+                    subs = dict(zip(params, map(lower, args)), soasz=soasz)
+                    return rename_vars(tpl, subs)
                 case _:
                     return node.map(lower)
 
