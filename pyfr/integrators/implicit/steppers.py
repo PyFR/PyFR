@@ -68,7 +68,7 @@ class BaseSDIRKStepper(BaseImplicitStepper):
     def invalidate_rhs(self):
         super().invalidate_rhs()
 
-        self._fsal_valid = False
+        self._fsal_reg = None
 
     def _size_registers(self):
         # Compensate the stage register if it alternates with the solution
