@@ -36,5 +36,4 @@ class BaseSolverPlugin(InSituMixin, BasePlugin):
         for b in self._extern_binders:
             b(**self._extern_values)
 
-        # Invalidate the right hand side held by the integrator
         intg.invalidate_rhs()

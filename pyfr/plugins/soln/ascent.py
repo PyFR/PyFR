@@ -295,7 +295,7 @@ class _VolumeAscentOutput:
         # Interpolate the primitives to the subdiv points
         samples = apply_op(self.soln_ops[etype], block)
 
-        # Transforms move the points in place, so pass them a copy
+        # Pass a copy of the points, as transforms move them in place
         yield names, samples, self.plocs[etype].copy()
 
     def _emit(self, mesh_n, dom, fname, arr):

@@ -65,7 +65,7 @@ class BaseDataSource:
             if (q := resolve(name)).fields:
                 qs.append(q)
 
-        # Transforms run ahead of the quantities derived from their output
+        # Run transforms ahead of the quantities derived from their output
         qs.sort(key=lambda q: not q.transform)
 
         return qs

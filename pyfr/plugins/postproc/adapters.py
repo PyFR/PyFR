@@ -80,7 +80,7 @@ class BoundaryPostProcData(PostProcData):
         r = op @ self._spts.reshape(op.shape[1], -1)
         x_upt = r.reshape(op.shape[0], *self._spts.shape[1:])
 
-        # Surface points and unit normals in the frame of the mesh
+        # Take the surface points and unit normals in the frame of the mesh
         ploc = self._metrics.ploc_at(self._finfo.svpts).swapaxes(1, 2)
         unorm = self.pnorm / np.linalg.norm(self.pnorm, axis=0)
 

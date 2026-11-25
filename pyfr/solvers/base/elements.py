@@ -152,7 +152,6 @@ class BaseElements:
 
         exprs = {dv: self.cfg.getexpr('soln-ics', dv) for dv in self.privars}
 
-        # Let a plugin rewrite the expressions
         exprs |= rewrite('soln-ics', exprs)
 
         # Evaluate the ICs from the config file

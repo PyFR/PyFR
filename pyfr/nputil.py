@@ -245,7 +245,7 @@ class Quaternion:
         cy, sy = np.cos(ry / 2), np.sin(ry / 2)
         cz, sz = np.cos(rz / 2), np.sin(rz / 2)
 
-        # ZYX sequence of rotations about x, y and z
+        # Compose the rotations about x, y and z in ZYX order
         return cls([cz*cy*cx + sz*sy*sx, cz*cy*sx - sz*sy*cx,
                     cz*sy*cx + sz*cy*sx, sz*cy*cx - cz*sy*sx])
 

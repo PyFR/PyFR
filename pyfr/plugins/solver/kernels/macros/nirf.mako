@@ -10,24 +10,21 @@
     fpdtype_t r[3] = {}, v[3] = {}, oxr[3] = {}, f[${ndims}];
     fpdtype_t invrho = 1.0/u[0];
 
-    // Angular velocity and acceleration of the frame
 % for i in range(3):
     omega[${i}] = ${frame_omega[i]};
     alpha[${i}] = ${frame_alpha[i]};
 % endfor
 
-    // Position relative to the centre of rotation and velocity
 % for i in range(ndims):
     r[${i}] = ploc[${i}] - ${frame_origin[i]};
     v[${i}] = invrho*u[${i + 1}];
 % endfor
 
-    // Omega x r
 % for i, (j, k) in enumerate(cyc):
     oxr[${i}] = omega[${j}]*r[${k}] - omega[${k}]*r[${j}];
 % endfor
 
-    // Centrifugal, Coriolis, Euler and linear acceleration forces
+    // Sum the centrifugal, Coriolis, Euler and linear acceleration forces
 % for i, (j, k) in enumerate(cyc):
     f[${i}] = -u[0]*(omega[${j}]*oxr[${k}] - omega[${k}]*oxr[${j}]
                      + 2.0*(omega[${j}]*v[${k}] - omega[${k}]*v[${j}])
@@ -36,6 +33,6 @@
     src[${i + 1}] += f[${i}];
 % endfor
 
-    // Work done by these forces
+    // Add the work done by these forces to the energy equation
     src[${nvars - 1}] += ${pyfr.dot('f[{i}]', 'v[{i}]', i=ndims)};
 </%pyfr:macro>

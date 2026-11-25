@@ -64,12 +64,12 @@ class PrescribedMotion(BaseMotion):
 
         self._simp = Simplifier().simplify_fully
 
-        # Derivatives are taken with respect to t
+        # Differentiate with respect to t alone
         self._diff = Differentiator({'t'}, set(), set(), lambda n: f'_d_{n}')
 
         self.kin = self._kinematics()
 
-        # The state is evaluated on the host from the expressions themselves
+        # Compile the expressions for evaluation on the host
         gen = _HostCodeGenerator().generate
         self._hexprs = {k: compile(gen(v), k, 'eval')
                         for k, v in self.kin.items()}
@@ -119,16 +119,16 @@ class PrescribedMotion(BaseMotion):
         else:
             rot = {f'r{c}': self._cfgexpr(f'frame-rot-{c}') for c in 'xyz'}
 
-            # Body-frame angular velocity of the ZYX Euler angle sequence
+            # Express the body-frame angular velocity by the ZYX Euler rates
             omega = ['drx - drz*sy', 'dry*cx + drz*sx*cy',
                      'drz*cx*cy - dry*sx']
 
-            # Rotation matrix of the ZYX Euler angle sequence
+            # Express the rotation matrix by the ZYX Euler angles
             rmat = [['cz*cy', 'cz*sy*sx - sz*cx', 'cz*sy*cx + sz*sx'],
                     ['sz*cy', 'sz*sy*sx + cz*cx', 'sz*sy*cx - cz*sx'],
                     ['-sy', 'cy*sx', 'cy*cx']]
 
-        # Sines and cosines of the angles, and the rates of the angles
+        # Substitute the sines, cosines and rates of the angles
         subs = {f'{f[0]}{c}': _subst(f'{f}(r{c})', rot)
                 for f in ('sin', 'cos') for c in 'xyz'}
         subs |= {f'd{k}': d(v) for k, v in rot.items()}
@@ -150,12 +150,11 @@ class PrescribedMotion(BaseMotion):
         ndims = self.ndims
         comps = 'xyz'[:ndims]
 
-        # Linear acceleration and the rotation matrix which resolves it
+        # Resolve the linear acceleration in body axes, R^T*a
         subs = {f'a{j}': kin[f'frame_accel_{c}'] for j, c in enumerate(comps)}
         subs |= {f'R{i}{j}': kin[f'frame_rmat_{i}{j}']
                  for i, j in ndrange(ndims, ndims)}
 
-        # Linear acceleration resolved in body axes, R^T*a
         bkin = {}
         for i, c in enumerate(comps):
             ba = ' + '.join(f'R{j}{i}*a{j}' for j in range(ndims))
@@ -212,7 +211,7 @@ class FreeMotion(BaseMotion):
         self.fquat = self._parse_rot0()
         self.fomega = self._rvec('frame-omega0')
 
-        # The accelerations follow from the loads at the first update
+        # Leave the accelerations for the first update to take from the loads
         self.faccel, self.falpha = np.zeros(ndims), np.zeros(3)
 
         if cfg.hasopt(cfgsect, 'dt-ode'):
@@ -222,12 +221,12 @@ class FreeMotion(BaseMotion):
 
         self.tode_last = intg.tcurr
 
-        # The frame parameters are runtime kernel arguments
+        # Refer to the frame parameters as runtime kernel arguments
         self.kin = {k: Var(k) for k in self.externs()}
         self.kin |= {f'frame_rmat_{i}{j}': parse_expr(f'nirf_R[{i}][{j}]')
                      for i, j in ndrange(ndims, ndims)}
 
-        # Only the rates about z are non-zero in 2D
+        # Zero the rates about x and y in 2D
         if ndims == 2:
             self.kin |= {f'frame_{k}_{c}': Float(0.0)
                          for k in ('omega', 'alpha') for c in 'xy'}
@@ -249,7 +248,7 @@ class FreeMotion(BaseMotion):
         rcomps = 'z' if self.ndims == 2 else 'xyz'
         all_dof = [*comps, *(f'r{c}' for c in rcomps)]
 
-        # All degrees of freedom are active unless stated otherwise
+        # Free every degree of freedom unless told otherwise
         dof_str = self.cfg.get(self.cfgsect, 'dof', ','.join(all_dof))
         if dof_str.strip().lower() in ('', 'none'):
             free_dof = set()
@@ -269,7 +268,6 @@ class FreeMotion(BaseMotion):
         elif cfg.hasopt(cfgsect, 'frame-rot0-quat'):
             q = Quaternion(cfg.getliteral(cfgsect, 'frame-rot0-quat'))
 
-            # Only rotations about z exist in 2D
             if self.ndims == 2 and q.q[1:3].any():
                 raise ValueError('frame-rot0-quat must be about z in 2D')
 
@@ -280,7 +278,7 @@ class FreeMotion(BaseMotion):
     def externs(self):
         ndims = self.ndims
 
-        # The momentum source takes the linear acceleration in body axes
+        # Resolve the linear acceleration in body axes for the momentum source
         baccel = self.rmat[:ndims, :ndims].T @ self.faccel
 
         ev = {}
@@ -289,7 +287,7 @@ class FreeMotion(BaseMotion):
             ev[f'frame_velo_{c}'] = self.fvelo[i]
             ev[f'frame_baccel_{c}'] = baccel[i]
 
-        # Rotation is about z alone in 2D
+        # Pass only the rates about z in 2D
         for i, c in enumerate('xyz'):
             if ndims == 3 or c == 'z':
                 ev[f'frame_omega_{c}'] = self.fomega[i]
@@ -298,21 +296,20 @@ class FreeMotion(BaseMotion):
         return ev
 
     def schedule(self, intg):
-        # The body is next due an update dt-ode after its last
+        # Ask to be called dt-ode after the last update
         if self.dt_ode is not None:
             intg.call_plugin_dt(self.tode_last + self.dt_ode, self.dt_ode)
 
     def should_advance(self, t):
         dt = t - self.tode_last
 
-        # A zero interval takes the accelerations from the loads
+        # Advance over a zero interval too, which sets the first accelerations
         return (self.dt_ode is None or dt == 0 or
                 dt >= self.dt_ode - self.tol)
 
     def advance(self, t, force, moment):
         ndims = self.ndims
 
-        # Advance over the time which has elapsed since the last update
         dt = t - self.tode_last
 
         if ndims == 2:
@@ -321,20 +318,20 @@ class FreeMotion(BaseMotion):
         else:
             gyro = np.cross(self.fomega, self.inertia @ self.fomega)
 
-            # Locked rotations are held by reactions about their own axes
+            # Solve for the angular acceleration about the free axes alone
             m = self._rot_mask
             falpha = np.zeros(3)
             falpha[m] = np.linalg.solve(self.inertia[np.ix_(m, m)],
                                         (moment - gyro)[m])
 
-        # Heun's method
+        # Advance the angular velocity and orientation with Heun's method
         fomega = self.fomega + 0.5*dt*(self.falpha + falpha)
 
         omega_avg = 0.5*(self.fomega + fomega)
         dqdt = 0.5*(self.fquat*Quaternion([0, *omega_avg])).q
         self.fquat = Quaternion(self.fquat.q + dt*dqdt).normalised()
 
-        # The force is integrated in body axes; the frame moves in lab axes
+        # Rotate the body-axis force into lab axes for the acceleration
         faccel = self.rmat[:ndims, :ndims] @ force / self.mass
         faccel *= self._trans_mask
 
@@ -363,13 +360,13 @@ class NIRFPlugin(SeriesWriterMixin, BaseSolverPlugin):
 
         cfg, ndims = self.cfg, self.ndims
 
-        # Time the frame was last advanced to
+        # Track the time the frame was last advanced to
         self._tadv = None
 
-        # Time of the last load integration and its result
+        # Cache the loads with the time they were integrated at
         self._loads = (None, None)
 
-        # Centre of rotation, about which the moments are also taken
+        # Read the centre of rotation, about which moments are also taken
         origin = cfg.getliteral(cfgsect, 'center-of-rot', (0,)*ndims)
         self.origin = np.array(origin, dtype=float)
 
@@ -400,7 +397,7 @@ class NIRFPlugin(SeriesWriterMixin, BaseSolverPlugin):
         def texts(kind, comps):
             return [gen(m.kin[f'frame_{kind}_{c}']) for c in comps]
 
-        # Frame parameters as they are to appear in the source term kernels
+        # Render the frame parameters for the source term kernels
         tplargs = {
             'frame_omega': texts('omega', 'xyz'),
             'frame_alpha': texts('alpha', 'xyz'),
@@ -436,7 +433,7 @@ class NIRFPlugin(SeriesWriterMixin, BaseSolverPlugin):
         subs |= {f'R{i}{j}': kin[f'frame_rmat_{i}{j}']
                  for i, j in ndrange(ndims, ndims)}
 
-        # Lab-frame position, x_lab = R*(x_body - x0) + x0 + loc
+        # Express the lab-frame position, x_lab = R*(x_body - x0) + x0 + loc
         xlab = []
         for i in range(ndims):
             rx = ' + '.join(f'R{i}{j}*(P{j} - X{j})' for j in range(ndims))
@@ -448,12 +445,12 @@ class NIRFPlugin(SeriesWriterMixin, BaseSolverPlugin):
             else:
                 return node.map(lab_position)
 
-        # Components of r x omega, where r is zero out of plane in 2D
+        # Form r x omega, with r zero out of plane in 2D
         r = [f'(P{i} - X{i})' if i < ndims else '0.0' for i in range(3)]
         rxw = [f'W{k}*{r[j]} - W{j}*{r[k]}'
                for j, k in [(1, 2), (2, 0), (0, 1)][:ndims]]
 
-        # Body-frame velocity, u_body = R^T*(u_lab - V) - omega x r
+        # Express the body-frame velocity, u_body = R^T*(u_lab - V) - omega x r
         ubody = []
         for i, c in enumerate(rxw):
             rtu = ' + '.join(f'R{j}{i}*(U{j} - V{j})' for j in range(ndims))
@@ -462,11 +459,11 @@ class NIRFPlugin(SeriesWriterMixin, BaseSolverPlugin):
         def body_frame(cfgsect, exprs):
             exprs = {k: parse_expr(v) for k, v in exprs.items()}
 
-            # Position-dependent expressions are given at lab-frame points
+            # Evaluate position-dependent expressions at lab-frame points
             lab = {k: lab_position(e) for k, e in exprs.items()}
             rexprs = {k: e for k, e in lab.items() if e is not exprs[k]}
 
-            # A velocity given with other variables is a lab-frame velocity
+            # Take a velocity given with other variables as a lab-frame one
             if set(vkeys) < exprs.keys():
                 usubs = subs | {f'U{i}': lab[k] for i, k in enumerate(vkeys)}
                 rexprs |= {k: _subst(u, usubs) for k, u in zip(vkeys, ubody)}
@@ -480,7 +477,7 @@ class NIRFPlugin(SeriesWriterMixin, BaseSolverPlugin):
         pos = [parse_expr(f'ploc[{i}]') for i in range(self.ndims)]
         body_frame = self._body_frame(self.motion.kin, pos)
 
-        # Externs the rewritten expressions may reference
+        # Offer the frame parameters as externs to the rewritten expressions
         externs = {k: ('scalar fpdtype_t', None)
                    for k in self.motion.externs()}
         if externs:
@@ -497,13 +494,12 @@ class NIRFPlugin(SeriesWriterMixin, BaseSolverPlugin):
     def _init_loads(self, intg):
         cfg, cfgsect = self.cfg, self.cfgsect
 
-        # The output file reports the loads and so needs a boundary
+        # Write output only if given a file and a boundary for the loads
         self._has_output = (cfg.hasopt(cfgsect, 'file') and
                             cfg.hasopt(cfgsect, 'boundary'))
 
-        # Integrate the loads only where the body or the file needs them
+        # Set up the load integration if the body or the output needs it
         if self.motion.needs_force or self._has_output:
-            # Default the quadrature degree to the solution order
             if not cfg.hasopt(cfgsect, 'quad-deg'):
                 order = cfg.getint('solver', 'order')
                 cfg.set(cfgsect, 'quad-deg', max(order, 1))
@@ -542,7 +538,7 @@ class NIRFPlugin(SeriesWriterMixin, BaseSolverPlugin):
     def _transform_ics(self, intg):
         ndims, m = self.ndims, self.motion
 
-        # Frame parameters at the start of the run
+        # Freeze the frame parameters at their values at the start of the run
         state = {'loc': m.floc, 'velo': m.fvelo, 'omega': m.fomega}
         kin = {f'frame_{k}_{c}': Float(float(v))
                for k, vals in state.items() for c, v in zip('xyz', vals)}
@@ -594,25 +590,24 @@ class NIRFPlugin(SeriesWriterMixin, BaseSolverPlugin):
 
             force, moment = self._integrate_loads(intg)
 
-            # Only the root rank holds the output file
             _, rank, root = get_comm_rank_root()
             if rank == root:
                 m, nr = self.motion, len(moment)
                 euler = m.fquat.to_euler()
 
-                # Angular state about each rotational axis, then the rest
+                # Lay the row out as angular state, linear state, then loads
                 row = [*euler[-nr:], *m.fomega[-nr:], *m.falpha[-nr:],
                        *m.floc, *m.fvelo, *m.faccel, *force, *moment]
 
                 self._write(intg.tcurr, row)
 
     def _serialise_data(self, intg):
-        # A writer may ask for the state before this plugin has been called
+        # Bring the frame up to date in case a writer runs first
         self._advance(intg)
 
         m, pad = self.motion, (0, 3 - self.ndims)
 
-        # Saved state, with the linear vectors padded to three components
+        # Pad the linear vectors to three components for the saved state
         lin = [np.pad(v, pad) for v in (m.floc, m.fvelo, m.faccel)]
         sdata = (*lin, m.fquat.q, m.fomega, m.falpha, m.tode_last)
 

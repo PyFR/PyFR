@@ -10,10 +10,9 @@ class BasePostProcPlugin(BasePlugin):
     needs_gridh = False
     fields = {}
 
-    # If the plugin modifies the data in place instead of adding fields
+    # Mark plugins which modify the data in place instead of adding fields
     transform = False
 
-    # Prefix of the data source the plugin applies to
     source_prefix = None
 
     def __init__(self, source, cfg, export_type=None, kind=None, want=None):
