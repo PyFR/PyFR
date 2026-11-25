@@ -60,7 +60,13 @@ class NewtonSolver(BaseNonlinearSolver):
                                   self._solve_temp, eps_scales=self._scales)
 
             # Scale the residual vector for the Krylov solver
-            self._add(1, self._nl_resid, out_scale=self._inv_scales)
+            if self._linesearch:
+                delta = self._nl_delta
+                self._add(0, delta, 1, self._nl_resid,
+                          out_scale=self._inv_scales)
+            else:
+                delta = self._nl_resid
+                self._add(1, delta, out_scale=self._inv_scales)
 
             # Solve no more tightly than this iteration needs to finish
             if safeguard:
@@ -68,20 +74,18 @@ class NewtonSolver(BaseNonlinearSolver):
             else:
                 ktol = rtol
 
-            if self._linesearch:
-                nkrylov, nprecond, _ = self._krylov_solve(
-                    matvec, self._nl_resid, self._nl_delta,
-                    precond, rtol=ktol, accumulate=False
-                )
+            # Solve for the step in place of the scaled residual
+            nkrylov, nprecond, _ = self._krylov_solve(matvec, delta, precond,
+                                                      rtol=ktol)
 
+            if self._linesearch:
                 # Line search applies the damped step and returns the new norm
-                rnorm = self._line_search(t, u_reg, f_reg, self._nl_delta,
-                                          residual_fn, rnorm)
+                rnorm = self._line_search(t, u_reg, f_reg, delta, residual_fn,
+                                          rnorm)
             else:
-                nkrylov, nprecond, _ = self._krylov_solve(
-                    matvec, self._nl_resid, u_reg, precond, rtol=ktol,
-                    accumulate=True, accumulate_scale=self._scales
-                )
+                # Apply the full step
+                self._add(1, u_reg, 1, delta, in_scale=self._scales,
+                          in_scale_idxs=(1,))
                 rnorm = None
 
             niters += 1

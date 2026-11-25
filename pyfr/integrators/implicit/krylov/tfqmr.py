@@ -8,11 +8,10 @@ class TFQMRMixin(BaseLinearSolver):
     # Stall detection window
     _stall_window = 10
 
-    _tq = VectorRegister(n=9, rhs=False, extent='solve')
+    _tq = VectorRegister(n=8, rhs=False, extent='solve')
 
-    def _krylov_solve(self, matvec, residual, out_reg, precond=None, *,
-                      rtol, accumulate=True, accumulate_scale=()):
-        w, y1, y2, u1, u2, v, d, x, rt = self._tq
+    def _krylov_solve(self, matvec, x_reg, precond=None, *, rtol):
+        w, y1, y2, u1, u2, v, d, rt = self._tq
         niters = m = 0
         tau = 0.0
 
@@ -41,7 +40,7 @@ class TFQMRMixin(BaseLinearSolver):
             eta = c*c*alpha
 
             # Overwrite x on the first update (m == 0), then accumulate
-            self._add(1 if m else 0, x, eta, d)
+            self._add(1 if m else 0, x_reg, eta, d)
             m += 1
 
             # Reset on a >=0.1% tau drop, else count toward the stall window
@@ -54,8 +53,8 @@ class TFQMRMixin(BaseLinearSolver):
             return tau < rtol or stall >= self._stall_window
 
         # If the initial residual is non-zero then start iterating
-        if (r0norm := self._norm2(residual)):
-            self._add(0, w, -1/r0norm, residual)
+        if (r0norm := self._norm2(x_reg)):
+            self._add(0, w, -1/r0norm, x_reg)
             self._add(0, y1, 1, w)
 
             # Fixed unit shadow vector rt = r0 (so rt·r0 = 1)
@@ -100,15 +99,13 @@ class TFQMRMixin(BaseLinearSolver):
 
         # Recover M⁻¹·ξ; skip when nothing was solved (m == 0)
         if precond and m:
-            precond(x, self._precond_temp)
-            corr = self._precond_temp
-        else:
-            corr = x
+            precond(x_reg, self._precond_temp)
 
-        # Fold the correction into out_reg, undoing the r0norm scaling
-        sidxs = (1,) if accumulate_scale else ()
-        self._add(float(accumulate), out_reg, r0norm if m else 0, corr,
-                  in_scale=accumulate_scale, in_scale_idxs=sidxs)
+            # Leave the correction in x_reg, undoing the r0norm scaling
+            self._add(0, x_reg, r0norm, self._precond_temp)
+        # Otherwise undo the r0norm scaling in place
+        else:
+            self._add(r0norm if m else 0, x_reg)
 
         # Each matvec applies M⁻¹ once; recovery adds one more when m > 0
         return niters, niters + (m > 0) if precond else 0, tau

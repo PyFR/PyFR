@@ -285,7 +285,6 @@ class BaseRosenbrockStepper(BaseImplicitStepper):
 
     _r_f0 = ScalarRegister()
     _r_fv = ScalarRegister()
-    _r_resid = ScalarRegister(rhs=False)
     _r_us = DynamicVectorRegister(rhs=False, extent='solve')
     _r_err = DynamicScalarRegister(rhs=False)
 
@@ -332,7 +331,7 @@ class BaseRosenbrockStepper(BaseImplicitStepper):
 
     def _stage_solve(self, stage, t, r_un, f_reg, gdt, matvec, precond,
                      rtol, probe):
-        r_us, resid = self._r_us, self._r_resid
+        r_us, r_inc = self._r_us, self._r_us[stage]
 
         def solve_fn():
             # Choose a suitable finite difference perturbation
@@ -345,20 +344,21 @@ class BaseRosenbrockStepper(BaseImplicitStepper):
             # Form the negated stage right-hand side
             ct = [-self._gamma*cj for cj in self._ct[stage]]
             pairs = [(-gdt, f_reg)] + list(zip(ct, r_us))
-            self._addv_nz(resid, pairs)
+            self._addv_nz(r_inc, pairs)
 
-            rnorm = self._calc_rnorm(resid)
+            rnorm = self._calc_rnorm(r_inc)
             if not math.isfinite(rnorm):
                 raise DivergenceError('Non-finite residual')
 
             # Scale the residual vector for the Krylov solver
-            self._add(1, resid, out_scale=self._inv_scales)
+            self._add(1, r_inc, out_scale=self._inv_scales)
 
             # Solve for the stage increment
-            niters, nprecond, relerr = self._krylov_solve(
-                matvec, resid, r_us[stage], precond, rtol=rtol,
-                accumulate=False, accumulate_scale=self._scales
-            )
+            niters, nprecond, relerr = self._krylov_solve(matvec, r_inc,
+                                                          precond, rtol=rtol)
+
+            # Undo the scaling of the stage increment
+            self._add(1, r_inc, out_scale=self._scales)
 
             return SolveStats(nonlin_iters=1, precond_apps=nprecond,
                               init_resid=rnorm, final_resid=relerr*rnorm,

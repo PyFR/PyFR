@@ -76,21 +76,17 @@ class GMRESMixin(BaseLinearSolver):
         # Also apply to beta
         beta[j:j + 2] = cs[j]*beta[j], -sn[j]*beta[j]
 
-    def _krylov_solve(self, matvec, residual, out_reg, precond=None, *,
-                      rtol, accumulate=True, accumulate_scale=()):
+    def _krylov_solve(self, matvec, x_reg, precond=None, *, rtol):
         v, m, nmax = self._krylov, self._gmres_m, self._krylov_nmax
 
         niters = ncycles = 0
 
         # A zero residual needs no solve
-        if not (r0norm := self._norm2(residual)):
-            if not accumulate:
-                self._add(0, out_reg)
-
+        if not (r0norm := self._norm2(x_reg)):
             return 0, 0, 0.0
 
         # Compute the first Krylov vector
-        self._add(0, v[0], -1/r0norm, residual)
+        self._add(0, v[0], -1/r0norm, x_reg)
         rnorm = r0norm
 
         while niters < nmax:
@@ -151,26 +147,23 @@ class GMRESMixin(BaseLinearSolver):
                 self._addv([z[j + 1], *z[:j + 1].tolist()],
                            [v[j + 1], *v[:j + 1]])
 
-            # Solution update; first cycle honours accumulate, rest add
-            first = niters == j + 1
-            acc = float(accumulate) if first else 1.0
+            # Solution update; first cycle overwrites the residual, rest add
+            acc = float(ncycles > 1)
 
             if precond:
                 self._addv([0, *y.tolist()], [self._precond_temp, *v[:j + 1]])
                 precond(self._precond_temp, v[0])
-                self._add(acc, out_reg, 1, v[0], in_scale=accumulate_scale,
-                          in_scale_idxs=(1,) if accumulate_scale else ())
+                self._add(acc, x_reg, 1, v[0])
             else:
-                sidxs = tuple(range(1, j + 2)) if accumulate_scale else ()
-                self._addv([acc, *y.tolist()], [out_reg, *v[:j + 1]],
-                           in_scale=accumulate_scale, in_scale_idxs=sidxs)
+                self._addv([acc, *y.tolist()], [x_reg, *v[:j + 1]])
 
             if done:
                 break
 
             # Restart: install the reconstructed residual as the new v[0]
-            rnorm = abs(self._beta[j + 1])
-            self._add(0, v[0], 1, v[j + 1])
+            qnorm = self._norm2(v[j + 1])
+            rnorm = abs(self._beta[j + 1])*qnorm
+            self._add(0, v[0], 1/qnorm, v[j + 1])
 
         # Each matvec applies M⁻¹ once; recovery adds one more per cycle
         return niters, niters + ncycles if precond else 0, float(err)

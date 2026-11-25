@@ -4,11 +4,10 @@ from pyfr.integrators.registers import VectorRegister
 
 class BiCGStabMixin(BaseLinearSolver):
     linear_name = 'bicgstab'
-    _bcg = VectorRegister(n=7, rhs=False, extent='solve')
+    _bcg = VectorRegister(n=6, rhs=False, extent='solve')
 
-    def _krylov_solve(self, matvec, residual, out_reg, precond=None, *,
-                      rtol, accumulate=True, accumulate_scale=()):
-        r, rhat, p, v, s, t, x = self._bcg
+    def _krylov_solve(self, matvec, x_reg, precond=None, *, rtol):
+        r, rhat, p, v, s, t = self._bcg
         niters, xset, relerr = 0, False, 0.0
 
         # Matrix-vector product operator with optional right-preconditioning
@@ -25,8 +24,8 @@ class BiCGStabMixin(BaseLinearSolver):
                 return src
 
         # So long as the residual is non-zero, iterate
-        if (r0norm := self._norm2(residual)):
-            self._add(0, r, -1/r0norm, residual)
+        if (r0norm := self._norm2(x_reg)):
+            self._add(0, r, -1/r0norm, x_reg)
             self._add(0, rhat, 1, r)
             relerr = 1.0
 
@@ -52,7 +51,7 @@ class BiCGStabMixin(BaseLinearSolver):
                 # s = r - alpha*v; x += alpha*phat (overwrite on first write)
                 alpha = nrho / denom
                 self._add(0, s, 1, r, -alpha, v)
-                self._add(1 if xset else 0, x, alpha, phat)
+                self._add(1 if xset else 0, x_reg, alpha, phat)
                 xset = True
 
                 # Half-step convergence saves the second matvec
@@ -70,7 +69,7 @@ class BiCGStabMixin(BaseLinearSolver):
 
                 # x += omega*shat; r = s - omega*t
                 omega = ts / tt
-                self._add(1, x, omega, shat)
+                self._add(1, x_reg, omega, shat)
                 self._add(0, r, 1, s, -omega, t)
                 rho = nrho
 
@@ -79,9 +78,7 @@ class BiCGStabMixin(BaseLinearSolver):
                 if relerr < rtol or abs(omega) < self._breakdown_tol:
                     break
 
-        # Fold the correction into out_reg, undoing the r0norm scaling
-        sidxs = (1,) if accumulate_scale else ()
-        self._add(float(accumulate), out_reg, r0norm if xset else 0, x,
-                  in_scale=accumulate_scale, in_scale_idxs=sidxs)
+        # Leave the correction in x_reg, undoing the r0norm scaling
+        self._add(r0norm if xset else 0, x_reg)
 
         return niters, niters if precond else 0, relerr
