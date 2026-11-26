@@ -1,5 +1,5 @@
-// Storage types of the Jacobians and inverses and conversions between them,
-// rounding as PyFR does: half as _Float16, and bf16 as the top half of an
+// Storage types of the Jacobians and inverses, and conversions between them.
+// Rounding is as in PyFR: half is _Float16, and bf16 is the top half of an
 // fp32 rounded to nearest even.
 #pragma once
 

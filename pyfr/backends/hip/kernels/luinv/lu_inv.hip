@@ -1,22 +1,21 @@
-// The LU inverse of PyFR's block-Jacobi preconditioner on AMD GPUs with
-// MFMA, in separate kernels for the build, the factorisation and the
-// solves; see config.hpp for the configuration and factor.hpp and solve.hpp
-// for the kernels.
+// LU inverse for the block-Jacobi preconditioner of PyFR on AMD GPUs with
+// MFMA.  There are three kernels: build, factor and solve.
 //
 // The caller describes the problem with macros:
-//   LUINV_N        the order of the matrices
-//   LUINV_FTYPE    the type of the factorisation, double or float
-//   LUINV_STYPE    the type of the Jacobians: double, float, _Float16 or
+//   LUINV_N        order of the matrices
+//   LUINV_FTYPE    type of the factorisation, double or float
+//   LUINV_STYPE    type of the Jacobians: double, float, _Float16 or
 //                  luinv::bf16
-//   LUINV_OTYPE    the type of the inverses, likewise
-//   LUINV_SCALE_T  the type of the scale
-//   LUINV_IXTYPE   the index type of the memory model, int or int64_t
+//   LUINV_OTYPE    type of the inverses, as for LUINV_STYPE
+//   LUINV_SCALE_T  type of the scale
+//   LUINV_IXTYPE   index type, int or int64_t
 //   LUINV_TR, LUINV_TC, LUINV_PADC
-//                  the tiles of the inverses in PyFR's matrices
-//   LUINV_NDIES    the number of dies the blocks are dealt across
+//                  tiling of the inverses in PyFR's matrices
+//   LUINV_NDIES    number of dies the blocks are dealt across
 //   LUINV_FEW      1 for launches of at most three matrices per CU
-// The launch bounds of the factorisation and the solves carry their block
-// sizes, from which the caller sizes their launches.
+//
+// The launch bounds of the factor and solve kernels give their block sizes.
+// The caller reads them to size the launches.
 
 #if !defined(__HIPCC_RTC__)
 #include <hip/hip_runtime.h>
@@ -34,7 +33,8 @@ using cfg = luinv::config<
 
 using ix_t = cfg::IX;
 
-// A = I - scale*src in the workspaces, a block per row of 64 matrices
+// Build A = I - scale*src in the workspaces, one block per row of 64
+// matrices
 extern "C" __global__ __launch_bounds__(cfg::BUILD_THREADS)
 void lu_inv_build(ix_t nx, cfg::FT scale, const cfg::ST* __restrict__ src_v,
                   ix_t ldsrc, const ix_t* __restrict__ wk_v,
@@ -44,7 +44,7 @@ void lu_inv_build(ix_t nx, cfg::FT scale, const cfg::ST* __restrict__ src_v,
                          src_v, ldsrc, wk_v, ws_v);
 }
 
-// P A = L U in the workspaces, a block per matrix
+// Factorise P A = L U in the workspaces, one block per matrix
 extern "C" __global__ __launch_bounds__(cfg::FACTOR_THREADS, cfg::K1MB)
 void lu_inv_factor(ix_t _nx, const ix_t* __restrict__ wk_v,
                    cfg::T* __restrict__ ws_v, int16_t* __restrict__ perm_v)
@@ -53,7 +53,8 @@ void lu_inv_factor(ix_t _nx, const ix_t* __restrict__ wk_v,
                           perm_v);
 }
 
-// The inverses from the factors, a block per 16*WPB columns of a matrix
+// Compute the inverses from the factors, one block per 16*WPB columns of a
+// matrix
 extern "C" __global__ __launch_bounds__(cfg::SOLVE_THREADS, cfg::K2MB)
 void lu_inv_solve(ix_t _nx, cfg::OT* __restrict__ inv_v,
                   const ix_t* __restrict__ inv_vix,

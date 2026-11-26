@@ -1,5 +1,3 @@
-// What the hand written kernels share with the PyFR kernels: the fixed
-// width integers HIPRTC lacks, and the numbering of the blocks.
 #pragma once
 
 #if defined(__HIPCC_RTC__)
@@ -10,9 +8,9 @@ typedef long long int64_t;
 namespace luinv
 {
 
-// The number of the block as PYFR_BLOCK_ID gives it: each of the NDIES dies
-// (XCDs) the blocks are dealt across round robin takes a contiguous range,
-// so neighbouring blocks share the L2 of their die
+// Block number as PYFR_BLOCK_ID gives it.  The hardware deals blocks to the
+// NDIES dies (XCDs) round robin.  This remaps them so each die gets a
+// contiguous range, and neighbouring blocks share the L2 cache of their die.
 template<int NDIES, typename IX>
 __device__ __forceinline__ IX block_id()
 {

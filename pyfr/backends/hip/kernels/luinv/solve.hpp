@@ -1,23 +1,23 @@
 // Inverse of a matrix from its LU factorisation with MFMA, in fp64 or fp32.
 //
-// The factorisation leaves P A = L U with L lower and U unit upper, and the
-// row order P in perm.  The inverse is A^-1 = U^-1 L^-1 P, so with
-// Z = U^-1 L^-1 solving L U Z = I column by column, column k of Z is column
-// perm[k] of A^-1.
+// The factorisation gives P A = L U, with L lower and U unit upper, and the
+// row order P in perm.  The inverse is A^-1 = U^-1 L^-1 P.  We solve
+// L U Z = I column by column, so Z = U^-1 L^-1.  Then column k of Z is
+// column perm[k] of A^-1.
 //
-// The factor comes packed from lu_factor in factor.hpp: NB x NB blocks of
-// 16 x 16 (NB = NP/16), stored a strip of 16 columns at a time, each block
-// in the order of the A operands of the MFMA so a wave loads it in one
-// piece; the inverses of the diagonal blocks of L are in place of them, and
-// those of U come after all the blocks.
+// lu_factor (factor.hpp) packs the factor as NB x NB blocks of 16 x 16
+// (NB = NP/16), one strip of 16 columns after another.  Each block is in the
+// order of the MFMA A operands, so a wave loads it in one piece.  The
+// inverses of the diagonal blocks of L replace the blocks themselves.  The
+// inverses of the diagonal blocks of U come after all the blocks.
 //
-// lu_solve_mfma has every wave solve for 16 columns of Z, holding them in
-// registers as NB accumulator tiles of 16 x 16.  Each block row i of a
+// In lu_solve_mfma each wave solves for 16 columns of Z and keeps them in
+// registers as NB accumulator tiles of 16 x 16.  Block row i of a
 // triangular solve is one product with the inverse of the diagonal block,
-// D_ii^-1 Z_i, then the updates Z_j -= M_ji Z_i of the block rows still to
-// be solved, with Z_i the B operand straight from its accumulators (see
-// mfma.hpp).  The waves of a block share the loads of the factor through
-// LDS.
+// D_ii^-1 Z_i.  Then the block rows still to be solved are updated,
+// Z_j -= M_ji Z_i.  Z_i is used as the B operand directly from its
+// accumulators (see mfma.hpp).  The waves of a block share the loads of the
+// factor through LDS.
 #pragma once
 
 #include "mfma.hpp"
@@ -26,17 +26,17 @@
 namespace luinv
 {
 
-// Offsets in the packed factor of block (j, i), in strip i, and of the
-// inverse of U_ii after the strips
+// Offset in the packed factor of block (j, i) of strip i, and of the
+// inverse of U_ii (after the strips)
 template<int NB>
 __device__ __forceinline__ int pk_block(int j, int i) { return 256*(NB*i + j); }
 
 template<int NB>
 __device__ __forceinline__ int pk_uinv(int i) { return 256*(NB*NB + i); }
 
-// Position in a packed block of element (r, c): the lane holding it as an
-// A operand and the slice of the product it is in, such that slice v takes
-// the rows of Z in accumulator value v
+// Position of element (r, c) in a packed block.  It gives the lane that
+// holds the element as an A operand and the slice of the product.  Slice v
+// uses the rows of Z in accumulator value v.
 template<typename T>
 __device__ __forceinline__ int pk_ix(int r, int c)
 {
@@ -46,7 +46,7 @@ __device__ __forceinline__ int pk_ix(int r, int c)
         return 4*(r + 16*(c / 4)) + c % 4;
 }
 
-// The A operands the lane holds of the packed 16 x 16 block at m
+// The A operands held by the lane for the packed 16 x 16 block at m
 template<typename T>
 __device__ __forceinline__ vec4<T> load_a(const T* m, int lane)
 {
@@ -64,11 +64,12 @@ __device__ __forceinline__ vec4<T> mma_a(vec4<T> a, vec4<T> z, vec4<T> acc)
     return acc;
 }
 
-// Solve L U Z = I for the 16 columns of Z from column block cb0 + w of each
-// of the WPB waves of a block.  A sweep goes a column of blocks of the
-// factor at a time, the inverse of the diagonal block first, in chunks of
-// WPB blocks staged in LDS; each wave fetches one block of the next chunk
-// while the current one is applied, so each chunk takes one barrier.
+// Solve L U Z = I.  Each of the WPB waves of a block solves for 16 columns
+// of Z, starting at column block cb0 + w.  A sweep goes through the factor
+// one column of blocks at a time, with the inverse of the diagonal block
+// first.  The blocks are staged in LDS in chunks of WPB blocks.  Each wave
+// fetches one block of the next chunk while the current chunk is applied,
+// so each chunk needs one barrier.
 template<int NB, int WPB, typename T>
 __device__ __forceinline__ void solve_columns(const T* pk, int cb0, int w,
                                               int lane, vec4<T> (&z)[NB])
@@ -87,7 +88,8 @@ __device__ __forceinline__ void solve_columns(const T* pk, int cb0, int w,
             z[j][v] = (j == cb && mfma_crow<T>(lane, v) == mfma_lrow(lane));
     }
 
-    // Block m of column i of the forward or backward sweep, and their count
+    // Block m of column i of the forward or backward sweep, and the number
+    // of blocks
     auto item = [&](bool fwd, int i, int m)
     {
         if (fwd)
@@ -113,7 +115,7 @@ __device__ __forceinline__ void solve_columns(const T* pk, int cb0, int w,
             st[buf][w][lane] = pf;
         __syncthreads();
 
-        // Fetch the next chunk: of this column, the next column, or the
+        // Fetch the next chunk: from this column, the next column, or the
         // first column of the backward sweep
         if (WPB*(c + 1) < count(fwd, i))
             fetch(fwd, i, c + 1);
@@ -145,7 +147,8 @@ __device__ __forceinline__ void solve_columns(const T* pk, int cb0, int w,
         buf ^= 1;
     };
 
-    // Forward: L^-1 is lower triangular so the block rows above cb stay zero
+    // Forward: L^-1 is lower triangular, so the block rows above cb stay
+    // zero
     fetch(true, cb0, 0);
 #pragma unroll
     for (int i = 0; i < NB; i++)
@@ -175,9 +178,9 @@ __device__ __forceinline__ int tiled_ix(int r, int c)
     return (r / TR)*(PADC / TC)*TR*TC + (c / TC)*TR*TC + (r % TR)*TC + c % TC;
 }
 
-// One block of C::WPB waves per WPB*16 columns of one matrix, the last
-// block of a matrix with fewer columns than that; the inverse is written as
-// C::OT in tiles of C::TR x C::TC
+// One block of C::WPB waves handles WPB*16 columns of one matrix.  The last
+// block of a matrix may have fewer columns.  The inverse is written as C::OT
+// in tiles of C::TR x C::TC.
 template<class C, typename T = typename C::T, typename OT = typename C::OT,
          typename IX = typename C::IX>
 __device__ __forceinline__ void lu_solve_mfma(
@@ -201,8 +204,8 @@ __device__ __forceinline__ void lu_solve_mfma(
     vec4<T> z[NB];
     solve_columns<NB, WPB>(pk, cb0, w, lane, z);
 
-    // Write the columns out in pivoted order, with the waves of the last
-    // block past the end only having helped with the loads
+    // Write the columns in pivoted order.  Waves past the last column only
+    // helped with the loads
     if (cb >= NB)
         return;
 

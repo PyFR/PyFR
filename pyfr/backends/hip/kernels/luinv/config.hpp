@@ -1,21 +1,26 @@
-// The configuration of the LU inverse: the problem, from its caller, and the
-// tuning knobs of the kernels, from the policy below.
+// Configuration of the LU inverse: the problem (set by the caller) and the
+// tuning knobs of the kernels.
 //
-// The problem is the order N of the matrices, the types of the
-// factorisation T (double or float), of the Jacobians ST, of the inverses
-// OT and of the scale FT, the index type IX of the memory model, the tiling
-// TR x TC (with PADC padded columns) of the inverses in PyFR's matrices,
-// the number of dies NDIES the blocks are dealt across, and whether a
-// launch has few matrices (FEW: at most three per CU), where more blocks
-// per CU gain nothing.
+// The problem:
+//   N      order of the matrices
+//   T      type of the factorisation (double or float)
+//   ST     type of the Jacobians
+//   OT     type of the inverses
+//   FT     type of the scale
+//   IX     index type
+//   TR, TC, PADC
+//          tiling of the inverses in PyFR's matrices (PADC padded columns)
+//   NDIES  number of dies the blocks are dealt across
+//   FEW    the launch has few matrices (at most three per CU), so more
+//          blocks per CU do not help
 //
 // The knobs:
 //   K1W   waves per block of the factorisation (4 or 8)
 //   S     strips of 16 columns per pass of the factorisation (1 or 2)
-//   K1MB  launch bounds of the factorisation: minimum waves per SIMD
+//   K1MB  minimum waves per SIMD (launch bounds) of the factorisation
 //   IOL   invert the diagonal blocks out of line (0 or 1)
-//   WPB   waves per block of the solves (2 or 4), sharing their loads
-//   K2MB  launch bounds of the solves: minimum waves per SIMD
+//   WPB   waves per block of the solves (2 or 4); they share their loads
+//   K2MB  minimum waves per SIMD (launch bounds) of the solves
 #pragma once
 
 namespace luinv
@@ -26,23 +31,18 @@ struct knobs
     int k1w, s, k1mb, iol, wpb, k2mb;
 };
 
-// The knobs measured best on MI325X (gfx942) for NB strips of 16 columns,
-// the factorisation in fp32 or fp64.
-//
-// The factorisation: fp32 tiles take half the registers of fp64, so fp32
-// runs more blocks per CU and keeps four waves to larger matrices; the
-// irregular bounds follow where each shape starts to spill.  Eight waves
-// and two strips per pass cut the latency of each big matrix instead.
-// Inverting the diagonal blocks out of line frees registers for more
-// blocks, except in fp64 above 16 strips where the updates take nearly
-// them all, and in fp64 it loses to the costs of more blocks when a launch
-// has few matrices.  Never with eight waves: at n=625 the factorisation
-// then goes wrong with pivoting, under HIPRTC and hipcc alike (it spills
-// and calls two functions).
-//
-// The solves: two waves to a block for the fewest column blocks, where four
-// leave many idle, and one wave per SIMD above 20 strips, where their
-// registers spill otherwise.
+// Factorisation:
+// - fp32 tiles use half the registers of fp64. So fp32 runs more blocks per
+//   CU and uses four waves for larger matrices. The irregular bounds follow
+//   where each shape starts to spill.
+// - Eight waves and two strips per pass reduce the latency of big matrices.
+// - Inverting the diagonal blocks out of line frees registers for more
+//   blocks. It is not used in fp64 above 16 strips, where the updates need
+//   nearly all registers. In fp64 it also loses when a launch has few
+//   matrices.
+// - Never out of line with eight waves: at n=625 the factorisation then
+//   goes wrong with pivoting, under HIPRTC and hipcc alike (it spills and
+//   calls two functions).
 constexpr knobs policy(int nb, bool f32, bool few)
 {
     knobs k = {8, 2, 1, 0, nb <= 6 ? 2 : 4, nb <= 20 ? 2 : 1};
@@ -85,8 +85,8 @@ struct config
     static constexpr int N = N_, TR = TR_, TC = TC_, PADC = PADC_;
     static constexpr int NDIES = NDIES_;
 
-    // The matrices padded to whole strips, and the workspace of each: its
-    // strips, then the inverses of the diagonal blocks of U
+    // The matrices padded to whole strips, and the workspace size of each
+    // matrix: its strips, then the inverses of the diagonal blocks of U
     static constexpr int NP = (N + 15)/16*16, NB = NP/16;
     static constexpr long long WSZ = (long long) NP*(NP + 16);
 
@@ -97,7 +97,7 @@ struct config
     static constexpr bool IOL = P.iol;
     static constexpr int WPB = P.wpb, K2MB = P.k2mb;
 
-    // Threads per block of the build, the factorisation and the solves
+    // Threads per block of the build, factorisation and solve kernels
     static constexpr int BUILD_THREADS = 256;
     static constexpr int FACTOR_THREADS = 64*K1W;
     static constexpr int SOLVE_THREADS = 64*WPB;

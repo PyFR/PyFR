@@ -1,27 +1,28 @@
-// LU factorisation with partial pivoting with MFMA, in fp64 or fp32, for
-// the solves of solve.hpp.
+// LU factorisation with partial pivoting using MFMA, in fp64 or fp32.  The
+// result is used by the solves in solve.hpp.
 //
-// The workspace of a matrix holds it as NB = NP/16 strips of 16 columns,
-// each strip NP rows of 16 entries in a row (strip-major).  lu_build fills
-// it with A = I - scale*src, padded with the identity.  lu_factor then
-// factorises it left-looking, a strip at a time, as P A = L U with L lower
-// and U unit upper (the convention of PyFR's template), overwriting each
-// strip with its 16 x 16 blocks packed for the MFMA (see solve.hpp): the
-// blocks of U above the diagonal, the inverse of the diagonal block of L,
-// and the blocks of L below it.  The inverses of the diagonal blocks of U
-// go after the strips.
+// The workspace of a matrix is NB = NP/16 strips of 16 columns.  Each strip
+// has NP rows of 16 entries (strip-major).  lu_build fills the workspace with
+// A = I - scale*src, padded with the identity.  lu_factor then factorises it
+// left-looking, one strip at a time, as P A = L U.  L is lower and U is unit
+// upper (the convention of PyFR's template).
 //
-// For strip k the block
-//   1. loads the strip in the current row order into accumulator tiles,
-//   2. applies the factored strips: Z_i = L_ii^-1 Z_i for the block rows
-//      i < k, each followed by Z_j -= L_ji Z_i for j > i,
-//   3. stores the blocks i < k, which are now U_ik,
-//   4. factorises the remaining NP - 16k rows of the strip with partial
-//      pivoting, a row per lane and column, as the template does,
-//   5. swaps the pivoted rows in the factored strips and the row order,
-//   6. stores the factored blocks and the inverses of the diagonal blocks.
-// The strips to the right are untouched until loaded in the row order of
-// the time, so they take the row interchanges as they are loaded.
+// Each strip is overwritten with its 16 x 16 blocks, packed for the MFMA (see
+// solve.hpp).  The blocks are, in order: U above the diagonal, the inverse of
+// the diagonal block of L, and L below the diagonal.  The inverses of the
+// diagonal blocks of U go after the strips.
+//
+// For strip k the block does these steps:
+//   1. Load the strip, in the current row order, into accumulator tiles.
+//   2. Apply the factored strips: Z_i = L_ii^-1 Z_i for each block row i < k,
+//      then Z_j -= L_ji Z_i for all j > i.
+//   3. Store the blocks i < k.  They are now U_ik.
+//   4. Factorise the remaining NP - 16k rows of the strip with partial
+//      pivoting, one row per lane and column, as the template does.
+//   5. Swap the pivoted rows in the factored strips and in the row order.
+//   6. Store the factored blocks and the inverses of the diagonal blocks.
+// The strips to the right are not touched until they are loaded.  They are
+// loaded in the row order of that time, so they get the row swaps then.
 #pragma once
 
 #include "config.hpp"
@@ -39,8 +40,8 @@ __device__ __forceinline__ int sm_ix(int r, int c)
     return NP*16*(c / 16) + 16*r + c % 16;
 }
 
-// Two consecutive entries of src from p, aligned to their size, as T, not
-// kept in the caches
+// Two consecutive entries of src from p, aligned to their size.  Returns
+// them as T.  The loads bypass the caches.
 template<typename T, typename ST>
 __device__ __forceinline__ vec2<T> load_pair(const ST* p)
 {
@@ -61,12 +62,13 @@ __device__ __forceinline__ vec2<T> load_pair(const ST* p)
     }
 }
 
-// Fill the strip-major workspaces with A = I - scale*src, in T, for one row
-// of the 64 matrices of an AoSoA group of src per block of four waves.  Each
-// wave takes 16 of the matrices, 16 columns at a time, transposing them
-// through its own LDS: it loads them two matrices a lane, so the loads of a
-// column coalesce, and stores them two columns a lane, so those of a matrix
-// do.  The groups of src are whole, so the loads need no guard past nx.
+// Fill the strip-major workspaces with A = I - scale*src, in T.  One call
+// handles one row of the 64 matrices of an AoSoA group of src, per block of
+// four waves.  Each wave takes 16 of the matrices, 16 columns at a time.  It
+// transposes them through its own LDS.  It loads two matrices per lane, so
+// the loads of a column coalesce.  It stores two columns per lane, so the
+// stores of a matrix coalesce.  The groups of src are whole, so the loads
+// need no guard past nx.
 template<class C, typename T = typename C::T, typename ST = typename C::ST,
          typename FT = typename C::FT, typename IX = typename C::IX>
 __device__ __forceinline__ void lu_build(
@@ -82,7 +84,7 @@ __device__ __forceinline__ void lu_build(
     const T scl = T(scale);
     T (*st)[17] = stw[w];
 
-    // Order the LDS accesses of the wave, which needs no barrier
+    // Order the LDS accesses of the wave.  No barrier is needed.
     auto wave_sync = []()
     {
         __builtin_amdgcn_fence(__ATOMIC_RELEASE, "wavefront");
@@ -111,7 +113,7 @@ __device__ __forceinline__ void lu_build(
         }
         wave_sync();
 
-        // Entries (r, c0 + 2(i % 8)) and the next of matrix i/8
+        // Entries (r, c0 + 2(i % 8)) and the next one, of matrix i/8
 #pragma unroll
         for (int u = 0; u < 2; u++)
         {
@@ -126,8 +128,8 @@ __device__ __forceinline__ void lu_build(
     }
 }
 
-// Pivot search key of entry v of row r: the larger magnitude wins, then
-// the lower row; the low 12 bits of the magnitude make way for the row
+// Pivot search key of entry v in row r.  The larger magnitude wins.  On a
+// tie the lower row wins.  The low 12 bits of the magnitude hold the row.
 template<typename T>
 __device__ __forceinline__ unsigned long long pivot_key(T v, int r)
 {
@@ -140,8 +142,8 @@ __device__ __forceinline__ int pivot_row(unsigned long long key)
     return 0xfff - int(key & 0xfff);
 }
 
-// Lane value of v moved by the DPP control Ctrl, rows outside RowMask
-// keeping their own
+// Value of v in a lane, moved by the DPP control Ctrl.  Rows outside
+// RowMask keep their own value.
 template<int Ctrl, int RowMask = 0xf>
 __device__ __forceinline__ unsigned long long dpp_u64(unsigned long long v)
 {
@@ -151,7 +153,7 @@ __device__ __forceinline__ unsigned long long dpp_u64(unsigned long long v)
     return (unsigned long long)(unsigned) lo | (unsigned long long) hi << 32;
 }
 
-// Largest key of the wave by DPP moves, as in a reduction to lane 63
+// Largest key of the wave, by DPP moves as in a reduction to lane 63
 __device__ __forceinline__ unsigned long long wave_max(unsigned long long v)
 {
     auto mx = [](unsigned long long a, unsigned long long b)
@@ -171,11 +173,11 @@ __device__ __forceinline__ unsigned long long wave_max(unsigned long long v)
     return (unsigned long long)(unsigned) lo | (unsigned long long) hi << 32;
 }
 
-// Invert a 16 x 16 diagonal block d (row major in LDS) into packed blocks,
-// lanes 0-15 of the first wave given taking the columns of L^-1, with L on
-// and below the diagonal of d, and those of the second the columns of
-// U^-1, with U unit upper above it.  idg holds the reciprocals of the
-// diagonal of d.
+// Invert a 16 x 16 diagonal block d (row major in LDS) into packed blocks.
+// Lanes 0-15 of the first wave compute the columns of L^-1, where L is on and
+// below the diagonal of d.  Lanes 0-15 of the second wave compute the columns
+// of U^-1, where U is unit upper, above the diagonal.  idg holds the
+// reciprocals of the diagonal of d.
 template<typename T>
 __device__ __forceinline__ void invert_diag(const T* d, const T* idg,
                                             int lane, bool lower, T* linv,
@@ -183,8 +185,8 @@ __device__ __forceinline__ void invert_diag(const T* d, const T* idg,
 {
     const int c = lane % 16;
 
-    // Column c of the inverse by substitution a column of d at a time, each
-    // solved entry updating all the rows after it at once
+    // Column c of the inverse, by substitution one column of d at a time.
+    // Each solved entry updates all the rows after it at once.
     T y[16];
 #pragma unroll
     for (int r = 0; r < 16; r++)
@@ -221,9 +223,9 @@ __device__ __forceinline__ void invert_diag(const T* d, const T* idg,
     }
 }
 
-// invert_diag out of line, its registers then apart from those of the
-// updates: fewer at the peak of the factorisation, though the updates
-// around the call may be scheduled worse
+// invert_diag out of line.  Its registers are then separate from those of
+// the updates.  This lowers the register count at the peak of the
+// factorisation.  The updates around the call may be scheduled worse.
 template<typename T>
 __device__ __noinline__ void invert_diag_ool(const T* d, const T* idg,
                                              int lane, bool lower, T* linv,
@@ -232,22 +234,25 @@ __device__ __noinline__ void invert_diag_ool(const T* d, const T* idg,
     invert_diag(d, idg, lane, lower, linv, uinv);
 }
 
-// Make the global and LDS stores of the block visible to all of its lanes
+// Make the global and LDS stores of the block visible to all its lanes
 __device__ __forceinline__ void block_sync()
 {
     __threadfence_block();
     __syncthreads();
 }
 
-// Factor rows r0 = 16k to NP - 1 of the panel of strip k, which the block
-// left row major in the strip, a row per lane and pass.  For each column the
-// waves reduce the pivot search by DPP moves and post their best candidate
-// row in LDS, so after one barrier every lane picks the pivot row and reads
-// it from there.  Then apply the row interchanges to the factored strips,
-// the npend strips after k waiting row major and the row order rord, store
-// the blocks of L below the diagonal packed and stage the diagonal block in
-// dg.  Kept out of line, as its registers are separate from those of the
-// updates.
+// Factor rows r0 = 16k to NP - 1 of the panel of strip k.  The block left
+// the panel row major in the strip.  Each lane takes a row per pass.
+//
+// For each column, the waves reduce the pivot search with DPP moves.  Each
+// wave posts its best candidate row in LDS.  After one barrier, every lane
+// picks the pivot row and reads it from LDS.
+//
+// Then apply the row interchanges to the factored strips, to the npend strips
+// after k that are waiting (row major), and to the row order rord.  Store the
+// blocks of L below the diagonal, packed.  Stage the diagonal block in dg.
+//
+// Kept out of line, so its registers are separate from those of the updates.
 template<int NP, int W, typename T>
 __device__ __noinline__ void factor_panel(
     T* a, int k, int npend, short* rord, int* ipiv, T (*cand)[W][16],
@@ -277,8 +282,8 @@ __device__ __noinline__ void factor_panel(
     {
         const int gk = r0 + j, b = j % 2;
 
-        // Find the pivot: largest magnitude in column j on or below gk, the
-        // first such row on a near tie
+        // Find the pivot: the largest magnitude in column j on or below gk.
+        // On a near tie, take the first such row.
         unsigned long long key = 0;
         int mq = -1;
 #pragma unroll
@@ -295,8 +300,8 @@ __device__ __noinline__ void factor_panel(
         const unsigned long long mine = key;
         key = wave_max(key);
 
-        // Post the best row of the wave as it would be as the pivot row,
-        // scaled right of the diagonal, and the diagonal row
+        // Post the best row of the wave, as it would be as the pivot row
+        // (scaled right of the diagonal), and the diagonal row
 #pragma unroll
         for (int q = 0; q < NQ; q++)
         {
@@ -396,8 +401,7 @@ __device__ __noinline__ void factor_panel(
         }
     }
 
-    // Store the factored blocks below the diagonal, and stage the diagonal
-    // block
+    // Store the factored blocks below the diagonal.  Stage the diagonal block.
 #pragma unroll
     for (int q = 0; q < NQ; q++)
     {
@@ -419,16 +423,22 @@ __device__ __noinline__ void factor_panel(
 
 // Factorise one matrix per block of W waves, S strips per pass.
 //
-// The waves deal the block rows of the strips between them: wave w holds
-// block rows jb + w, jb + w + W, ... as tiles 0, 1, ..., with jb advancing
-// by W as the leading tiles are solved.  For each step i of the updates
-// the owner of block row i has published the solved Z_i through LDS; every
-// wave then subtracts L_ji Z_i from its block rows below, the owner of
-// block row i + 1 first, solving and publishing it for the next step, so
-// each step takes one barrier.  A pass first applies the strips factored
-// before it to all its strips at once, each operand serving all of them,
-// then factorises its strips in turn, applying those of the pass before.
+// The waves share the block rows of the strips.  Wave w holds block rows
+// jb + w, jb + w + W, ... as tiles 0, 1, ...  The base jb advances by W as
+// the leading tiles are solved.
 //
+// Step i of the updates works like this.  The owner of block row i has
+// published the solved Z_i through LDS.  Every wave subtracts L_ji Z_i from
+// its block rows below.  The owner of block row i + 1 does this first.  It
+// then solves and publishes that row for the next step.  So each step takes
+// one barrier.
+//
+// A pass first applies the strips factored before it to all its strips at
+// once, so each operand serves all of them.  Then it factorises its strips in
+// turn, applying those of the same pass that came before.
+//
+// The panel is spread over all the lanes too; see factor_panel.  With C::IOL
+// the inversions of the diagonal blocks are out of line.
 // The panel is spread over all the lanes too; see factor_panel.  With
 // C::IOL the inversions of the diagonal blocks are out of line.
 template<class C, typename T = typename C::T, typename IX = typename C::IX>
@@ -463,15 +473,15 @@ __device__ __forceinline__ void lu_factor(IX x, const IX* __restrict__ wk_v,
     {
         const int ns = min(S, NB - k0);
 
-        // The nsa strips from kb held as tiles, with the updates solving
-        // their block rows i0 to ke - 1
+        // The nsa strips from kb, held as tiles.  The updates solve their
+        // block rows i0 to ke - 1.
         vec4<T> z[S][NT];
         int kb, nsa, i0, ke;
         auto strip = [&](int s) { return a + 256*NB*(kb + s); };
         auto held = [&](int s) { return S == 1 || s < nsa; };
 
-        // The operands of step i of the updates for the tiles, numbered
-        // from block row jb, and of the solve of block row i + 1
+        // The operands of step i of the updates for the tiles (numbered from
+        // block row jb), and of the solve of block row i + 1
         vec4<T> pa[NT], pd;
         auto fetch = [&](int i, int jb)
         {
@@ -486,8 +496,8 @@ __device__ __forceinline__ void lu_factor(IX x, const IX* __restrict__ wk_v,
                 pd = load_a(a + pk_block<NB>(i + 1, i + 1), lane);
         };
 
-        // Steps ib to ib + W - 1 of the updates, those before ke, each
-        // fetching the operands of the next
+        // Steps ib to ib + W - 1 of the updates, those before ke.  Each step
+        // fetches the operands of the next.
         auto steps = [&](int ib)
         {
 #pragma unroll
@@ -550,11 +560,11 @@ __device__ __forceinline__ void lu_factor(IX x, const IX* __restrict__ wk_v,
             }
         };
 
-        // Run the updates from block row i0, the tiles numbered from it,
-        // returning the block row the tiles are then numbered from
+        // Run the updates from block row i0, with the tiles numbered from it.
+        // Returns the block row the tiles are then numbered from.
         auto run = [&]()
         {
-            // Solve and publish block row i0, storing it as U
+            // Solve and publish block row i0, and store it as U
             if (i0 < ke)
             {
                 fetch(i0, i0);
@@ -580,8 +590,8 @@ __device__ __forceinline__ void lu_factor(IX x, const IX* __restrict__ wk_v,
             }
             __syncthreads();
 
-            // Whole groups of steps, after which the leading tiles are
-            // solved
+            // Whole groups of steps.  After each, the leading tiles are
+            // solved.
             int jb = i0;
             for (; jb + W <= ke; jb += W)
             {
@@ -601,7 +611,7 @@ __device__ __forceinline__ void lu_factor(IX x, const IX* __restrict__ wk_v,
             return jb;
         };
 
-        // Store the block rows from ke of the strips row major
+        // Store the block rows from ke of the strips, row major
         auto store_rest = [&](int jb)
         {
 #pragma unroll
@@ -623,8 +633,8 @@ __device__ __forceinline__ void lu_factor(IX x, const IX* __restrict__ wk_v,
             block_sync();
         };
 
-        // Load the strips of the pass in the current row order, apply the
-        // strips before it and leave the rest of their rows row major
+        // Load the strips of the pass in the current row order.  Apply the
+        // strips before it.  Leave the rest of their rows row major.
         kb = k0, nsa = ns, i0 = 0, ke = k0;
 #pragma unroll
         for (int s = 0; s < S; s++)
@@ -651,8 +661,8 @@ __device__ __forceinline__ void lu_factor(IX x, const IX* __restrict__ wk_v,
         {
             const int k = k0 + s;
 
-            // Apply the strips of the pass before this one, which have
-            // swapped its rows as they were factorised
+            // Apply the strips of the pass before this one.  They swapped the
+            // rows of this strip when they were factorised.
             if (S > 1 && s > 0)
             {
                 kb = k, nsa = 1, i0 = k0, ke = k;

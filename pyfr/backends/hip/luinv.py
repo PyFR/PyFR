@@ -31,15 +31,9 @@ class HIPLUKernel(HIPKernel):
 
 
 class HIPLUInverse(LUInverse):
-    """The LU inverse in hand written HIP kernels with MFMA.
-
-    lu_inv_build forms I - scale*src in a strip-major workspace;
-    lu_inv_factor factorises it with a block per matrix, leaving the factor
-    packed for the MFMA; lu_inv_solve solves for the inverse, 16 columns per
-    wave.  The matrices are padded to a multiple of 16.  The factorisation
-    is in fp64 for double and in fp32 for the other precisions.  The kernels
-    are C++ templates over the problem, passed as -D macros, with the tuning
-    knobs picked by the policy in config.hpp.
+    """The LU inverse as plain HIP kernels with MFMA.
+    
+        Runs three separate kernels: build, factor, and solve.
     """
 
     @staticmethod
@@ -102,8 +96,6 @@ class HIPLUInverse(LUInverse):
         b, t = self.backend, self.tplargs
         ix, ptr, nb = b.ixdtype, np.uintp, t['npad'] // 16
 
-        # Build the kernels as the backend does its own, so the time taken
-        # is not counted against the preconditioner
         with b.region('kernel-setup'):
             build = self._function('lu_inv_build',
                                    [ix, b.fpdtype, ptr, ix, ptr, ptr])
