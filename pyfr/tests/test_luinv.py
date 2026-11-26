@@ -2,7 +2,7 @@
 
 Each implementation (the Mako kernels and, on HIP, the hand written ones)
 inverts I - scale*J for Jacobians J of several kinds.  A sample of the
-inverses is checked against a plain Gauss-Jordan inverse in float64, with
+inverses is checked against np.linalg.inv in float64, with
 error bounds scaled to the precision.  A quick set of cases runs by
 default; the options in conftest.py select more:
 
@@ -12,7 +12,6 @@ default; the options in conftest.py select more:
   --luinv-bench-report FILE   also write the benchmark to FILE
 """
 import gc
-import hashlib
 import itertools as it
 
 import numpy as np
@@ -96,42 +95,6 @@ def make_jacobians(kind, k, n, seed=0):
 
 # The reference and the error metric
 
-def ref_inverse(a):
-    """Inverses of a stack of matrices by Gauss-Jordan elimination with
-    partial pivoting in float64: slow, but plain."""
-    k, n, _ = a.shape
-    ks = np.arange(k)
-
-    # Reduce [A | I] to [I | A^-1] a column at a time
-    m = np.concatenate([a, np.broadcast_to(np.eye(n), a.shape)], axis=2)
-    for j in range(n):
-        # Swap the row with the largest entry in column j on or below the
-        # diagonal into row j (the right hand side indexes give copies)
-        p = j + np.argmax(np.abs(m[:, j:, j]), axis=1)
-        m[ks, j], m[ks, p] = m[ks, p], m[ks, j]
-
-        # Scale row j to a unit pivot and clear column j in every other row
-        m[:, j] /= m[:, j, j, None]
-        f = m[:, :, j].copy()
-        f[:, j] = 0
-        m -= f[:, :, None]*m[:, None, j]
-
-    return m[:, :, n:]
-
-
-# The latest reference, which every implementation of a case shares
-_ref = {}
-
-
-def _reference(a):
-    key = hashlib.sha1(a.tobytes()).hexdigest()
-    if key not in _ref:
-        _ref.clear()
-        _ref[key] = ref_inverse(a)
-
-    return _ref[key]
-
-
 def roundoffs(precision):
     pcdtype, wdtype = PRECISIONS[precision]
 
@@ -171,7 +134,7 @@ def inverse_errors(a, x, precision):
     n = a.shape[-1]
     uf, uo, eta = roundoffs(precision)
 
-    xref = _reference(a)
+    xref = np.linalg.inv(a)
     na, nx, nxref = _infnorm(a), _infnorm(x), _infnorm(xref)
     kappa = na*nxref
 
@@ -190,9 +153,6 @@ def passes(a, x, precision):
     err = inverse_errors(a, x, precision)
     return (err['finite'].all() and err['res'].max() <= 1 and
             err['ferr'].max() <= 1)
-
-
-# The problem: what the preconditioner keeps for one element type
 
 _backends = {}
 
@@ -333,20 +293,11 @@ def make_problem(monkeypatch):
     gc.collect()
 
 
-# The checks of the reference and the metric themselves
+# The checks of the metric itself
 
 def _exact(kind, n=64, k=4):
     a = np.eye(n) - SCALE*make_jacobians(kind, k, n)
     return a, np.linalg.inv(a)
-
-
-@pytest.mark.parametrize('kind', KINDS)
-def test_reference(kind):
-    a, x = _exact(kind)
-    err = _infnorm(ref_inverse(a) - x) / _infnorm(x)
-    kappa = _infnorm(a)*_infnorm(x)
-
-    assert np.all(err <= kappa*a.shape[-1]*np.finfo(np.float64).eps)
 
 
 @pytest.mark.parametrize('precision', PRECISIONS)
@@ -416,7 +367,7 @@ FULL = [
 
 
 def _cases():
-    # The implementations of each case in turn, so they share its reference
+    # The implementations of each case in turn
     for cases, marks in [(QUICK, ()), (FULL, pytest.mark.full)]:
         for case, (bname, impl) in it.product(cases, IMPLS):
             n, prec = case[:2]
