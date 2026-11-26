@@ -4,7 +4,7 @@ import time
 import numpy as np
 
 from pyfr.cache import memoize
-from pyfr.integrators.implicit.luinv import LUInverse
+from pyfr.integrators.implicit.luinv import get_lu_inverse
 from pyfr.mpiutil import get_comm_rank_root, mpi, scal_coll
 from pyfr.nputil import npdtype_to_ctype
 from pyfr.progress import NullProgressBar
@@ -40,8 +40,8 @@ class _ElementPrecond:
                                      extent=extent, tags={'align'})
 
         # Allocate the workspace of the inversion beside the staging matrix
-        self.luinv = LUInverse(backend, self.jstage, self.inv, self.ceidxs,
-                               extent)
+        self.luinv = get_lu_inverse(backend, self.jstage, self.inv,
+                                    self.ceidxs, extent)
 
     def _gather_view(self, mat, eidxs):
         # Pad the gather map to capacity by replicating its final entry

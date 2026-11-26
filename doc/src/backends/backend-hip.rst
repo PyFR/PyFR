@@ -27,6 +27,17 @@ Parameterises the HIP backend with
 
      *int*
 
+#. ``lu-inverse`` --- kernels which invert the blocks of the
+   ``block-jacobi`` preconditioner, defaults to ``mako``:
+
+     ``mako`` | ``hip``
+
+   where ``mako`` is the portable kernel PyFR generates for every
+   backend and ``hip`` is a hand written kernel for AMD GPUs with
+   MFMA (gfx90a, gfx94x and gfx95x), tuned on the MI300 series.  The
+   environment variable ``PYFR_HIP_LU_INVERSE`` takes precedence over
+   this option.
+
 Example:
 
 .. code-block:: ini
