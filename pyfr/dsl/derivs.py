@@ -80,6 +80,8 @@ class Differentiator:
                   lambda y, x: Unary('-', Binary('/', y, _sqsum(x, y)))),
         'hypot': (lambda x, y: Binary('/', x, call('hypot', [x, y])),
                   lambda x, y: Binary('/', y, call('hypot', [x, y]))),
+        'copysign': (lambda x, y: Binary('*', _dfabs(x), _dfabs(y)),
+                     lambda x, y: Int(0)),
         'fmin': _dfmin, 'min': _dfmin,
         'fmax': _dfmax, 'max': _dfmax
     }

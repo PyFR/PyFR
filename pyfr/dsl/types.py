@@ -38,7 +38,7 @@ UNKNOWN = Type('unknown', None)
 
 # Math functions which always return a floating point value
 FLOAT_FNS = (frozenset(Differentiator.func_derivs) |
-             frozenset(Differentiator.func_derivs2) | {'pow', 'copysign'})
+             frozenset(Differentiator.func_derivs2) | {'pow'})
 
 # Operators whose result is an integer whatever their operands
 INT_OPS = frozenset('% << >> & | ^ == != < <= > >= && ||'.split())

@@ -161,9 +161,10 @@ keeps piecewise constant quantities such as limiter switches out of
 the derivative.
 
 Where a function is not differentiable ``fabs`` differentiates to
-``copysign(1, x)``, ``fmin`` and ``fmax`` follow their first argument
-on ties, ``sign``, comparisons and casts to integer types are
-constants, ``?:`` differentiates only its branches and ``%`` is not
+``copysign(1, x)``, ``copysign`` takes the sign of its second argument
+as a constant, ``fmin`` and ``fmax`` follow their first argument on
+ties, ``sign``, comparisons and casts to integer types are constants,
+``?:`` differentiates only its branches and ``%`` is not
 differentiable.
 
 Requesting a kernel with ``tangent={'u': 'du', ...}`` wraps its body
