@@ -92,6 +92,7 @@ class HIPWrappers(LibWrapper):
 
     # Constants
     DEVICE_ATTR_NUMBER_OF_XCCS = 10018
+    FUNC_ATTR_MAX_THREADS_PER_BLOCK = 0
     FUNC_ATTR_SHARED_SIZE_BYTES = 1
     FUNC_ATTR_LOCAL_SIZE_BYTES = 3
     FUNC_ATTR_NUM_REGS = 4
@@ -291,6 +292,7 @@ class HIPFunction(_HIPBase):
         self.nreg = self._get_attr('num_regs')
         self.shared_mem = self._get_attr('shared_size_bytes')
         self.local_mem = self._get_attr('local_size_bytes')
+        self.max_threads = self._get_attr('max_threads_per_block')
 
         # Save a reference to our underlying module and argument types
         self.module = module
