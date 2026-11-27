@@ -11,6 +11,9 @@ def pytest_addoption(parser):
     group.addoption('--luinv-bench', action='store_true',
                     help='benchmark the HIP kernels against Mako, and run '
                     'nothing else')
+    group.addoption('--luinv-profile', action='store_true',
+                    help='run only the single case entry point for profilers, '
+                    'with the implementation picked by PYFR_HIP_LU_INVERSE')
     group.addoption('--luinv-bench-report', metavar='FILE',
                     help='also write the benchmark to FILE as JSON lines; '
                     'implies --luinv-bench')
@@ -26,6 +29,8 @@ def pytest_configure(config):
                             'matrix of the LU inverses (--luinv-full)')
     config.addinivalue_line('markers', 'bench: in the benchmark of the LU '
                             'inverses (--luinv-bench)')
+    config.addinivalue_line('markers', 'profile: the profiling entry point '
+                            'of the LU inverses (--luinv-profile)')
 
     # Rows of the benchmark, which the tests append to
     config.luinv_bench = []
@@ -33,14 +38,19 @@ def pytest_configure(config):
 
 def pytest_collection_modifyitems(config, items):
     full, bench = config.getoption('luinv_full'), _bench(config)
+    profile = config.getoption('luinv_profile')
 
-    # The benchmark on its own, or every test but it
+    # The benchmark or profiling entry point on its own, or every test but
+    # them
     keep, drop = [], []
     for item in items:
-        if bench:
+        if profile:
+            wanted = item.get_closest_marker('profile')
+        elif bench:
             wanted = item.get_closest_marker('bench')
         else:
             wanted = not (item.get_closest_marker('bench') or
+                          item.get_closest_marker('profile') or
                           (item.get_closest_marker('full') and not full))
 
         (keep if wanted else drop).append(item)

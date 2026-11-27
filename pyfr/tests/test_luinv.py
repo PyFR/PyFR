@@ -10,9 +10,12 @@ conftest.py select more:
   --luinv-bench               benchmark the HIP kernels against Mako, and
                               run nothing else
   --luinv-bench-report FILE   also write the benchmark to FILE
+  --luinv-profile             run one case of one implementation, as the
+                              entry point for a profiler, and nothing else
 """
 import gc
 import itertools as it
+import os
 
 import numpy as np
 import pytest
@@ -541,3 +544,30 @@ def test_bench(make_problem, request, n, prec):
         'mako_ms': 1e3*times['mako'], 'hip_ms': 1e3*times['hip'],
         'speedup': times['mako'] / times['hip']
     })
+
+
+# The entry point for profilers, such as rocprof-compute:
+#
+#   PYFR_HIP_LU_INVERSE=hip rocprof-compute profile -d DIR -k lu_inv -- \
+#       pytest pyfr/tests/test_luinv.py --luinv-profile -k n320-double
+PROFILE_REPS = 3
+
+
+@pytest.mark.profile
+@pytest.mark.parametrize('n,prec', BENCH, ids=[f'n{n}-{p}' for n, p in BENCH])
+def test_profile(make_problem, n, prec):
+    impl = os.environ.get('PYFR_HIP_LU_INVERSE', 'mako')
+    if impl not in HIP_IMPLS:
+        pytest.fail(f'PYFR_HIP_LU_INVERSE must be one of {HIP_IMPLS}, '
+                    f'not {impl!r}')
+
+    neles = 2048 if n > 512 else 4096
+    prob = make_problem('hip', impl, n, make_colours(neles, 1), prec)
+
+    # Stage the Jacobians and invert them once, which also warms up the
+    # kernels, then invert them again for the profiler
+    prob.stage_and_invert(nsample=1)
+    for i in range(PROFILE_REPS):
+        prob.invert(0)
+
+    prob.backend.wait()
