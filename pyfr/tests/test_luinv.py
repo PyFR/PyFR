@@ -1,10 +1,10 @@
 """Tests of the batched LU inverses of the block-Jacobi preconditioner.
 
-Each implementation (the Mako kernels and, on HIP, the hand written ones)
-inverts I - scale*J for Jacobians J of several kinds.  A sample of the
-inverses is checked against np.linalg.inv in float64, with
-error bounds scaled to the precision.  A quick set of cases runs by
-default; the options in conftest.py select more:
+Each implementation (Mako/pure HIP kernel) inverts I - scale*J for 
+Jacobians J of several kinds. A sample of the inverses is checked 
+against np.linalg.inv in float64, with error bounds scaled to the 
+precision.  A quick set of cases runs by default; the options in 
+conftest.py select more:
 
   --luinv-full                the whole validation matrix
   --luinv-bench               benchmark the HIP kernels against Mako, and
@@ -71,8 +71,8 @@ def _dense(rng, k, n):
 
 def _illcond(rng, k, n, cond=1e6, npool=4):
     # Few orthogonally similar matrices of the given condition number, made
-    # distinct per element through a scale factor; the singular values are
-    # centred on one so the inverses stay in range of half precision
+    # distinct per element through a scale factor. The singular values are
+    # centred on one so the inverses stay in range of half precision.
     s = np.logspace(np.log10(cond) / 2, -np.log10(cond) / 2, n)
     pool = []
     for _ in range(min(k, npool)):
@@ -98,7 +98,7 @@ def make_jacobians(kind, k, n, seed=0):
 def roundoffs(precision):
     pcdtype, wdtype = PRECISIONS[precision]
 
-    # The factorisation is in the staging precision, with bf16 in single
+    # The factorisation is in the staging precision.
     fdtype = np.float32 if is_bf16(wdtype) else wdtype
     uf = float(np.finfo(fdtype).eps) / 2
 
@@ -113,6 +113,8 @@ def roundoffs(precision):
 
 
 def _infnorm(m):
+    # m is a batch of square matrices of shape (batch, n, n)
+    # Compute max_i {sum_j |m_ij|} for each matrix.
     return np.abs(m).sum(axis=-1).max(axis=-1)
 
 
@@ -142,7 +144,7 @@ def inverse_errors(a, x, precision):
     ferr = _infnorm(x - xref) / nxref
 
     return {
-        'finite': np.isfinite(x).all(axis=(-2, -1)),
+        'finite': np.isfinite(x).all(axis=(-2, -1)), # One bool per matrix, x is (batch, n, n)
         'kappa': kappa,
         'res': res / (n*uf + uo + n*eta/nx),
         'ferr': ferr / (kappa*n*uf + uo + n*eta/nxref),
@@ -237,6 +239,8 @@ class Problem:
         mat, backend = self.inv, self.backend
 
         # Copy out the tiles of every matrix in its padded row-major order
+        # 'mako' and 'hip' implementations of the 'hip' backend store the 
+        # inverses inthe same way.
         if backend.name == 'hip':
             backend.wait()
 
@@ -262,7 +266,10 @@ class Problem:
     def stage_and_invert(self, kind='jacobian', colours=None, nsample=32,
                          seed=0):
         """Stage and invert the colours, returning a sample of the elements
-        and their matrices I - scale*J as staged."""
+        and their matrices I - scale*J as staged.
+        
+        Use read() to obtain the inverted matrices after staging and inverting.
+        """
         rng = np.random.default_rng(seed)
         eidx, a = [], []
         for c in self.colours if colours is None else colours:
@@ -292,8 +299,6 @@ def make_problem(monkeypatch):
     # Problems hold large workspaces so free them between tests
     gc.collect()
 
-
-# The checks of the metric itself
 
 def _exact(kind, n=64, k=4):
     a = np.eye(n) - SCALE*make_jacobians(kind, k, n)
@@ -332,8 +337,7 @@ def test_metric_fails():
     assert not passes(a, x, 'double')
 
 
-# The inverses of each implementation
-
+# Quick test set.
 QUICK = [
     (40, 'double', 'jacobian', 70, 3),
     *[(n, p, 'jacobian', 65, 2) for n in (100, 320) for p in PRECISIONS],
@@ -352,6 +356,7 @@ QUICK = [
     (625, 'double', 'pivot', 65, 1),
 ]
 
+# Full set of cases
 FULL = [
     *[(n, p, k, 65, 1) for n, p, k in it.product(
         (100, 175, 320, 625), PRECISIONS, KINDS
@@ -385,24 +390,26 @@ def _cases():
 
 @pytest.mark.parametrize('bname,impl,n,prec,kind,neles,ncolours',
                          list(_cases()))
-def test_inverse(make_problem, bname, impl, n, prec, kind, neles, ncolours):
+def test_lu_inverse_is_correct(make_problem, bname, impl, n, prec, kind, neles, ncolours):
     prob = make_problem(bname, impl, n, make_colours(neles, ncolours), prec)
     eidx, a = prob.stage_and_invert(kind)
 
     assert passes(a, prob.read()[eidx], prec)
 
 
-@pytest.mark.parametrize('n', [100, 320])
-def test_matches_mako(make_problem, n):
+@pytest.mark.parametrize('n', [100, 320, 625])
+def test_hip_impl_matches_mako_impl(make_problem, n):
     colours = make_colours(130, 2)
 
     xs = []
+    a = None
     for impl in HIP_IMPLS:
         prob = make_problem('hip', impl, n, colours)
         eidx, a = prob.stage_and_invert()
         xs.append(prob.read()[eidx])
 
-    # Agreement to within the error bounds of the inverses themselves
+    # xm: Mako implementation, xh: HIP implementation
+    # Test that the HIP implementation matches the Mako implementation.
     xm, xh = xs
     kappa = inverse_errors(a, xm, 'double')['kappa']
     rel = _infnorm(xh - xm) / _infnorm(xm)
@@ -432,11 +439,14 @@ def test_colour_isolation(make_problem, impl):
 
 
 @pytest.mark.parametrize('impl', HIP_IMPLS)
-def test_deterministic(make_problem, impl):
+def test_lu_inv_is_deterministic(make_problem, impl):
     prob = make_problem('hip', impl, 320, make_colours(300, 1))
     prob.stage_and_invert()
     x1 = prob.read()
 
+    # Invert the staged matrices again and check for determinism:
+    # The second inversion must be bitwise equal to the first one.
+    # We only check color zero - it could be any color.
     prob.fill(0)
     prob.invert(0)
 
@@ -444,7 +454,7 @@ def test_deterministic(make_problem, impl):
 
 
 @pytest.mark.parametrize('impl', HIP_IMPLS)
-def test_rescale(make_problem, impl):
+def test_rescale_does_not_use_previous_state(make_problem, impl):
     # Inverting the staged Jacobians again with another scale must not
     # reuse any state from the first inversion
     prob = make_problem('hip', impl, 320, make_colours(100, 1))
@@ -457,7 +467,7 @@ def test_rescale(make_problem, impl):
     assert passes(a, prob.read(), 'double')
 
 
-def test_select(make_problem, monkeypatch):
+def test_backend_selection(make_problem, monkeypatch):
     from pyfr.backends.hip.luinv import HIPLUInverse
 
     def impl(env='', cfg=None):
@@ -481,16 +491,14 @@ def test_select(make_problem, monkeypatch):
     with pytest.raises(ValueError):
         impl(cfg='magma')
 
-    # The hand written kernels need MFMA
+    # The pure HIP kernels need MFMA
     monkeypatch.setattr(HIPLUInverse, 'supported', lambda backend: False)
     with pytest.raises(ValueError):
         impl(env='hip')
 
 
-# The benchmark of the HIP kernels against Mako
-
+# The benchmark set of the HIP kernels against Mako
 BENCH = list(it.product((70, 175, 320, 625), ('double', 'single')))
-
 
 def _time(prob, reps=10, warmup=2):
     backend = prob.backend
