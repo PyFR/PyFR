@@ -106,6 +106,10 @@ struct config
                   "the factorisation is in fp64 or fp32");
     static_assert(K1W == 4 || K1W == 8, "four or eight waves");
     static_assert(S >= 1, "at least one strip per pass");
+    static_assert(!(IOL && K1W == 8),
+                  "out-of-line inversion with eight waves miscompiles (n=625)");
+    static_assert(NP <= 4096, "pivot_key packs the row into 12 bits");
+    static_assert(NDIES >= 1, "at least one die");
 };
 
 }

@@ -53,7 +53,7 @@ class HIPLUInverse(LUInverse):
         t['wsz'] = npad*(npad + 16)
 
         # Factorise more matrices at once, within a workspace of 2**28
-        # entries, starting each part at a whole AoSoA group of the matrices
+        # entries (2 GiB in fp64), starting each part at a whole AoSoA group of the matrices
         nwork = max(512, min(4096, 2**28 // t['wsz']))
         t['nwork'] = min(nwork // 64 * 64, m.ioshape[2])
 
@@ -73,7 +73,7 @@ class HIPLUInverse(LUInverse):
                 np.dtype(b.ixdtype).itemsize
             ],
             'LUINV_TR': out.trows, 'LUINV_TC': out.tcols,
-            'LUINV_PADC': out.padc, 'LUINV_NDIES': b.ndies,
+            'LUINV_PADC': out.padc, 'LUINV_NDIES': max(1, b.ndies),
             'LUINV_FEW': int(t['nwork'] <= 3*ncu)
         }
 

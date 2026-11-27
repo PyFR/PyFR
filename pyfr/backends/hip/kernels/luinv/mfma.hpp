@@ -35,9 +35,8 @@ __device__ __forceinline__ f32x4 mfma_16x16x4(float a, float b, f32x4 c)
     return __builtin_amdgcn_mfma_f32_16x16x4f32(a, b, c, 0, 0, 0);
 }
 
-// Row and K index of the A operand element held by the lane
+// Row of the A operand element held by the lane
 __device__ __forceinline__ int mfma_lrow(int lane) { return lane % 16; }
-__device__ __forceinline__ int mfma_lk(int lane) { return lane / 16; }
 
 // Row of accumulator value v held by the lane
 template<typename T>

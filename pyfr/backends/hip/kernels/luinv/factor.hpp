@@ -439,8 +439,6 @@ __device__ __noinline__ void factor_panel(
 //
 // The panel is spread over all the lanes too; see factor_panel.  With C::IOL
 // the inversions of the diagonal blocks are out of line.
-// The panel is spread over all the lanes too; see factor_panel.  With
-// C::IOL the inversions of the diagonal blocks are out of line.
 template<class C, typename T = typename C::T, typename IX = typename C::IX>
 __device__ __forceinline__ void lu_factor(IX x, const IX* __restrict__ wk_v,
                                           T* __restrict__ ws_v,

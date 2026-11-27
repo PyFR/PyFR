@@ -110,7 +110,10 @@ class HIPCompiler:
         # Gather the files under each include directory
         for f, g in zip(flags, [*flags[1:], None]):
             if f.startswith('-I'):
-                idir = Path(f[2:] or g)
+                d = f[2:] or g
+                if d is None or not (idir := Path(d)).is_dir():
+                    continue
+
                 for p in sorted(idir.rglob('*')):
                     if p.is_file():
                         files.append((str(p.relative_to(idir)),

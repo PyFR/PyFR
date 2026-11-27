@@ -1,5 +1,6 @@
 from functools import cached_property
 import os
+import warnings
 
 import numpy as np
 
@@ -110,14 +111,21 @@ class LUInverse:
 def get_lu_inverse(backend, m, out, idxs, extent):
     # On HIP the inverse may come from hand written kernels instead
     if backend.name == 'hip':
-        impl = (os.environ.get('PYFR_HIP_LU_INVERSE') or
-                backend.cfg.get('backend-hip', 'lu-inverse', 'mako'))
+        cfgimpl = backend.cfg.get('backend-hip', 'lu-inverse', 'mako')
+        impl = os.environ.get('PYFR_HIP_LU_INVERSE') or cfgimpl
+
+        # Note an override of the config file, for reproducibility
+        if impl != cfgimpl:
+            warnings.warn(f'PYFR_HIP_LU_INVERSE={impl} overrides the '
+                          f'configured lu-inverse = {cfgimpl}')
 
         if impl == 'hip':
             from pyfr.backends.hip.luinv import HIPLUInverse
 
             if not HIPLUInverse.supported(backend):
-                raise ValueError('HIP LU inverse needs a GPU with MFMA')
+                arch = backend.props['gcn_arch_name']
+                raise ValueError(f'HIP LU inverse needs a GPU with MFMA '
+                                 f'(gfx90a, gfx94x or gfx95x), found {arch}')
 
             return HIPLUInverse(backend, m, out, idxs, extent)
         elif impl != 'mako':
