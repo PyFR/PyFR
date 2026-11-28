@@ -24,7 +24,10 @@ class HIPKernelGenerator(BaseGPUKernelGenerator):
     _ptr_arg = '{c}{t}* __restrict__ {n}'
 
     def _group_index(self, lsz):
-        return f'(int) __builtin_amdgcn_readfirstlane(_bl / {lsz})'
+        if lsz % self.backend.subgrpsz == 0:
+            return f'(int) __builtin_amdgcn_readfirstlane(_bl / {lsz})'
+        else:
+            return super()._group_index(lsz)
 
     def _render_spec(self):
         kargs = [self._karg(*a) for a in self._kargs()]
