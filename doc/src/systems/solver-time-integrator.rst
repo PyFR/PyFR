@@ -497,6 +497,9 @@ Preconditioner Options
         Jacobian stored in bf16; inverse computed in single and stored
         in bf16.
 
+    On HIP the blocks may instead be inverted by hand written kernels;
+    see the ``lu-inverse`` option of ``[backend-hip]``.
+
 #. ``fd-eps`` --- finite-difference perturbation
 
     ``auto`` or *float* (default: ``auto``)

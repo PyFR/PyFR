@@ -1,5 +1,6 @@
 from ctypes import (POINTER, create_string_buffer, c_char_p, c_int, c_size_t,
                     c_void_p)
+from pathlib import Path
 
 from pyfr.cache import ObjectCache
 from pyfr.ctypesutil import LibWrapper
@@ -102,8 +103,28 @@ class HIPCompiler:
         hip.lib.hipRuntimeGetVersion(version)
         self.version = version.value
 
+    @staticmethod
+    def _include_files(flags):
+        files = []
+
+        # Gather the files under each include directory
+        for f, g in zip(flags, [*flags[1:], None]):
+            if f.startswith('-I'):
+                d = f[2:] or g
+                if d is None or not (idir := Path(d)).is_dir():
+                    continue
+
+                for p in sorted(idir.rglob('*')):
+                    if p.is_file():
+                        files.append((str(p.relative_to(idir)),
+                                      p.read_bytes()))
+
+        return files
+
     def build(self, name, src, flags=[]):
-        ckey = digest(self.version, name, src, flags)
+        # Key on any included headers so that editing them forces a rebuild
+        ckey = digest(self.version, name, src, flags,
+                      self._include_files(flags))
 
         code = self.cache.get_bytes(ckey)
         if code is None:
