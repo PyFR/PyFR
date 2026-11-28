@@ -1,7 +1,5 @@
 import numpy as np
 
-from pyfr.mpiutil import mpi, scal_coll
-
 
 class DirectVTKOutput:
     pyr_divisor_bump = 2
@@ -34,22 +32,15 @@ class CleanToGridVTKOutput(DirectVTKOutput):
         self.point_data = self._average(dtypes)
 
     def _average(self, dtypes):
-        comm, etypes = self.cleaner.comm, list(self.cleaner.layouts)
+        etypes = list(self.cleaner.layouts)
 
         # Obtain the field data for each element type
         fdata = {etype: self._point_arrays(etype) for etype in etypes}
 
         # Iterate through the fields and average them
-        out = []
-        for i, dtype in enumerate(dtypes):
-            efields, ncomp = {}, 0
-
-            for etype, arrays in fdata.items():
-                efields[etype] = arrays[i].astype(dtype, copy=False)
-                ncomp = max(ncomp, arrays[i].shape[2])
-
-            ncomp = scal_coll(comm.Allreduce, ncomp, op=mpi.MAX)
-            out.append(self.cleaner.average(efields, ncomp, dtype))
+        items = [({et: arrs[i] for et, arrs in fdata.items()}, dt)
+                 for i, dt in enumerate(dtypes)]
+        out = self.cleaner.average_items(items)
 
         # Group by element type and return
         return {etype: [f[etype] for f in out] for etype in etypes}

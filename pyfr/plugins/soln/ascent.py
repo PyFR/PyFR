@@ -9,7 +9,7 @@ from pyfr.ctypesutil import LibWrapper
 from pyfr.exprs import npeval
 from pyfr.fields import CleanToGrid
 from pyfr.inifile import process_expr
-from pyfr.mpiutil import get_comm_rank_root, mpi
+from pyfr.mpiutil import get_comm_rank_root
 from pyfr.plugins.common import region_data
 from pyfr.plugins.postproc import FaceInfo, get_source
 from pyfr.plugins.soln.base import BaseSolnPlugin
@@ -306,7 +306,6 @@ class _VolumeAscentOutput:
                 self._emit(mesh_n, dom, fname, arr.astype(dtype, copy=False))
 
     def _publish_clean(self, mesh_n, fields):
-        comm, _, _ = get_comm_rank_root()
         dtype = self.renderer.dtype
 
         # Re-key by published (possibly namespaced) field name
@@ -316,20 +315,14 @@ class _VolumeAscentOutput:
                 byfield[fname][key] = arr
 
         # Sorted per-source list so idle ranks hit every collective
-        for field in sorted(self.renderer._source_fields[self.sname]):
-            fname = self.renderer._field_name(self.sname, field)
-            arrs = byfield.get(fname, {})
+        fnames = [self.renderer._field_name(self.sname, f)
+                  for f in sorted(self.renderer._source_fields[self.sname])]
+        items = [(byfield.get(fn, {}), dtype) for fn in fnames]
 
-            ncomp = max((a.shape[-1] for a in arrs.values()), default=1)
-            ncomp = comm.allreduce(ncomp, op=mpi.MAX)
-
-            efields = {key: arr.astype(dtype, copy=False)
-                       for key, arr in arrs.items()}
-
-            avg = self.cleaner.average(efields, ncomp, dtype)
+        for fn, avg in zip(fnames, self.cleaner.average_items(items)):
             for key, vals in avg.items():
                 dom = self.renderer.dinfo[self.sname, key]
-                self._emit(mesh_n, dom, fname, vals)
+                self._emit(mesh_n, dom, fn, vals)
 
 
 class _BoundaryAscentOutput(_VolumeAscentOutput):

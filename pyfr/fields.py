@@ -1,5 +1,6 @@
-from collections import namedtuple
+from collections import defaultdict, namedtuple
 from functools import partial
+import itertools as it
 
 import numpy as np
 
@@ -7,7 +8,7 @@ from pyfr.bases import get_basis
 from pyfr.cache import memoize
 from pyfr.metrics import MeshMetrics
 from pyfr.mpiutil import (DistributedDirectory, first_coll,
-                          get_comm_rank_root)
+                          get_comm_rank_root, mpi)
 from pyfr.nputil import zip_chunks
 from pyfr.quadrules import get_quadrule
 from pyfr.readers.native import group_names
@@ -64,6 +65,9 @@ class Reducer:
 class CleanToGrid:
     # Accumulation chunk size, in items
     CHUNK_SZ = 2**15
+
+    # Batch width for averaging multiple items, in components
+    BATCH_NCOMP = 32
 
     @staticmethod
     def _class_rows(classes, nint):
@@ -241,6 +245,40 @@ class CleanToGrid:
             _, _, body = self.layouts[etype]
             out[etype].append(vdofvals[etype][body])
             out[etype] = np.concatenate(out[etype])
+
+        return out
+
+    def average_items(self, items):
+        # Agree on the component count of each item across ranks
+        widths = [max((a.shape[2] for a in ef.values()), default=1)
+                  for ef, _ in items]
+        ncomps = np.array(widths, dtype=int)
+        self.comm.Allreduce(mpi.IN_PLACE, ncomps, op=mpi.MAX)
+
+        # Group items by data type into bounded-width batches
+        batches = defaultdict(list)
+        for i, ((_, dt), w) in enumerate(zip(items, ncomps)):
+            grp = batches[np.dtype(dt).type]
+            if not grp or ncomps[grp[-1]].sum() + w > self.BATCH_NCOMP:
+                grp.append([])
+
+            grp[-1].append(i)
+
+        # Average each batch and split into per-item outputs
+        out = [None]*len(items)
+        for dt, grp in batches.items():
+            for ids in grp:
+                offs = list(it.accumulate(ncomps[ids], initial=0))
+                efs = [items[i][0] for i in ids]
+
+                bef = {}
+                for et in efs[0]:
+                    parts = [ef[et] for ef in efs]
+                    bef[et] = np.concatenate(parts, axis=2, dtype=dt)
+
+                avg = self.average(bef, offs[-1], dt)
+                for i, (a, b) in zip(ids, it.pairwise(offs)):
+                    out[i] = {et: v[:, a:b] for et, v in avg.items()}
 
         return out
 
