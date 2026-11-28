@@ -9,8 +9,9 @@ from pyfr.metrics import MeshMetrics
 from pyfr.mpiutil import (DistributedDirectory, first_coll,
                           get_comm_rank_root)
 from pyfr.nputil import zip_chunks
+from pyfr.quadrules import get_quadrule
 from pyfr.readers.native import group_names
-from pyfr.shapes import BaseShape, apply_op
+from pyfr.shapes import BaseShape, apply_op, proj_pts
 from pyfr.subdiv import get_subdiv
 from pyfr.util import first, subclass_where, subclasses
 
@@ -275,7 +276,8 @@ class FieldRecovery:
         self.elementscls, self.ndims = elementscls, mesh.ndims
 
         # Per-etype metric terms and nodal transfer operators
-        self.metrics, self.gops, self.up2n, self.n2up = {}, {}, {}, {}
+        self.metrics, self.gops, self.fops = {}, {}, {}
+        self.up2n, self.n2up, self.n2g = {}, {}, {}
         cnodemap, divmap, nsvptsmap = {}, {}, {}
         for et in mesh.spts:
             shapecls = subclass_where(BaseShape, name=et)
@@ -299,6 +301,7 @@ class FieldRecovery:
             bnodes = nodes[bmask]
             self.up2n[et] = shape.ubasis.nodal_basis_at(bnodes)
             self.n2up[et] = nbasis.nodal_basis_at(shape.upts)[:, bmask]
+            self.n2g[et], self.fops[et] = self._face_ops(shape, bnodes)
 
             # Corner node numbers key the shared-vdof classes
             snodes = mesh.spts_nodes[et]
@@ -309,8 +312,31 @@ class FieldRecovery:
         shared = np.fromiter(mesh.shared_nodes.by_node, dtype=int)
         self.cleaner = CleanToGrid(cnodemap, divmap, nsvptsmap, shared)
 
-    def average(self, fmap):
-        # Node-average per-etype (nupts, ..., neles) fields across elements
+    @staticmethod
+    def _face_ops(shape, bnodes):
+        p, ubasis = shape.order, shape.ubasis
+        ou = ubasis.ortho_basis_at(shape.upts)
+
+        # Build surface lifting and quadrature operators for each face
+        n2g, fops = np.zeros((shape.ndims*shape.nupts, len(bnodes))), []
+        for kind, proj, norm in shape.faces:
+            fnodes = subclass_where(BaseShape, name=kind).std_ele(p)
+            pfnodes = proj_pts(proj, fnodes)
+            fb = np.linalg.norm(bnodes - pfnodes[:, None], axis=2).argmin(1)
+
+            qr = get_quadrule(kind, qdeg=max(2*p, 1))
+            qpts = proj_pts(proj, qr.pts)
+            oq = ou.T @ (ubasis.ortho_basis_at(qpts)*qr.wts)
+            q2g = (np.asarray(norm)[:, None, None]*oq).reshape(-1, len(qpts))
+            fn2q = get_basis(kind, p, fnodes).nodal_basis_at(qr.pts)
+
+            n2g[:, fb] += q2g @ fn2q
+            fops.append((qpts, fb, ubasis.nodal_basis_at(qpts), fn2q, q2g))
+
+        return n2g, fops
+
+    def _nodal_deltas(self, fmap):
+        # Interpolate fields to the element boundary nodes
         nodal = {}
         for et, f in fmap.items():
             fn = apply_op(self.up2n[et], f)
@@ -321,14 +347,21 @@ class FieldRecovery:
         ncomp, dtype = first_coll(self.cleaner.comm, ninfo)
         avg = self.cleaner.average(nodal, ncomp, dtype)
 
-        # Lift the boundary-node jumps to the solution points
+        # Compute the common-value jumps at the boundary nodes
         out = {}
         for et, f in fmap.items():
-            rmap = self.cleaner.layouts[et][0].T
-            df = apply_op(self.n2up[et], avg[et][rmap] - nodal[et])
-            out[et] = f + df.swapaxes(1, 2).reshape(f.shape)
+            nd = avg[et][self.cleaner.layouts[et][0].T] - nodal[et]
+            out[et] = nd.swapaxes(1, 2).reshape(-1, *f.shape[1:])
 
         return out
+
+    def average(self, fmap):
+        # Node-average per-etype (nupts, ..., neles) fields across elements
+        ndeltas = self._nodal_deltas(fmap)
+
+        # Lift the boundary-node jumps to the solution points
+        return {et: f + apply_op(self.n2up[et], ndeltas[et])
+                for et, f in fmap.items()}
 
     def _bc_state_info(self):
         # Nothing to recover when there are no boundary faces
@@ -354,20 +387,19 @@ class FieldRecovery:
 
         return info
 
-    def _bc_delta(self, out, fmap, con, state, bcrows):
+    def _bc_grad(self, refg, fmap, ndeltas, con, state, bcrows):
         kind, vidxs = bcrows
 
         for et, fidx, eidxs in con.items():
-            metrics, shape = self.metrics[et], self.metrics[et].shape
-            fp = shape.facefpts[fidx]
+            qpts, fb, u2q, fn2q, q2g = self.fops[et][fidx]
 
-            # Unit outward normals at the face flux points
-            pn = metrics.pnorm_at(shape.fpts[fp], fidx)
+            # Unit outward normals at the face quadrature points
+            pn = self.metrics[et].pnorm_at(qpts, fidx)
             pn = pn[:, eidxs].transpose(2, 0, 1)
             nl = pn / np.linalg.norm(pn, axis=0)
 
-            # Interior state at the face flux points
-            ul = apply_op(shape.m0[fp], fmap[et][:, *np.ix_(vidxs, eidxs)])
+            # Interior state at the face quadrature points
+            ul = apply_op(u2q, fmap[et][:, *np.ix_(vidxs, eidxs)])
             ulv = list(ul.swapaxes(0, 1))
 
             # Evaluate the boundary common state in primitive variables
@@ -377,38 +409,32 @@ class FieldRecovery:
             else:
                 urv = state(ulv, nl)
 
-            out[et][np.ix_(fp, vidxs, eidxs)] = np.stack(urv, axis=1) - ul
-
-    def deltas(self, fmap, favg, bcrows=None):
-        # Flux-point jumps between the common values and local states
-        out = {}
-        for et, f in fmap.items():
-            out[et] = apply_op(self.metrics[et].shape.m0, favg[et] - f)
-
-        # Boundaries with known common states refine the deltas
-        if bcrows is not None:
-            for con, state in self._bc_state_info():
-                self._bc_delta(out, fmap, con, state, bcrows)
-
-        return out
+            # Lift the residual boundary jump into the transformed gradients
+            nd = apply_op(fn2q, ndeltas[et][np.ix_(fb, vidxs, eidxs)])
+            ur = np.stack(urv, axis=1).astype(ul.dtype, copy=False)
+            dg = apply_op(q2g, ur - ul - nd)
+            dg = dg.reshape(self.ndims, -1, *ur.shape[1:])
+            refg[et][:, :, *np.ix_(vidxs, eidxs)] += dg
 
     def grad_corrected(self, fmap, bcrows=None):
-        # Common-value deltas at the flux points
-        dmap = self.deltas(fmap, self.average(fmap), bcrows)
+        # Common-value deltas at the boundary nodes
+        ndeltas = self._nodal_deltas(fmap)
 
-        out = {}
+        # Compute the corrected gradients in transformed space
+        refg = {}
         for et, f in fmap.items():
-            shape = self.metrics[et].shape
-            jacop, jinv = self.gops[et]
+            rg = apply_op(self.gops[et][0], f)
+            rg += apply_op(self.n2g[et], ndeltas[et])
+            refg[et] = rg.reshape(self.ndims, *f.shape)
 
-            # Compute the corrected gradients in transformed space
-            refg = apply_op(jacop, f).reshape(-1, *f.shape)
-            refg += apply_op(shape.m6, dmap[et]).reshape(refg.shape)
+        # Refine the gradients on boundaries with known common states
+        if bcrows is not None:
+            for con, state in self._bc_state_info():
+                self._bc_grad(refg, fmap, ndeltas, con, state, bcrows)
 
-            # Transform the gradients from reference to physical space
-            out[et] = np.einsum('ijkm,ijlm->jlkm', jinv, refg)
-
-        return out
+        # Transform the gradients from reference to physical space
+        return {et: np.einsum('ijkm,ijlm->jlkm', self.gops[et][1], rg)
+                for et, rg in refg.items()}
 
     def laplacian_of(self, gmap):
         # Stabilised divergence: average, differentiate, average again
