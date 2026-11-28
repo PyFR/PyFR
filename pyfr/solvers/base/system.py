@@ -104,6 +104,14 @@ class BaseSystem:
             if not r.rhs and not r.dynamic and r.n
         )
 
+    def rewrite_ic_exprs(self, fn):
+        for eles, eb in zip(self.ele_map.values(), self.ele_banks):
+            ics = eles.set_ics_from_cfg(fn)
+
+            # Write the initial conditions to each of the RHS banks
+            for b in eb[:self.nrhs]:
+                b.set(ics)
+
     def register_kernel_callback(self, names, callback):
         # Check for extern name clashes with other plugins
         for cb_names, _ in self._kernel_callbacks:

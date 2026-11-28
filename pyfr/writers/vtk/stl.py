@@ -186,6 +186,9 @@ class VTKSTLWriter(BaseVTKWriter):
             # Run postproc plugins at the sample points
             if self.pp_pipe.plugins:
                 names = self.source.pvar_names(soln.rownames, soln.groups)
+
+                # Copy the points, as transforms move them in place
+                spts = spts.copy()
                 ppfields = self.pp_pipe(names, svars, spts).fields
             else:
                 ppfields = {}
