@@ -4,7 +4,8 @@ import numpy as np
 
 from pyfr.mpiutil import autofree, get_comm_rank_root
 from pyfr.solvers.base.elements import ExportableField
-from pyfr.solvers.baseadvec.shockcapturing import BaseShockCapturing
+from pyfr.solvers.baseadvec.shockcapturing import (BaseShockCapturing,
+                                                   NullShockCapturing)
 
 
 class _VtxPeer:
@@ -28,6 +29,13 @@ class ArtificialViscosity(BaseShockCapturing):
     name = 'av'
     scheme = 'artificial-viscosity'
     needs_grad_soln = True
+
+    @classmethod
+    def resolve(cls, cfg, system):
+        if cfg.getint('solver', 'order') == 0:
+            return NullShockCapturing
+        else:
+            return cls
 
     def __init__(self, backend, cfg, system):
         self._be = backend
