@@ -59,7 +59,9 @@ class EntropyFilter(BaseShockCapturing):
         self._entmin[etype] = entmin
 
         # Allocate space for filter strength (1 = no filter, 0 = max)
-        ef_filter = be.matrix((1, neles), extent=self._ef_ext, tags={'align'})
+        ef_init = np.ones((1, neles), dtype=be.fpdtype)
+        ef_filter = be.matrix((1, neles), extent=self._ef_ext, tags={'align'},
+                              initval=ef_init)
 
         # Set us as the shock capturing scheme
         eles.set_shock_capturing(self)
@@ -89,16 +91,20 @@ class EntropyFilter(BaseShockCapturing):
                 u=eles.scal_upts[uin], entmin_int=entmin, m0=m0
             )
 
-        def entropy_filter_kern(uin):
-            return be.kernel(
-                'entropyfilter', tplargs=eftplargs, dims=[eles.neles],
-                u=eles.scal_upts[uin], entmin_int=entmin, ef_filter=ef_filter,
-                vdm=vdm_ef, invvdm=invvdm, m0=m0,
-                mean_wts=eles.mean_wts
-            )
+        def make_ef_kern(update):
+            def kern(uin):
+                return be.kernel(
+                    'entropyfilter', tplargs=eftplargs, dims=[eles.neles],
+                    u=eles.scal_upts[uin], entmin_int=entmin,
+                    ef_filter=ef_filter, vdm=vdm_ef, invvdm=invvdm, m0=m0,
+                    mean_wts=eles.mean_wts, update=int(update)
+                )
+
+            return kern
 
         eles.kernels['local_entropy'] = local_entropy_kern
-        eles.kernels['entropy_filter'] = entropy_filter_kern
+        eles.kernels['entropy_filter'] = make_ef_kern(update=True)
+        eles.kernels['entropy_postproc'] = make_ef_kern(update=False)
 
     def _build_operators(self, eles, form):
         be = self._be
@@ -240,4 +246,4 @@ class EntropyFilter(BaseShockCapturing):
         return g_filter,
 
     def postproc(self, be, k):
-        be.run_kernels(k['eles/entropy_filter'])
+        be.run_kernels(k['eles/entropy_postproc'])

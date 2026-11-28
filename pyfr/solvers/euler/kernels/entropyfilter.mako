@@ -91,7 +91,8 @@
               vdm='in broadcast fpdtype_t[${str(nefpts)}][${str(nupts)}]'
               invvdm='in broadcast fpdtype_t[${str(nupts)}][${str(nupts)}]'
               m0='in broadcast fpdtype_t[${str(nfpts)}][${str(nupts)}]'
-              mean_wts='in fpdtype_t[${str(nupts)}]'>
+              mean_wts='in fpdtype_t[${str(nupts)}]'
+              update='scalar ixdtype_t'>
     fpdtype_t dmin, pmin, emin;
     fpdtype_t f = 1.0;
 
@@ -212,9 +213,12 @@
     }
 
     // Set new minimum entropy within element for next stage
+    if (update)
+    {
 % for fidx in range(nfaces):
-    entmin_int[${fidx}] = emin;
+        entmin_int[${fidx}] = emin;
 % endfor
+    }
 
     // Output the filter strength
     ef_filter[0] = f;
