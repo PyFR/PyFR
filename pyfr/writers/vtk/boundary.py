@@ -15,7 +15,6 @@ class VTKBoundaryWriter(BaseVTKWriter):
     type = 'boundary'
     dimensions = '2|3'
     output_curved = True
-    needs_con = True
 
     def __init__(self, meshf, boundaries, **kwargs):
         super().__init__(meshf, **kwargs)
