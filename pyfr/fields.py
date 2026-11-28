@@ -125,7 +125,7 @@ class CleanToGrid:
 
     def _build_layout(self, etype, topo):
         neles, npts = len(self.cnodemap[etype]), topo.npts
-        remap = np.empty((neles, npts), dtype=int)
+        remap = np.empty((npts, neles), dtype=int)
         kept, off = [], 0
 
         # Merge coincident vdofs into unique kept positions
@@ -145,17 +145,17 @@ class CleanToGrid:
             ksrc[ukept] = fsrc[fidx]
 
             # Update the remap table and accumulate kept sources
-            remap[divmod(fsrc, npts)] = off + within
+            remap.ravel()[fsrc] = off + within
             kept.append(ksrc)
             off += len(classes)*g.nint
 
         # Body vdofs: unique by construction (sequential kept ids)
         bidxs = topo.body_idxs
-        bpos = ((np.arange(neles)*npts)[:, None] + bidxs).ravel()
-        remap[:, bidxs] = off + np.arange(bpos.size).reshape(neles, -1)
+        bpos = (bidxs[:, None]*neles + np.arange(neles)).ravel()
+        remap[bidxs] = off + np.arange(bpos.size).reshape(-1, neles)
         kept.append(bpos)
 
-        return remap, np.concatenate(kept), bpos
+        return remap.T, np.concatenate(kept), bpos
 
     @memoize
     def _scatter_plan(self, kname):
@@ -198,13 +198,13 @@ class CleanToGrid:
 
     def select(self, etype, values):
         _, kept, _ = self.layouts[etype]
-        flat = values.swapaxes(0, 1).reshape(-1, *values.shape[2:])
+        flat = values.reshape(-1, *values.shape[2:])
         return flat[kept]
 
     def average(self, fields, ncomp, dtype):
         # Per-kind: accumulate sums -> exchange deficient sums -> divide by
         # precomputed topological count
-        vdofvals = {etype: vals.swapaxes(0, 1).reshape(-1, ncomp)
+        vdofvals = {etype: vals.reshape(-1, ncomp)
                     for etype, vals in fields.items()}
 
         # Chunking keeps the accumulator resident across the gather slots

@@ -45,8 +45,7 @@ class SubDOFMap:
         return getattr(self, f'_{kind}_canonical')(cnodes)
 
     def _fsrc(self, vdofs, neles):
-        eoff = (np.arange(neles)*self.npts)[:, None]
-        return (eoff + vdofs[None, :]).ravel()
+        return (np.arange(neles)[:, None] + vdofs*neles).ravel()
 
     def _corner_canonical(self, cn):
         vdofs, lin, _ = self._kinds['corner']
