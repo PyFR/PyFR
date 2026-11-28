@@ -345,6 +345,11 @@ class DistributedDirectory(AlltoallMixin):
         self.ridx_inv = np.empty_like(self.ridx)
         self.ridx_inv[self.ridx] = np.arange(len(self.ridx))
 
+    def reorder(self, perm):
+        # Permute the order in which received values are presented
+        self.ridx = self.ridx[perm]
+        self.ridx_inv[self.ridx] = np.arange(len(perm))
+
     def scatter(self, values):
         rv = self._alltoallv(self.comm, self.scountdisps, self.rcountdisps,
                              values[self.sidx])

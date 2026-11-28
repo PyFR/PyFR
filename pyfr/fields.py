@@ -19,6 +19,7 @@ from pyfr.util import first, subclass_where, subclasses
 
 KindGlobal = namedtuple('KindGlobal',
                         'keys defidx nint emap count reducer')
+Layout = namedtuple('Layout', 'remap kept koffs boff bidxs')
 
 
 def _unique_rows(keys):
@@ -45,13 +46,17 @@ class Reducer:
 
     def __init__(self, comm, fkeys):
         self.dd = DistributedDirectory(comm, self._hash_rows(fkeys))
-        self.uniq, self.inv = _unique_rows(self.dd.scatter(fkeys))
+        _, inv = _unique_rows(self.dd.scatter(fkeys))
+
+        # Group received entries by key
+        self.dd.reorder(np.argsort(inv, kind='stable'))
+        self.counts = np.bincount(inv)
+        self.starts = np.cumsum(self.counts) - self.counts
 
     def __call__(self, values):
         rv = self.dd.scatter(values)
-        gv = np.zeros((len(self.uniq), *values.shape[1:]), dtype=values.dtype)
-        np.add.at(gv, self.inv, rv)
-        return self.dd.gather(gv[self.inv])
+        gv = np.add.reduceat(rv, self.starts, axis=0)
+        return self.dd.gather(np.repeat(gv, self.counts, axis=0))
 
     @classmethod
     def _hash_rows(cls, keys):
@@ -70,8 +75,11 @@ class CleanToGrid:
     BATCH_NCOMP = 32
 
     @staticmethod
-    def _class_rows(classes, nint):
-        return (classes[:, None]*nint + np.arange(nint)).ravel()
+    def _class_rows(g, classes):
+        if len(classes) == len(g.keys):
+            return Ellipsis
+        else:
+            return (classes[:, None]*g.nint + np.arange(g.nint)).ravel()
 
     def __init__(self, cnodemap, divmap, nsvptsmap, shared):
         self.comm, _, _ = get_comm_rank_root()
@@ -131,10 +139,10 @@ class CleanToGrid:
     def _build_layout(self, etype, topo):
         neles, npts = len(self.cnodemap[etype]), topo.npts
         remap = np.empty((npts, neles), dtype=int)
-        kept, off = [], 0
+        kept, koffs, off = [], {}, 0
 
         # Merge coincident vdofs into unique kept positions
-        for g in self.kinds.values():
+        for kname, g in self.kinds.items():
             if (kp := g.emap.get(etype)) is None:
                 continue
 
@@ -152,7 +160,7 @@ class CleanToGrid:
             # Update the remap table and accumulate kept sources
             remap.ravel()[fsrc] = off + within
             kept.append(ksrc)
-            off += len(classes)*g.nint
+            koffs[kname] = slice(off, off := off + len(ksrc))
 
         # Body vdofs: unique by construction (sequential kept ids)
         bidxs = topo.body_idxs
@@ -160,7 +168,8 @@ class CleanToGrid:
         remap[bidxs] = off + np.arange(bpos.size).reshape(-1, neles)
         kept.append(bpos)
 
-        return remap.T, np.concatenate(kept), bpos
+        return Layout(np.ascontiguousarray(remap.T), np.concatenate(kept),
+                      koffs, off, bidxs)
 
     @memoize
     def _scatter_plan(self, kname):
@@ -182,29 +191,31 @@ class CleanToGrid:
                 # Here cols[i, j] is the jth entry of row rows[i]
                 rows = np.flatnonzero(counts == nfan)
                 cols = sfsrc[starts[rows][:, None] + np.arange(nfan)]
-                blocks.append((rows, cols))
+                blocks.append((rows, np.ascontiguousarray(cols.T)))
 
         return plan
 
-    def _scatter(self, psum, src, blocks, csize):
-        buf = np.empty((csize, src.shape[1]), dtype=src.dtype)
+    def _scatter(self, psum, src, blocks, buf, accum):
+        csize = buf.shape[1]
 
         for rows, cols in blocks:
-            for rs, cs in zip_chunks(csize, rows, cols):
+            for rs, cs in zip_chunks(csize, rows, cols, axis=-1):
                 # The first slot seeds the sum and the rest add into it
-                head, *tail = cs.T
-                acc = np.take(src, head, axis=0, mode='clip')
-                tmp = buf[:len(rs)]
+                head, *tail = cs
+                acc, tmp = buf[:, :len(rs)]
+                np.take(src, head, axis=0, out=acc, mode='clip')
                 for col in tail:
                     np.take(src, col, axis=0, out=tmp, mode='clip')
                     acc += tmp
 
-                psum[rs] += acc
+                if accum:
+                    psum[rs] += acc
+                else:
+                    psum[rs] = acc
 
     def select(self, etype, values):
-        _, kept, _ = self.layouts[etype]
         flat = values.reshape(-1, *values.shape[2:])
-        return flat[kept]
+        return flat[self.layouts[etype].kept]
 
     def average(self, fields, ncomp, dtype):
         # Per-kind: accumulate sums -> exchange deficient sums -> divide by
@@ -214,37 +225,38 @@ class CleanToGrid:
 
         # Chunking keeps the accumulator resident across the gather slots
         csize = max(1, self.CHUNK_SZ // ncomp)
+        buf = np.empty((2, csize, ncomp), dtype=dtype)
 
-        out = {etype: [] for etype in fields}
+        out = {et: np.empty((len(self.layouts[et].kept), ncomp), dtype=dtype)
+               for et in fields}
         for kname, g in self.kinds.items():
             psum = np.zeros((len(g.keys)*g.nint, ncomp), dtype=dtype)
             plan = self._scatter_plan(kname)
 
             # Non-finite values from guarded ratios propagate by design
             with np.errstate(invalid='ignore'):
-                for etype in g.emap:
-                    self._scatter(psum, vdofvals[etype], plan[etype], csize)
+                # The first etype seeds the sums and the rest add into them
+                for i, etype in enumerate(g.emap):
+                    self._scatter(psum, vdofvals[etype], plan[etype], buf,
+                                  accum=i > 0)
 
-                rows = self._class_rows(g.defidx, g.nint)
-                vals = psum[rows].reshape(-1, g.nint, ncomp)
+                rows = self._class_rows(g, g.defidx)
+                vals = psum[rows].reshape(len(g.defidx), g.nint, ncomp)
                 psum[rows] = g.reducer(vals).reshape(-1, ncomp)
 
-                psum /= np.repeat(g.count, g.nint)[:, None]
+                pv = psum.reshape(len(g.keys), g.nint, ncomp)
+                pv /= g.count[:, None, None]
 
+            # Extract each element type's slice of the averaged values
             for etype, (classes, _, _) in g.emap.items():
-                # When this etype's classes cover every global class for
-                # this kind, the fancy-index slice is the whole array
-                if len(classes) == len(g.keys):
-                    out[etype].append(psum)
-                else:
-                    rows = self._class_rows(classes, g.nint)
-                    out[etype].append(psum[rows])
+                kslice = self.layouts[etype].koffs[kname]
+                out[etype][kslice] = psum[self._class_rows(g, classes)]
 
-        # Append body slice and concat per-etype
-        for etype in fields:
-            _, _, body = self.layouts[etype]
-            out[etype].append(vdofvals[etype][body])
-            out[etype] = np.concatenate(out[etype])
+        # Copy unshared body values into each element type's output
+        for etype, vals in fields.items():
+            lay = self.layouts[etype]
+            if len(lay.bidxs) and len(vals):
+                out[etype][lay.boff:] = vals[lay.bidxs].reshape(-1, ncomp)
 
         return out
 
@@ -349,6 +361,8 @@ class FieldRecovery:
 
         shared = np.fromiter(mesh.shared_nodes.by_node, dtype=int)
         self.cleaner = CleanToGrid(cnodemap, divmap, nsvptsmap, shared)
+        self.remap = {et: self.cleaner.layouts[et].remap.T.copy()
+                      for et in mesh.spts}
 
     @staticmethod
     def _face_ops(shape, bnodes):
@@ -388,7 +402,7 @@ class FieldRecovery:
         # Compute the common-value jumps at the boundary nodes
         out = {}
         for et, f in fmap.items():
-            nd = avg[et][self.cleaner.layouts[et][0].T] - nodal[et]
+            nd = np.take(avg.pop(et), self.remap[et], axis=0) - nodal[et]
             out[et] = nd.swapaxes(1, 2).reshape(-1, *f.shape[1:])
 
         return out
