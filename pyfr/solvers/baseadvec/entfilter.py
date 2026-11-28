@@ -135,7 +135,7 @@ class EntropyFilter(BaseShockCapturing):
             'f_tol': cfg.getfloat('solver-entropy-filter', 'f-tol', 1e-4),
             'niters': cfg.getfloat('solver-entropy-filter', 'niters', 2),
             'linearise': form == 'linearised',
-            'ubdegs': [int(max(dd)) for dd in ub.degrees],
+            'ubdegs': ub.order_degrees,
         }
 
     def _setup_interfaces(self, system):

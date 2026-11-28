@@ -1,4 +1,5 @@
 from functools import cached_property
+from itertools import product
 
 import numpy as np
 
@@ -95,9 +96,19 @@ class ElementBasis:
     def invvdm(self):
         return np.linalg.inv(self.vdm)
 
+    @cached_property
+    def degrees(self):
+        dds = product(range(self.order + 1), repeat=self.ndims)
+        return [dd for dd in dds if self._deg_to_order(*dd) <= self.order]
+
+    @cached_property
+    def order_degrees(self):
+        return [self._deg_to_order(*dd) for dd in self.degrees]
+
 
 class LineBasis(ElementBasis):
     name = 'line'
+    ndims = 1
 
     def _ortho_basis_at(self, p):
         jp = jacobi(self.order, 0, 0, p)
@@ -107,13 +118,14 @@ class LineBasis(ElementBasis):
         djp = jacobi_diff(self.order, 0, 0, p)
         return [((i + 0.5)**0.5*p,) for i, p in enumerate(djp)]
 
-    @cached_property
-    def degrees(self):
-        return [(i,) for i in range(self.order + 1)]
+    @staticmethod
+    def _deg_to_order(i):
+        return i
 
 
 class TriBasis(ElementBasis):
     name = 'tri'
+    ndims = 2
 
     def _ortho_basis_at(self, p, q):
         with np.errstate(divide='ignore', invalid='ignore'):
@@ -156,15 +168,14 @@ class TriBasis(ElementBasis):
 
         return ob
 
-    @cached_property
-    def degrees(self):
-        return [(i, j)
-                for i in range(self.order + 1)
-                for j in range(self.order - i + 1)]
+    @staticmethod
+    def _deg_to_order(i, j):
+        return i + j
 
 
 class QuadBasis(ElementBasis):
     name = 'quad'
+    ndims = 2
 
     def _ortho_basis_at(self, p, q):
         sk = [(k + 0.5)**0.5 for k in range(self.order + 1)]
@@ -185,15 +196,14 @@ class QuadBasis(ElementBasis):
                 for pi, dpi in zip(pa, dpa)
                 for pj, dpj in zip(pb, dpb)]
 
-    @cached_property
-    def degrees(self):
-        return [(i, j)
-                for i in range(self.order + 1)
-                for j in range(self.order + 1)]
+    @staticmethod
+    def _deg_to_order(i, j):
+        return max(i, j)
 
 
 class TetBasis(ElementBasis):
     name = 'tet'
+    ndims = 3
 
     def _ortho_basis_at(self, p, q, r):
         with np.errstate(divide='ignore', invalid='ignore'):
@@ -261,16 +271,14 @@ class TetBasis(ElementBasis):
 
         return ob
 
-    @cached_property
-    def degrees(self):
-        return [(i, j, k)
-                for i in range(self.order + 1)
-                for j in range(self.order - i + 1)
-                for k in range(self.order - i - j + 1)]
+    @staticmethod
+    def _deg_to_order(i, j, k):
+        return i + j + k
 
 
 class PriBasis(ElementBasis):
     name = 'pri'
+    ndims = 3
 
     def _ortho_basis_at(self, p, q, r):
         with np.errstate(divide='ignore', invalid='ignore'):
@@ -324,16 +332,14 @@ class PriBasis(ElementBasis):
         return [[pij*hk, qij*hk, rij*dhk]
                 for pij, qij, rij in pab for hk, dhk in zip(hc, dhc)]
 
-    @cached_property
-    def degrees(self):
-        return [(i, j, k)
-                for i in range(self.order + 1)
-                for j in range(self.order - i + 1)
-                for k in range(self.order + 1)]
+    @staticmethod
+    def _deg_to_order(i, j, k):
+        return max(i + j, k)
 
 
 class PyrBasis(ElementBasis):
     name = 'pyr'
+    ndims = 3
     type = 'rational'
 
     def _ortho_basis_at(self, p, q, r):
@@ -399,16 +405,14 @@ class PyrBasis(ElementBasis):
 
         return ob
 
-    @cached_property
-    def degrees(self):
-        return [(i, j, k)
-                for i in range(self.order + 1)
-                for j in range(self.order + 1)
-                for k in range(self.order - max(i, j) + 1)]
+    @staticmethod
+    def _deg_to_order(i, j, k):
+        return max(i, j) + k
 
 
 class HexBasis(ElementBasis):
     name = 'hex'
+    ndims = 3
 
     def _ortho_basis_at(self, p, q, r):
         sk = [(k + 0.5)**0.5 for k in range(self.order + 1)]
@@ -433,9 +437,6 @@ class HexBasis(ElementBasis):
                 for pj, dpj in zip(pb, dpb)
                 for pk, dpk in zip(pc, dpc)]
 
-    @cached_property
-    def degrees(self):
-        return [(i, j, k)
-                for i in range(self.order + 1)
-                for j in range(self.order + 1)
-                for k in range(self.order + 1)]
+    @staticmethod
+    def _deg_to_order(i, j, k):
+        return max(i, j, k)

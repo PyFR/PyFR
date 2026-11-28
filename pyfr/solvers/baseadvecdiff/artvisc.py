@@ -2,7 +2,6 @@ from weakref import WeakKeyDictionary
 
 import numpy as np
 
-from pyfr.bases import get_basis
 from pyfr.mpiutil import autofree, get_comm_rank_root
 from pyfr.solvers.base.elements import ExportableField
 from pyfr.solvers.baseadvec.shockcapturing import BaseShockCapturing
@@ -170,14 +169,11 @@ class ArtificialViscosity(BaseShockCapturing):
     def _sensor_tplargs(self, eles, c_av):
         shockvar = eles.convars.index(eles.shockvar)
 
-        ubname = eles.shape.ubasis.name
-        ubdegs = eles.shape.ubasis.degrees
         uborder = eles.shape.ubasis.order
+        mode_degs = eles.shape.ubasis.order_degrees
 
-        lubdegs = get_basis(ubname, max(0, uborder - 1)).degrees
-        ind_modes = [d not in lubdegs for d in ubdegs]
+        ind_modes = [uborder > 0 and d == uborder for d in mode_degs]
 
-        mode_degs = [max(d) for d in ubdegs]
         ndeg = uborder + 1
 
         if uborder >= 2:
