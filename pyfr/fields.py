@@ -291,25 +291,29 @@ class FieldRecovery:
 
             self.metrics[et] = metrics
             self.gops[et] = (jacop, jinv)
+
+            # Build nodal transfer operators for the boundary nodes
             nbasis = get_basis(et, p, nodes)
-            self.up2n[et] = shape.ubasis.nodal_basis_at(nodes)
-            self.n2up[et] = nbasis.nodal_basis_at(shape.upts)
+            bmask = np.ones(len(nodes), dtype=bool)
+            bmask[get_subdiv(et, p).topology(nodes).body_idxs] = False
+            bnodes = nodes[bmask]
+            self.up2n[et] = shape.ubasis.nodal_basis_at(bnodes)
+            self.n2up[et] = nbasis.nodal_basis_at(shape.upts)[:, bmask]
 
             # Corner node numbers key the shared-vdof classes
             snodes = mesh.spts_nodes[et]
             cidxs = shapecls.corner_pts_idxs(snodes.shape[1])
             cnodemap[et] = snodes[:, cidxs]
-            divmap[et], nsvptsmap[et] = p, nodes
+            divmap[et], nsvptsmap[et] = p, bnodes
 
         shared = np.fromiter(mesh.shared_nodes.by_node, dtype=int)
         self.cleaner = CleanToGrid(cnodemap, divmap, nsvptsmap, shared)
 
     def average(self, fmap):
         # Node-average per-etype (nupts, ..., neles) fields across elements
-        shapes, nodal = {}, {}
+        nodal = {}
         for et, f in fmap.items():
             fn = apply_op(self.up2n[et], f)
-            shapes[et] = fn.shape
             nodal[et] = fn.reshape(len(fn), -1, fn.shape[-1]).swapaxes(1, 2)
 
         # Component count and data type, from any rank holding elements
@@ -317,11 +321,12 @@ class FieldRecovery:
         ncomp, dtype = first_coll(self.cleaner.comm, ninfo)
         avg = self.cleaner.average(nodal, ncomp, dtype)
 
+        # Lift the boundary-node jumps to the solution points
         out = {}
-        for et, f in avg.items():
-            remap = self.cleaner.layouts[et][0]
-            fe = f[remap].transpose(1, 2, 0).reshape(shapes[et])
-            out[et] = apply_op(self.n2up[et], fe)
+        for et, f in fmap.items():
+            rmap = self.cleaner.layouts[et][0].T
+            df = apply_op(self.n2up[et], avg[et][rmap] - nodal[et])
+            out[et] = f + df.swapaxes(1, 2).reshape(f.shape)
 
         return out
 
