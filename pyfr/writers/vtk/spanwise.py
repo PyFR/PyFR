@@ -413,8 +413,9 @@ class SampledSpanwise(_SpanwiseBase, AlltoallMixin):
 
         # Route query points to their owners
         scount = np.bincount(locs['rank'], minlength=comm.size)
+        sdisps = self._count_to_disp(scount)
         sord = np.argsort(locs['rank'], kind='stable')
-        inq, (rcount, _) = self._alltoallcv(comm, locs[sord], scount)
+        inq, rcountdisps = self._alltoallcv(comm, locs[sord], scount, sdisps)
 
         # Interpolate the solution at each incoming tloc
         samp = np.zeros((len(inq), self.nfields))
@@ -430,7 +431,7 @@ class SampledSpanwise(_SpanwiseBase, AlltoallMixin):
             samp[mask] = np.einsum('pn,nfp->pf', ops, edata[:, :, local])
 
         # Return the results
-        rsamp, _ = self._alltoallcv(comm, samp, rcount)
+        rsamp = self._alltoallv(comm, rcountdisps, (scount, sdisps), samp)
 
         # Re-order the samples by query point index
         samps = np.empty((len(pts), self.nfields))

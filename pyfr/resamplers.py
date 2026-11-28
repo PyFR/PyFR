@@ -612,9 +612,9 @@ class BaseCloudResampler(AlltoallMixin):
         # Distribute the points
         tdisps = np.searchsorted(tranks[tidx], np.arange(comm.size))
         tcount = self._disp_to_count(tdisps, len(tranks))
-        rbuf = self._alltoallcv(comm, pts[tidx], tcount, tdisps)
+        rpts, rcountdisps = self._alltoallcv(comm, pts[tidx], tcount, tdisps)
 
-        return *rbuf, np.argsort(tidx)
+        return rpts, ((tcount, tdisps), rcountdisps), np.argsort(tidx)
 
     def _find_tgt_neighbours(self, pts):
         comm, rank, root = get_comm_rank_root()
@@ -728,8 +728,8 @@ class BaseCloudResampler(AlltoallMixin):
         fdisps = self._count_to_disp(fcount)
 
         # Exchange fringe points and solutions
-        pts = self._alltoallcv(comm, self.pts[fidxs], fcount, fdisps)[0]
-        solns = self._alltoallcv(comm, self.solns[fidxs], fcount, fdisps)[0]
+        pts, rcd = self._alltoallcv(comm, self.pts[fidxs], fcount, fdisps)
+        solns = self._alltoallv(comm, (fcount, fdisps), rcd, self.solns[fidxs])
 
         # Add the received fringe points to our tree
         self.pts_tree.add(np.arange(len(pts)) + len(self.pts), pts)
@@ -743,7 +743,7 @@ class BaseCloudResampler(AlltoallMixin):
         comm, rank, root = get_comm_rank_root()
 
         # Send the samples back to the ranks they came from
-        tsolns = self._alltoallcv(comm, tsolns, *tcountdisp)[0]
+        tsolns = self._alltoallv(comm, *tcountdisp[::-1], tsolns)
         return tsolns[tidx]
 
 

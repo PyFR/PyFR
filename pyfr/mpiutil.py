@@ -289,8 +289,14 @@ class AlltoallMixin:
         else:
             return (*sbuf, dtype), (*rbuf, dtype)
 
-    def _alltoallv(self, comm, sbuf, rbuf):
-        return comm.Alltoallv(*self._alltoallv_bufs(sbuf, rbuf))
+    def _alltoallv(self, comm, scountdisps, rcountdisps, svals, rvals=None):
+        if rvals is None:
+            n = rcountdisps[0].sum()
+            rvals = np.empty((n, *svals.shape[1:]), dtype=svals.dtype)
+
+        sbuf, rbuf = (svals, scountdisps), (rvals, rcountdisps)
+        comm.Alltoallv(*self._alltoallv_bufs(sbuf, rbuf))
+        return rvals
 
     def _alltoallv_init(self, comm, sbuf, rbuf):
         return comm.Alltoallv_init(*self._alltoallv_bufs(sbuf, rbuf))
@@ -305,11 +311,10 @@ class AlltoallMixin:
         sdisps = self._count_to_disp(scount) if sdisps is None else sdisps
 
         # Exchange values
-        rvals = np.empty((rcount.sum(), *svals.shape[1:]), dtype=svals.dtype)
-        rbuf = (rvals, (rcount, rdisps))
-        self._alltoallv(comm, (svals, (scount, sdisps)), rbuf)
+        rcountdisps = (rcount, rdisps)
+        rvals = self._alltoallv(comm, (scount, sdisps), rcountdisps, svals)
 
-        return rbuf
+        return rvals, rcountdisps
 
 
 class DistributedDirectory(AlltoallMixin):
@@ -341,13 +346,13 @@ class DistributedDirectory(AlltoallMixin):
         self.ridx_inv[self.ridx] = np.arange(len(self.ridx))
 
     def scatter(self, values):
-        rv, _ = self._alltoallcv(self.comm, values[self.sidx],
-                                 *self.scountdisps)
+        rv = self._alltoallv(self.comm, self.scountdisps, self.rcountdisps,
+                             values[self.sidx])
         return rv[self.ridx]
 
     def gather(self, values):
-        rv, _ = self._alltoallcv(self.comm, values[self.ridx_inv],
-                                 *self.rcountdisps)
+        rv = self._alltoallv(self.comm, self.rcountdisps, self.scountdisps,
+                             values[self.ridx_inv])
 
         out = np.empty_like(rv)
         out[self.sidx] = rv
@@ -362,14 +367,15 @@ class DistributedDirectory(AlltoallMixin):
         home = home_rank(keys, comm.size)
         sord = np.argsort(home)
         scount = np.bincount(home, minlength=comm.size)
+        sdisps = self._count_to_disp(scount)
 
-        recv, (rcount, _) = self._alltoallcv(comm, keys[sord], scount)
+        recv, rcountdisps = self._alltoallcv(comm, keys[sord], scount, sdisps)
 
         # Look up owner ranks in the sorted table
         ans = self.ranks[np.searchsorted(self.keys, recv)]
 
-        # Send answers back; rcount mirrors the forward counts
-        ret, _ = self._alltoallcv(comm, ans, rcount)
+        # Send the owner ranks back to the querying ranks
+        ret = self._alltoallv(comm, rcountdisps, (scount, sdisps), ans)
 
         # Unshuffle from home-rank order back to caller order
         result = np.empty_like(keys)
@@ -651,8 +657,8 @@ class Sorter(AlltoallMixin):
         rvals = np.empty((self.cnt, *svals.shape[1:]), dtype=svals.dtype)
 
         # Perform the exchange
-        self._alltoallv(self.comm, (svals, self.scountdisps),
-                        (rvals, self.rcountdisps))
+        self._alltoallv(self.comm, self.scountdisps, self.rcountdisps, svals,
+                        rvals)
 
         # Locally sort our received data
         return rvals[self.ridx]
@@ -660,10 +666,8 @@ class Sorter(AlltoallMixin):
     @property
     def argidx(self):
         svals = self.start + np.argsort(self.ridx)
-        rvals = np.empty(len(self.sidx), dtype=svals.dtype)
-
-        self._alltoallv(self.comm, (svals, self.rcountdisps),
-                        (rvals, self.scountdisps))
+        rvals = self._alltoallv(self.comm, self.rcountdisps, self.scountdisps,
+                                svals)
 
         return rvals[np.argsort(self.sidx)]
 
